@@ -28,6 +28,8 @@ export interface ClinicalEntry {
   notes: string;
   date: string; // ISO yyyy-mm-dd
   createdAt: number;
+  specialty: string; // especialidade do registro
+  archived: boolean; // arquivado (nunca excluído)
 }
 
 export interface Fingerprint {
@@ -143,6 +145,9 @@ export interface Patient {
   fingerprint: Fingerprint | null;
   entries: ClinicalEntry[];
   createdAt: number;
+  primarySpecialty: string; // especialidade médica principal
+  archived: boolean; // dados nunca são excluídos — apenas arquivados
+  ownerAccountId: string | null; // titular da conta que criou o prontuário
 }
 
 export type IdMethod = 'face' | 'finger';
@@ -160,6 +165,12 @@ export interface IdEvent {
   at: number;
   thumb: string | null;
   detail?: string;
+  byName: string; // conta logada que realizou a consulta (rastreabilidade)
+}
+
+export interface Session {
+  accountId: string;
+  patientId: string | null; // prontuário ativo escolhido após o login
 }
 
 export interface AppState {
@@ -167,10 +178,61 @@ export interface AppState {
   seeded: boolean;
   patients: Patient[];
   log: IdEvent[];
+  accounts: Account[];
+  grants: AccessGrant[];
+  session: Session | null;
 }
+
+export interface Account {
+  id: string;
+  name: string;
+  email: string;
+  role: 'titular' | 'responsavel';
+  pinHash: string | null; // PIN local (demo) — nunca sai do dispositivo
+  createdAt: number;
+}
+
+export interface AccessGrant {
+  id: string;
+  accountId: string; // quem recebe o acesso
+  patientId: string; // prontuário acessível
+  grantedByName: string; // quem delegou
+  level: 'completo' | 'leitura';
+  createdAt: number;
+}
+
+export const SPECIALTIES: string[] = [
+  'Clínica geral',
+  'Cardiologia',
+  'Dermatologia',
+  'Endocrinologia',
+  'Gastroenterologia',
+  'Geriatria',
+  'Ginecologia e obstetrícia',
+  'Hematologia',
+  'Infectologia',
+  'Nefrologia',
+  'Neurologia',
+  'Nutrição',
+  'Oncologia',
+  'Oftalmologia',
+  'Ortopedia',
+  'Otorrinolaringologia',
+  'Pediatria',
+  'Psiquiatria',
+  'Pneumologia',
+  'Reumatologia',
+  'Urologia',
+  'Psicologia',
+  'Fisioterapia',
+  'Fonoaudiologia',
+  'Odontologia',
+  'Emergência',
+];
 
 export type Route =
   | { name: 'identify' }
+  | { name: 'consultor' }
   | { name: 'patients' }
   | { name: 'record'; id: string }
   | { name: 'missing' }

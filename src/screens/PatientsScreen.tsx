@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BloodType, Contact, Patient, Relationship, SpecialCare } from '../lib/types';
-import { BLOOD_TYPES, RELATIONSHIPS, RELATIONSHIP_META, SPECIAL_CARES, SPECIAL_CARE_META } from '../lib/types';
+import { BLOOD_TYPES, RELATIONSHIPS, RELATIONSHIP_META, SPECIAL_CARES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/types';
 import { newRecordNumber, uid } from '../lib/store';
 import {
   ageFromBirth,
@@ -26,6 +26,7 @@ import { CameraCapture } from '../components/CameraCapture';
 import { FingerprintPad } from '../components/FingerprintPad';
 import {
   IconAlert,
+  IconArchive,
   IconCamera,
   IconChart,
   IconFace,
@@ -33,6 +34,7 @@ import {
   IconPencil,
   IconPhone,
   IconPlus,
+  IconRefresh,
   IconSearch,
   IconTrash,
   IconUpload,
@@ -108,6 +110,7 @@ const emptyForm = (record: string) => ({
   specialCare: [] as SpecialCare[],
   emergencyNotes: '',
   contacts: [] as Contact[],
+  primarySpecialty: '',
 });
 
 type FormState = ReturnType<typeof emptyForm> & {
@@ -123,12 +126,14 @@ function PatientForm({
   onSave,
   onCancel,
   initialPhoto,
+  defaultOwnerId,
 }: {
   initial: Patient | null;
   patients: Patient[];
   onSave: (p: Patient) => void;
   onCancel: () => void;
   initialPhoto?: string | null;
+  defaultOwnerId: string | null;
 }) {
   const toast = useToast();
   const [f, setF] = useState<FormState>(() =>
@@ -146,6 +151,7 @@ function PatientForm({
           specialCare: [...initial.specialCare],
           emergencyNotes: initial.emergencyNotes,
           contacts: [...initial.contacts],
+          primarySpecialty: initial.primarySpecialty,
           photo: initial.photo,
           photoHash: initial.photoHash,
           fingerprint: initial.fingerprint,
@@ -247,6 +253,9 @@ function PatientForm({
       fingerprint: null,
       entries: [],
       createdAt: Date.now(),
+      primarySpecialty: '',
+      archived: false,
+      ownerAccountId: null,
     };
     onSave({
       ...base,
@@ -256,6 +265,8 @@ function PatientForm({
       sex: f.sex,
       cpf: f.cpf.trim(),
       bloodType: f.bloodType,
+      primarySpecialty: f.primarySpecialty,
+      ownerAccountId: initial ? initial.ownerAccountId : defaultOwnerId,
       allergies: f.allergies,
       intolerances: f.intolerances,
       conditions: f.conditions,
@@ -385,6 +396,14 @@ function PatientForm({
                   <option value="">Desconhecido</option>
                   {BLOOD_TYPES.map((b) => (
                     <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Especialidade principal">
+                <select className={inputCls} value={f.primarySpecialty} onChange={(e) => set('primarySpecialty', e.target.value)}>
+                  <option value="">Sem preferência definida</option>
+                  {SPECIALTIES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
               </Field>
@@ -543,8 +562,10 @@ export function PatientsScreen({
   patients,
   onAdd,
   onUpdate,
-  onDelete,
+  onArchive,
+  onRestore,
   onOpenRecord,
+  ownerAccountId,
   onLoadDemo,
   seeded,
   pendingPhoto,
@@ -555,7 +576,8 @@ export function PatientsScreen({
   patients: Patient[];
   onAdd: (p: Patient) => void;
   onUpdate: (p: Patient) => void;
-  onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
+  onRestore: (id: string) => void;
   onOpenRecord: (id: string) => void;
   onLoadDemo: () => void;
   seeded: boolean;
@@ -563,12 +585,14 @@ export function PatientsScreen({
   consumePendingPhoto: () => void;
   pendingEditId: string | null;
   consumePendingEdit: () => void;
+  ownerAccountId?: string | null;
 }) {
   const toast = useToast();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Patient | null>(null);
   const [query, setQuery] = useState('');
-  const [toDelete, setToDelete] = useState<Patient | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [toArchive, setToArchive] = useState<Patient | null>(null);
   const [formPhoto, setFormPhoto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -593,12 +617,14 @@ export function PatientsScreen({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = [...patients].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    const list = [...patients]
+      .filter((p) => showArchived || !p.archived)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     if (!q) return list;
     return list.filter((p) =>
       [p.name, p.cpf, p.record].join(' ').toLowerCase().includes(q),
     );
-  }, [patients, query]);
+  }, [patients, query, showArchived]);
 
   const missingCount = patients.filter((p) => p.missing.active).length;
 
@@ -640,14 +666,29 @@ export function PatientsScreen({
         </EmptyState>
       ) : (
         <>
-          <div className="rise relative mb-4 max-w-sm" style={{ animationDelay: '60ms' }}>
-            <IconSearch size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mute" />
-            <input
-              className={`${inputCls} pl-9`}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nome, CPF ou ficha…"
-            />
+          <div className="rise mb-4 flex flex-wrap items-center gap-2.5" style={{ animationDelay: '60ms' }}>
+            <div className="relative max-w-sm flex-1">
+              <IconSearch size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mute" />
+              <input
+                className={`${inputCls} pl-9`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por nome, CPF ou ficha…"
+              />
+            </div>
+            {patients.some((p) => p.archived) && (
+              <button
+                onClick={() => setShowArchived((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+                  showArchived
+                    ? 'border-warn-500/50 bg-warn-100 text-warn-600'
+                    : 'border-line bg-card text-mute hover:border-pine-200 hover:text-ink'
+                }`}
+              >
+                <IconArchive size={14} />
+                {showArchived ? 'Ocultar arquivados' : `Mostrar arquivados (${patients.filter((p) => p.archived).length})`}
+              </button>
+            )}
           </div>
 
           {filtered.length === 0 ? (
@@ -678,6 +719,8 @@ export function PatientsScreen({
                             )}
                             {p.specialCare.includes('alzheimer') && <Tag tone="info">Alzheimer</Tag>}
                             {p.allergies.length > 0 && <Tag tone="danger">{p.allergies.length} alergia{p.allergies.length === 1 ? '' : 's'}</Tag>}
+                            {p.primarySpecialty && <Tag tone="mute">{p.primarySpecialty}</Tag>}
+                            {p.archived && <Tag tone="warn">arquivada</Tag>}
                           </div>
                         </div>
                       </div>
@@ -705,9 +748,22 @@ export function PatientsScreen({
                         <Btn variant="outline" size="sm" onClick={() => { setEditing(p); setDrawerOpen(true); }} aria-label={`Editar ${p.name}`}>
                           <IconPencil size={14} />
                         </Btn>
-                        <Btn variant="ghost" size="sm" onClick={() => setToDelete(p)} aria-label={`Excluir ${p.name}`}>
-                          <IconTrash size={14} />
-                        </Btn>
+                        {p.archived ? (
+                          <Btn
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              onRestore(p.id);
+                              toast('success', `${p.name} restaurada — a ficha voltou a ficar acessível.`);
+                            }}
+                          >
+                            <IconRefresh size={14} /> Restaurar
+                          </Btn>
+                        ) : (
+                          <Btn variant="ghost" size="sm" onClick={() => setToArchive(p)} aria-label={`Arquivar ${p.name}`}>
+                            <IconArchive size={14} />
+                          </Btn>
+                        )}
                       </div>
                     </div>
                   </li>
@@ -735,6 +791,7 @@ export function PatientsScreen({
               initial={editing}
               patients={patients}
               initialPhoto={formPhoto}
+              defaultOwnerId={ownerAccountId ?? null}
               onCancel={() => {
                 setDrawerOpen(false);
                 setFormPhoto(null);
@@ -755,20 +812,22 @@ export function PatientsScreen({
       )}
 
       <ConfirmDialog
-        open={toDelete !== null}
-        onClose={() => setToDelete(null)}
+        open={toArchive !== null}
+        onClose={() => setToArchive(null)}
         onConfirm={() => {
-          if (toDelete) {
-            onDelete(toDelete.id);
-            toast('info', `${toDelete.name} removida da base local.`);
+          if (toArchive) {
+            onArchive(toArchive.id);
+            toast('info', `${toArchive.name} arquivada. Os dados foram preservados — nada é excluído.`);
           }
         }}
-        title="Excluir pessoa"
-        confirmLabel="Excluir definitivamente"
+        title="Arquivar prontuário"
+        tone="default"
+        confirmLabel="Arquivar"
         message={
           <p>
-            <strong className="text-ink">{toDelete?.name}</strong> será removida junto com o prontuário, os
-            biométricos e a rede de avisos. Essa ação não pode ser desfeita.
+            O prontuário de <strong className="text-ink">{toArchive?.name}</strong> sairá das listas e da
+            identificação, mas <strong className="text-ink">nenhum dado será excluído</strong>. Você poderá
+            restaurá-lo quando quiser em “Mostrar arquivados”.
           </p>
         }
       />

@@ -63,6 +63,7 @@ const RESULT_LABEL: Record<IdEvent['result'], { text: string; cls: string }> = {
 export function IdentifyScreen({
   patients,
   log,
+  accountName,
   onPatientsUpdated,
   onLogEvent,
   onOpenRecord,
@@ -71,6 +72,7 @@ export function IdentifyScreen({
 }: {
   patients: Patient[];
   log: IdEvent[];
+  accountName: string;
   onPatientsUpdated: (p: Patient[]) => void;
   onLogEvent: (e: IdEvent) => void;
   onOpenRecord: (id: string) => void;
@@ -117,8 +119,8 @@ export function IdentifyScreen({
     setScanning(false);
   };
 
-  const emitLog = (partial: Omit<IdEvent, 'id' | 'at'>) =>
-    onLogEvent({ id: uid(), at: Date.now(), ...partial });
+  const emitLog = (partial: Omit<IdEvent, 'id' | 'at' | 'byName'>) =>
+    onLogEvent({ id: uid(), at: Date.now(), byName: accountName, ...partial });
 
   /* ------------------------- pipeline de retrato ------------------------- */
 

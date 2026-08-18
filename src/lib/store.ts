@@ -1,8 +1,8 @@
-import type { AppState, ClinicalEntry, Patient } from './types';
+import type { AccessGrant, Account, AppState, ClinicalEntry, IdEvent, Patient } from './types';
 import { EMPTY_MISSING } from './types';
 import { makeFingerprintTemplate } from './biometrics';
 
-const KEY = 'vitalis.state.v2';
+const KEY = 'vitalis.state.v3';
 
 export function uid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -17,10 +17,68 @@ export function newRecordNumber(patients: Patient[]): string {
   return `VT-${year}-${String(seq).padStart(4, '0')}`;
 }
 
+/** Hash local simples do PIN (demo — nunca sai do dispositivo). */
+export function hashPin(pin: string): string {
+  let h = 5381;
+  for (let i = 0; i < pin.length; i++) h = ((h * 33) ^ pin.charCodeAt(i)) >>> 0;
+  return 'h' + h.toString(36);
+}
+
 /* ------------------- normalização / migração de versão ------------------ */
 
 function asArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
+}
+
+function normalizeEntry(raw: Record<string, unknown>): ClinicalEntry {
+  return {
+    id: String(raw.id ?? uid()),
+    type: (raw.type as ClinicalEntry['type']) ?? 'observacao',
+    title: String(raw.title ?? 'Registro'),
+    notes: String(raw.notes ?? ''),
+    date: String(raw.date ?? ''),
+    createdAt: Number(raw.createdAt ?? Date.now()),
+    specialty: String(raw.specialty ?? ''),
+    archived: Boolean(raw.archived),
+  };
+}
+
+function normalizeAccount(raw: Record<string, unknown>): Account {
+  return {
+    id: String(raw.id ?? uid()),
+    name: String(raw.name ?? 'Conta'),
+    email: String(raw.email ?? ''),
+    role: (raw.role as Account['role']) ?? 'titular',
+    pinHash: (raw.pinHash as string | null) ?? null,
+    createdAt: Number(raw.createdAt ?? Date.now()),
+  };
+}
+
+function normalizeGrant(raw: Record<string, unknown>): AccessGrant {
+  return {
+    id: String(raw.id ?? uid()),
+    accountId: String(raw.accountId ?? ''),
+    patientId: String(raw.patientId ?? ''),
+    grantedByName: String(raw.grantedByName ?? ''),
+    level: (raw.level as AccessGrant['level']) ?? 'completo',
+    createdAt: Number(raw.createdAt ?? Date.now()),
+  };
+}
+
+function normalizeLog(raw: Record<string, unknown>): IdEvent {
+  return {
+    id: String(raw.id ?? uid()),
+    method: (raw.method as IdEvent['method']) ?? 'face',
+    patientId: (raw.patientId as string | null) ?? null,
+    patientName: String(raw.patientName ?? '—'),
+    confidence: Number(raw.confidence ?? 0),
+    quality: (raw.quality as number | null) ?? null,
+    result: (raw.result as IdEvent['result']) ?? 'none',
+    at: Number(raw.at ?? Date.now()),
+    thumb: (raw.thumb as string | null) ?? null,
+    detail: raw.detail !== undefined ? String(raw.detail) : undefined,
+    byName: String(raw.byName ?? ''),
+  };
 }
 
 export function normalizePatient(raw: Record<string, unknown>): Patient {
@@ -50,13 +108,24 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
     photo: (raw.photo as string | null) ?? null,
     photoHash: (raw.photoHash as string | null) ?? null,
     fingerprint: (raw.fingerprint as Patient['fingerprint']) ?? null,
-    entries: asArray<ClinicalEntry>(raw.entries),
+    entries: asArray<Record<string, unknown>>(raw.entries).map(normalizeEntry),
     createdAt: Number(raw.createdAt ?? Date.now()),
+    primarySpecialty: String(raw.primarySpecialty ?? ''),
+    archived: Boolean(raw.archived),
+    ownerAccountId: (raw.ownerAccountId as string | null) ?? null,
   };
 }
 
 export function emptyState(): AppState {
-  return { rev: 2, seeded: false, patients: [], log: [] };
+  return {
+    rev: 3,
+    seeded: false,
+    patients: [],
+    log: [],
+    accounts: [],
+    grants: [],
+    session: null,
+  };
 }
 
 /* ------------------------------- seed demo ------------------------------ */
@@ -101,11 +170,14 @@ function seedPatients(): Patient[] {
       photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(120), quality: 91 },
       entries: [
-        { id: uid(), type: 'consulta', title: 'Avaliação geriátrica — estadiamento cognitivo', notes: 'CDR 1 (demência leve). Mantida Donepezila; orientada a família sobre segurança em saídas.', date: iso(34).slice(0, 10), createdAt: daysAgo(34) },
-        { id: uid(), type: 'exame', title: 'Ressonância magnética do crânio', notes: 'Atrofia hipocampal bilateral compatível com doença de Alzheimer.', date: iso(61).slice(0, 10), createdAt: daysAgo(61) },
-        { id: uid(), type: 'medicacao', title: 'Ajuste de Metformina', notes: 'HbA1c 6,9%. Mantida dose atual, reavaliar em 3 meses.', date: iso(90).slice(0, 10), createdAt: daysAgo(90) },
+        { id: uid(), type: 'consulta', title: 'Avaliação geriátrica — estadiamento cognitivo', notes: 'CDR 1 (demência leve). Mantida Donepezila; orientada a família sobre segurança em saídas.', date: iso(34).slice(0, 10), createdAt: daysAgo(34), specialty: 'Geriatria', archived: false },
+        { id: uid(), type: 'exame', title: 'Ressonância magnética do crânio', notes: 'Atrofia hipocampal bilateral compatível com doença de Alzheimer.', date: iso(61).slice(0, 10), createdAt: daysAgo(61), specialty: 'Neurologia', archived: false },
+        { id: uid(), type: 'medicacao', title: 'Ajuste de Metformina', notes: 'HbA1c 6,9%. Mantida dose atual, reavaliar em 3 meses.', date: iso(90).slice(0, 10), createdAt: daysAgo(90), specialty: 'Endocrinologia', archived: false },
       ],
       createdAt: daysAgo(420),
+      primarySpecialty: 'Geriatria',
+      archived: false,
+      ownerAccountId: 'acc-ana',
     },
     {
       id: 'p-carlos',
@@ -130,10 +202,13 @@ function seedPatients(): Patient[] {
       photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(98), quality: 88 },
       entries: [
-        { id: uid(), type: 'procedimento', title: 'Implante de marca-passo definitivo', notes: 'Procedimento sem intercorrências. Repouso relativo por 7 dias.', date: iso(300).slice(0, 10), createdAt: daysAgo(300) },
-        { id: uid(), type: 'consulta', title: 'Retorno cardiológico', notes: 'Holter 24h sem novas arritmias significativas.', date: iso(45).slice(0, 10), createdAt: daysAgo(45) },
+        { id: uid(), type: 'procedimento', title: 'Implante de marca-passo definitivo', notes: 'Procedimento sem intercorrências. Repouso relativo por 7 dias.', date: iso(300).slice(0, 10), createdAt: daysAgo(300), specialty: 'Cardiologia', archived: false },
+        { id: uid(), type: 'consulta', title: 'Retorno cardiológico', notes: 'Holter 24h sem novas arritmias significativas.', date: iso(45).slice(0, 10), createdAt: daysAgo(45), specialty: 'Cardiologia', archived: false },
       ],
       createdAt: daysAgo(380),
+      primarySpecialty: 'Cardiologia',
+      archived: false,
+      ownerAccountId: 'acc-carlos',
     },
     {
       id: 'p-sofia',
@@ -159,10 +234,36 @@ function seedPatients(): Patient[] {
       photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(40), quality: 74 },
       entries: [
-        { id: uid(), type: 'vacina', title: 'Tríplice viral — reforço', notes: 'Sem reações adversas.', date: iso(180).slice(0, 10), createdAt: daysAgo(180) },
-        { id: uid(), type: 'consulta', title: 'Pediatria — puericultura', notes: 'Crescimento e desenvolvimento adequados. Prescrita caneta de epinefrina (EpiPen).', date: iso(70).slice(0, 10), createdAt: daysAgo(70) },
+        { id: uid(), type: 'vacina', title: 'Tríplice viral — reforço', notes: 'Sem reações adversas.', date: iso(180).slice(0, 10), createdAt: daysAgo(180), specialty: 'Pediatria', archived: false },
+        { id: uid(), type: 'consulta', title: 'Pediatria — puericultura', notes: 'Crescimento e desenvolvimento adequados. Prescrita caneta de epinefrina (EpiPen).', date: iso(70).slice(0, 10), createdAt: daysAgo(70), specialty: 'Pediatria', archived: false },
       ],
       createdAt: daysAgo(200),
+      primarySpecialty: 'Pediatria',
+      archived: false,
+      ownerAccountId: 'acc-juliana',
+    },
+  ];
+}
+
+function seedAccounts(): Account[] {
+  const pin = hashPin('1234');
+  return [
+    { id: 'acc-ana', name: 'Ana Beatriz Sampaio', email: 'ana.sampaio@exemplo.com', role: 'titular', pinHash: pin, createdAt: daysAgo(420) },
+    { id: 'acc-carlos', name: 'Carlos Eduardo Menezes', email: 'carlos.menezes@exemplo.com', role: 'titular', pinHash: pin, createdAt: daysAgo(380) },
+    { id: 'acc-juliana', name: 'Juliana Almeida', email: 'juliana.almeida@exemplo.com', role: 'titular', pinHash: pin, createdAt: daysAgo(200) },
+    { id: 'acc-marina', name: 'Marina Sampaio Reis', email: 'marina.reis@exemplo.com', role: 'responsavel', pinHash: pin, createdAt: daysAgo(300) },
+  ];
+}
+
+function seedGrants(): AccessGrant[] {
+  return [
+    {
+      id: 'g-marina-ana',
+      accountId: 'acc-marina',
+      patientId: 'p-ana',
+      grantedByName: 'Ana Beatriz Sampaio',
+      level: 'completo',
+      createdAt: daysAgo(280),
     },
   ];
 }
@@ -171,7 +272,11 @@ export function seedDemoState(current: AppState): AppState {
   const demo = seedPatients();
   const existingIds = new Set(current.patients.map((p) => p.id));
   const merged = [...current.patients, ...demo.filter((p) => !existingIds.has(p.id))];
-  return { ...current, seeded: true, patients: merged };
+  const accIds = new Set(current.accounts.map((a) => a.id));
+  const accounts = [...current.accounts, ...seedAccounts().filter((a) => !accIds.has(a.id))];
+  const gIds = new Set(current.grants.map((g) => g.id));
+  const grants = [...current.grants, ...seedGrants().filter((g) => !gIds.has(g.id))];
+  return { ...current, seeded: true, patients: merged, accounts, grants };
 }
 
 /* ------------------------------- persistência --------------------------- */
@@ -181,11 +286,15 @@ export function loadState(): AppState {
     const raw = localStorage.getItem(KEY);
     if (!raw) return emptyState();
     const parsed = JSON.parse(raw) as Partial<AppState>;
+    const sessionRaw = (parsed.session ?? null) as AppState['session'];
     return {
-      rev: 2,
+      rev: 3,
       seeded: Boolean(parsed.seeded),
       patients: asArray<Record<string, unknown>>(parsed.patients).map(normalizePatient),
-      log: asArray<AppState['log'][number]>(parsed.log),
+      log: asArray<Record<string, unknown>>(parsed.log).map(normalizeLog),
+      accounts: asArray<Record<string, unknown>>(parsed.accounts).map(normalizeAccount),
+      grants: asArray<Record<string, unknown>>(parsed.grants).map(normalizeGrant),
+      session: sessionRaw ? { accountId: String(sessionRaw.accountId), patientId: sessionRaw.patientId ?? null } : null,
     };
   } catch {
     return emptyState();
@@ -199,6 +308,20 @@ export function saveState(state: AppState): boolean {
   } catch {
     return false;
   }
+}
+
+/* --------------------------- acesso & delegação ------------------------- */
+
+/** Prontuários acessíveis por uma conta: próprios + delegados (não arquivados). */
+export function accessiblePatients(state: AppState, accountId: string): Patient[] {
+  const granted = new Set(state.grants.filter((g) => g.accountId === accountId).map((g) => g.patientId));
+  return state.patients.filter(
+    (p) => !p.archived && (p.ownerAccountId === accountId || granted.has(p.id)),
+  );
+}
+
+export function grantFor(state: AppState, accountId: string, patientId: string): AccessGrant | null {
+  return state.grants.find((g) => g.accountId === accountId && g.patientId === patientId) ?? null;
 }
 
 /* ------------------------------ backup JSON ----------------------------- */
@@ -216,11 +339,15 @@ export function parseImport(text: string): AppState | null {
     const parsed = JSON.parse(text) as { state?: Partial<AppState>; patients?: unknown[] };
     const inner = (parsed.state ?? parsed) as Partial<AppState>;
     if (!Array.isArray(inner.patients)) return null;
+    const sessionRaw = (inner.session ?? null) as AppState['session'];
     return {
-      rev: 2,
+      rev: 3,
       seeded: true,
       patients: asArray<Record<string, unknown>>(inner.patients).map(normalizePatient),
-      log: asArray<AppState['log'][number]>(inner.log),
+      log: asArray<Record<string, unknown>>(inner.log).map(normalizeLog),
+      accounts: asArray<Record<string, unknown>>(inner.accounts).map(normalizeAccount),
+      grants: asArray<Record<string, unknown>>(inner.grants).map(normalizeGrant),
+      session: sessionRaw ? { accountId: String(sessionRaw.accountId), patientId: sessionRaw.patientId ?? null } : null,
     };
   } catch {
     return null;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { MissingStatus, Patient } from '../lib/types';
+import type { IdEvent, MissingStatus, Patient } from '../lib/types';
 import { uid } from '../lib/store';
 import { ageFromBirth, daysSince, formatDateTime, formatDateBR, waLink } from '../lib/biometrics';
 import { Avatar, BloodBadge, Btn, EmptyState, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
@@ -42,11 +42,13 @@ function EventLog({ history }: { history: MissingStatus['history'] }) {
 
 export function MissingScreen({
   patients,
+  log,
   onUpdate,
   onOpenRecord,
   onGoPatients,
 }: {
   patients: Patient[];
+  log: IdEvent[];
   onUpdate: (p: Patient) => void;
   onOpenRecord: (id: string) => void;
   onGoPatients: () => void;
@@ -66,14 +68,14 @@ export function MissingScreen({
   const missing = useMemo(
     () =>
       patients
-        .filter((p) => p.missing.active)
+        .filter((p) => !p.archived && p.missing.active)
         .sort((a, b) => a.missing.since.localeCompare(b.missing.since)),
     [patients],
   );
   const resolved = useMemo(
     () =>
       patients
-        .filter((p) => !p.missing.active && p.missing.history.length > 0)
+        .filter((p) => !p.archived && !p.missing.active && p.missing.history.length > 0)
         .sort((a, b) => {
           const la = a.missing.history[a.missing.history.length - 1]?.at ?? 0;
           const lb = b.missing.history[b.missing.history.length - 1]?.at ?? 0;
@@ -81,7 +83,7 @@ export function MissingScreen({
         }),
     [patients],
   );
-  const eligible = patients.filter((p) => !p.missing.active);
+  const eligible = patients.filter((p) => !p.archived && !p.missing.active);
   const networkSize = missing.reduce((s, p) => s + p.contacts.length, 0);
 
   const submitReport = () => {
@@ -245,6 +247,44 @@ export function MissingScreen({
                       )}
                       {p.missing.notes && <p className="mt-1.5 text-[13px] leading-relaxed text-mute">{p.missing.notes}</p>}
                       <EventLog history={p.missing.history} />
+                      {/* rastreabilidade: quem consultou esta ficha */}
+                      <div className="mt-3 rounded-lg border border-line bg-paper/70 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-mute">
+                          Quem consultou esta ficha (logado)
+                        </p>
+                        {(() => {
+                          const consults = log.filter(
+                            (e) => e.patientId === p.id && ['match', 'review', 'notify', 'found'].includes(e.result),
+                          );
+                          if (consults.length === 0)
+                            return (
+                              <p className="mt-1.5 text-xs text-mute">
+                                Nenhuma identificação registrada ainda. Toda consulta exige conta logada e fica
+                                auditada com nome e horário.
+                              </p>
+                            );
+                          const label: Record<string, string> = {
+                            match: 'identificou por biometria',
+                            review: 'revisou a identidade manualmente',
+                            notify: 'registrou avisos à rede',
+                            found: 'confirmou a localização',
+                          };
+                          return (
+                            <ul className="mt-1.5 space-y-1">
+                              {consults.slice(0, 5).map((e) => (
+                                <li key={e.id} className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+                                  <span className="font-bold text-ink">{e.byName || 'conta local'}</span>
+                                  <span className="text-mute">{label[e.result] ?? e.result}</span>
+                                  {e.confidence > 0 && (
+                                    <span className="font-mono text-[11px] text-mute">({e.confidence}%)</span>
+                                  )}
+                                  <span className="ml-auto font-mono text-[11px] text-mute">{formatDateTime(e.at)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          );
+                        })()}
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2 border-t border-line pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
                       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-mute">Ações</p>

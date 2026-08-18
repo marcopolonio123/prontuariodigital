@@ -1,32 +1,29 @@
 import { useRef, useState } from 'react';
 import type { AppState } from '../lib/types';
 import { exportJSON, parseImport } from '../lib/store';
-import { Btn, ConfirmDialog, Tag, useToast } from '../components/ui';
+import { Btn, Tag, useToast } from '../components/ui';
 import {
+  IconArchive,
   IconCheck,
   IconDatabase,
   IconDownload,
   IconFace,
   IconFingerprint,
   IconShield,
-  IconTrash,
   IconUpload,
 } from '../components/icons';
 
 export function SettingsScreen({
   state,
   onImport,
-  onWipe,
   onLoadDemo,
 }: {
   state: AppState;
   onImport: (s: AppState) => void;
-  onWipe: () => void;
   onLoadDemo: () => void;
 }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [wipeOpen, setWipeOpen] = useState(false);
 
   const totalEntries = state.patients.reduce((s, p) => s + p.entries.length, 0);
   const sizeKb = (new Blob([JSON.stringify(state)]).size / 1024).toFixed(1);
@@ -161,39 +158,37 @@ export function SettingsScreen({
         </section>
 
         <section
-          className="rise rounded-xl border border-danger-500/25 bg-card p-5 shadow-lift"
+          className="rise rounded-xl border border-line bg-card p-5 shadow-lift"
           style={{ animationDelay: '200ms' }}
         >
-          <h2 className="font-display text-base font-bold text-danger-600">Zona de risco</h2>
+          <h2 className="flex items-center gap-2 font-display text-base font-bold text-ink">
+            <IconArchive size={18} className="text-moss-600" /> Retenção de dados — nada é excluído
+          </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Remove permanentemente todos os pacientes, registros, identificações e configurações deste navegador.
+            Por decisão de produto, o Vitalis <strong className="text-ink">não permite excluir dados de saúde</strong>:
+            pessoas e registros são apenas <strong className="text-ink">arquivados</strong> (saem das listas e da
+            identificação, mas permanecem íntegros e podem ser restaurados). Para levar os dados para outro
+            dispositivo ou entregá-los a um médico, use a exportação JSON ou o compartilhamento por especialidade,
+            disponíveis em cada prontuário.
           </p>
-          <Btn variant="danger" className="mt-3" onClick={() => setWipeOpen(true)}>
-            <IconTrash size={16} /> Apagar toda a base local
-          </Btn>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Tag tone="moss">
+              <IconCheck size={12} className="mr-1" /> arquivamento reversível
+            </Tag>
+            <Tag tone="info">
+              <IconDownload size={12} className="mr-1" /> exportação por especialidade
+            </Tag>
+            <Tag tone="info">
+              <IconCheck size={12} className="mr-1" /> auditoria de quem consulta
+            </Tag>
+          </div>
         </section>
 
         <p className="rise px-1 pb-4 font-mono text-[11px] text-mute" style={{ animationDelay: '240ms' }}>
-          Vitalis v0.1.0 · MVP — identificação por retrato e digital · prontuário vitalício em construção
+          Vitalis v0.2.0 — contas & acesso delegado · consultor IA · especialidades · retenção sem exclusão
         </p>
       </div>
 
-      <ConfirmDialog
-        open={wipeOpen}
-        onClose={() => setWipeOpen(false)}
-        onConfirm={() => {
-          onWipe();
-        }}
-        title="Apagar toda a base"
-        confirmLabel="Apagar tudo"
-        message={
-          <p>
-            {state.patients.length} paciente{state.patients.length === 1 ? '' : 's'}, {totalEntries} registro
-            {totalEntries === 1 ? '' : 's'} clínicos e {state.log.length} identificações serão removidos deste
-            dispositivo. Exporte um backup antes, se necessário.
-          </p>
-        }
-      />
     </div>
   );
 }

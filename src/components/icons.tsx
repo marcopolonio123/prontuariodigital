@@ -257,6 +257,73 @@ export const IconFileText = (p: IconProps) => (
   </I>
 );
 
+export const IconSparkles = (p: IconProps) => (
+  <I {...p}>
+    <path d="M12 4.5l1.7 4.3 4.3 1.7-4.3 1.7L12 16.5l-1.7-4.3L6 10.5l4.3-1.7L12 4.5z" />
+    <path d="M19 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1z" />
+    <path d="M5 2.5l.7 1.8 1.8.7-1.8.7L5 7.5l-.7-1.8-1.8-.7 1.8-.7L5 2.5z" />
+  </I>
+);
+
+export const IconShare = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="18" cy="5.5" r="2.7" />
+    <circle cx="6" cy="12" r="2.7" />
+    <circle cx="18" cy="18.5" r="2.7" />
+    <path d="M8.4 10.7l7.2-4M8.4 13.3l7.2 4" />
+  </I>
+);
+
+export const IconArchive = (p: IconProps) => (
+  <I {...p}>
+    <rect x="3" y="4" width="18" height="5" rx="1.5" />
+    <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" />
+    <path d="M10 13h4" />
+  </I>
+);
+
+export const IconLogOut = (p: IconProps) => (
+  <I {...p}>
+    <path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3" />
+    <path d="M16 17l5-5-5-5M21 12H9" />
+  </I>
+);
+
+export const IconUserPlus = (p: IconProps) => (
+  <I {...p}>
+    <path d="M15 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="8" cy="7" r="4" />
+    <path d="M20 8v6M23 11h-6" />
+  </I>
+);
+
+export const IconLock = (p: IconProps) => (
+  <I {...p}>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+  </I>
+);
+
+export const IconSend = (p: IconProps) => (
+  <I {...p}>
+    <path d="M22 2L11 13" />
+    <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+  </I>
+);
+
+export const IconChevronDown = (p: IconProps) => (
+  <I {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </I>
+);
+
+export const IconBrain = (p: IconProps) => (
+  <I {...p}>
+    <path d="M9.5 2.5a2.5 2.5 0 0 0-2.5 2.5 3 3 0 0 0-2.5 3c-.9.5-1.5 1.5-1.5 2.6 0 .8.3 1.5.8 2.1A3 3 0 0 0 5 18c.3 1.7 1.7 3 3.5 3 1 0 1.9-.4 2.5-1V4.5a2.5 2.5 0 0 0-1.5-2z" />
+    <path d="M14.5 2.5a2.5 2.5 0 0 1 2.5 2.5 3 3 0 0 1 2.5 3c.9.5 1.5 1.5 1.5 2.6 0 .8-.3 1.5-.8 2.1A3 3 0 0 1 19 18c-.3 1.7-1.7 3-3.5 3-1 0-1.9-.4-2.5-1V4.5a2.5 2.5 0 0 1 1.5-2z" />
+  </I>
+);
+
 export const IconMapPin = (p: IconProps) => (
   <I {...p}>
     <path d="M20 10.4c0 5.8-8 11.6-8 11.6s-8-5.8-8-11.6a8 8 0 0 1 16 0z" />
