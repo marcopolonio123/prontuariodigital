@@ -257,6 +257,40 @@ export const IconFileText = (p: IconProps) => (
   </I>
 );
 
+export const IconMapPin = (p: IconProps) => (
+  <I {...p}>
+    <path d="M20 10.4c0 5.8-8 11.6-8 11.6s-8-5.8-8-11.6a8 8 0 0 1 16 0z" />
+    <circle cx="12" cy="10.4" r="3" />
+  </I>
+);
+
+export const IconPhone = (p: IconProps) => (
+  <I {...p}>
+    <path d="M21 16.9v2.6a1.9 1.9 0 0 1-2.1 1.9 18.9 18.9 0 0 1-8.2-2.9 18.6 18.6 0 0 1-5.7-5.7A18.9 18.9 0 0 1 2.1 4.6 1.9 1.9 0 0 1 4 2.5h2.6a1.9 1.9 0 0 1 1.9 1.6c.12.94.34 1.86.66 2.74a1.9 1.9 0 0 1-.43 2L7.6 10a15.2 15.2 0 0 0 5.7 5.7l1.2-1.2a1.9 1.9 0 0 1 2-.43c.88.32 1.8.54 2.74.66a1.9 1.9 0 0 1 1.66 1.97z" />
+  </I>
+);
+
+export const IconMessage = (p: IconProps) => (
+  <I {...p}>
+    <path d="M21 12.5a8 8 0 0 1-8 8 8.4 8.4 0 0 1-3.6-.8L3 21l1.3-6.4A8 8 0 1 1 21 12.5z" />
+    <path d="M8.5 12.5h.01M12 12.5h.01M15.5 12.5h.01" strokeWidth={2.4} />
+  </I>
+);
+
+export const IconBell = (p: IconProps) => (
+  <I {...p}>
+    <path d="M18 9a6 6 0 1 0-12 0c0 6.3-2.5 8-2.5 8h17S18 15.3 18 9z" />
+    <path d="M10.3 20.5a2 2 0 0 0 3.4 0" />
+  </I>
+);
+
+export const IconEye = (p: IconProps) => (
+  <I {...p}>
+    <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" />
+    <circle cx="12" cy="12" r="2.8" />
+  </I>
+);
+
 export const IconRefresh = (p: IconProps) => (
   <I {...p}>
     <path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" />

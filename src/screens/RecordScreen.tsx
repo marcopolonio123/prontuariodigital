@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { ClinicalEntry, EntryType, Patient } from '../lib/types';
-import { ENTRY_META, ENTRY_TYPES } from '../lib/types';
+import { ENTRY_META, ENTRY_TYPES, SPECIAL_CARE_META } from '../lib/types';
 import { ageFromBirth, formatDateBR } from '../lib/biometrics';
 import { uid } from '../lib/store';
 import {
@@ -205,7 +205,13 @@ export function RecordScreen({
                 {patient.sex === 'F' ? 'Feminino' : patient.sex === 'M' ? 'Masculino' : 'Outro'}
               </span>
             </div>
-            {(patient.allergies.length > 0 || patient.conditions.length > 0 || patient.photo || patient.fingerprint) && (
+            {(patient.allergies.length > 0 ||
+              patient.conditions.length > 0 ||
+              patient.intolerances.length > 0 ||
+              patient.specialCare.length > 0 ||
+              patient.medications.length > 0 ||
+              patient.photo ||
+              patient.fingerprint) && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {patient.allergies.map((a) => (
                   <Tag key={a} tone="warn">
@@ -217,6 +223,23 @@ export function RecordScreen({
                     {c}
                   </Tag>
                 ))}
+                {patient.intolerances.map((i) => (
+                  <Tag key={`int-${i}`} tone="warn">
+                    intolerância: {i}
+                  </Tag>
+                ))}
+                {patient.specialCare.length > 0 && (
+                  <Tag tone="info">
+                    <IconAlert size={11} className="mr-1" />
+                    {SPECIAL_CARE_META[patient.specialCare[0]].label}
+                    {patient.specialCare.length > 1 ? ` +${patient.specialCare.length - 1}` : ''}
+                  </Tag>
+                )}
+                {patient.medications.length > 0 && (
+                  <Tag tone="mute">
+                    {patient.medications.length} medicação(ões) em uso
+                  </Tag>
+                )}
                 {patient.photo && (
                   <Tag tone="moss">
                     <IconFace size={11} className="mr-1" /> retrato
@@ -240,6 +263,14 @@ export function RecordScreen({
             </div>
           </div>
         </div>
+        {patient.missing.active && (
+          <div className="relative flex items-center gap-2 border-t border-danger-500/30 bg-danger-100/70 px-5 py-2 sm:px-6">
+            <span className="blink-dot h-2 w-2 rounded-full bg-danger-500" />
+            <p className="text-xs font-bold text-danger-600">
+              DESAPARECIDA desde {formatDateBR(patient.missing.since)} — gerencie o alerta na tela Desaparecidos.
+            </p>
+          </div>
+        )}
         <div className="relative border-t border-line bg-paper/50 px-5 py-2.5 sm:px-6">
           <p className="text-xs text-mute">
             Último registro:{' '}

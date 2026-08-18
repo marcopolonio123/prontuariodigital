@@ -308,12 +308,13 @@ export function Tag({
   tone,
 }: {
   children: ReactNode;
-  tone: 'warn' | 'info' | 'moss' | 'mute';
+  tone: 'warn' | 'info' | 'moss' | 'mute' | 'danger';
 }) {
   const tones = {
     warn: 'bg-warn-100 text-warn-600 border-warn-500/25',
     info: 'bg-info-100 text-info-600 border-info-500/25',
     moss: 'bg-moss-100 text-moss-700 border-moss-500/25',
+    danger: 'bg-danger-100 text-danger-600 border-danger-500/25',
     mute: 'bg-pine-900/5 text-mute border-line',
   }[tone];
   return (

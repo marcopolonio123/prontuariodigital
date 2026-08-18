@@ -2,15 +2,17 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { AppState, ClinicalEntry, IdEvent, Patient, Route } from './lib/types';
 import { emptyState, loadState, saveState, seedDemoState } from './lib/store';
 import { Ecg, ToastProvider, useToast } from './components/ui';
-import { IconFace, IconGear, IconUsers, LogoMark } from './components/icons';
+import { IconFace, IconGear, IconSearch, IconUsers, LogoMark } from './components/icons';
 import { IdentifyScreen } from './screens/IdentifyScreen';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { RecordScreen } from './screens/RecordScreen';
+import { MissingScreen } from './screens/MissingScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
-const NAV: Array<{ key: 'identify' | 'patients' | 'settings'; label: string; icon: ReactNode }> = [
+const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'settings'; label: string; icon: ReactNode }> = [
   { key: 'identify', label: 'Identificação', icon: <IconFace size={18} /> },
-  { key: 'patients', label: 'Pacientes', icon: <IconUsers size={18} /> },
+  { key: 'patients', label: 'Pessoas & prontuários', icon: <IconUsers size={18} /> },
+  { key: 'missing', label: 'Desaparecidos', icon: <IconSearch size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', icon: <IconGear size={18} /> },
 ];
 
@@ -64,9 +66,20 @@ function Shell() {
   const activeKey = route.name === 'record' ? 'patients' : route.name;
   const currentPatient =
     route.name === 'record' ? state.patients.find((p) => p.id === route.id) : undefined;
+  const missingCount = state.patients.filter((p) => p.missing.active).length;
 
   const navButton = (item: (typeof NAV)[number], mobile: boolean) => {
     const active = activeKey === item.key;
+    const badge =
+      item.key === 'missing' && missingCount > 0 ? (
+        <span
+          className={`ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-bold ${
+            active || mobile ? 'bg-danger-500 text-white' : 'bg-danger-500/90 text-white'
+          }`}
+        >
+          {missingCount}
+        </span>
+      ) : null;
     if (mobile) {
       return (
         <button
@@ -78,6 +91,7 @@ function Shell() {
         >
           {item.icon}
           {item.label}
+          {badge}
         </button>
       );
     }
@@ -96,6 +110,7 @@ function Shell() {
         />
         <span className={active ? 'text-moss-300' : 'text-pine-200/80 group-hover:text-moss-300'}>{item.icon}</span>
         {item.label}
+        {badge}
       </button>
     );
   };
@@ -183,6 +198,14 @@ function Shell() {
                 }}
                 onAddEntry={addEntry}
                 onDeleteEntry={deleteEntry}
+              />
+            )}
+            {route.name === 'missing' && (
+              <MissingScreen
+                patients={state.patients}
+                onUpdate={updatePatient}
+                onOpenRecord={(id) => setRoute({ name: 'record', id })}
+                onGoPatients={() => setRoute({ name: 'patients' })}
               />
             )}
             {route.name === 'settings' && (

@@ -205,6 +205,46 @@ export function timeAgo(ts: number): string {
   return formatDateBR(new Date(ts).toISOString().slice(0, 10));
 }
 
+/* ---------------------- contatos: links de aviso ----------------------- */
+
+export function phoneDigits(phone: string): string {
+  let d = phone.replace(/\D/g, '');
+  // número brasileiro sem DDI → adiciona 55
+  if (d.length > 0 && d.length <= 11) d = '55' + d;
+  return d;
+}
+
+export function formatPhone(phone: string): string {
+  const d = phoneDigits(phone).replace(/^55/, '');
+  if (d.length === 11) return d.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+  if (d.length === 10) return d.replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3');
+  return phone;
+}
+
+export function telLink(phone: string): string {
+  return `tel:+${phoneDigits(phone)}`;
+}
+
+export function waLink(phone: string, text: string): string {
+  return `https://wa.me/${phoneDigits(phone)}?text=${encodeURIComponent(text)}`;
+}
+
+export function missingAlertText(personName: string, age: number | null, method: string, lastPlace: string): string {
+  const lines = [
+    `Olá! Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} foi localizado(a) agora há pouco, identificado(a) por ${method}.`,
+    lastPlace ? `Último local conhecido antes do desaparecimento: ${lastPlace}.` : '',
+    'Por favor, responda para confirmar o recebimento deste aviso.',
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+export function daysSince(isoDate: string): number {
+  if (!isoDate) return 0;
+  const start = new Date(isoDate + 'T00:00:00').getTime();
+  if (Number.isNaN(start)) return 0;
+  return Math.max(0, Math.floor((Date.now() - start) / 86_400_000));
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();

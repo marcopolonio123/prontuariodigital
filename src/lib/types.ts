@@ -36,6 +36,92 @@ export interface Fingerprint {
   quality: number;
 }
 
+export type Relationship =
+  | 'mae'
+  | 'pai'
+  | 'filho'
+  | 'filha'
+  | 'conjuge'
+  | 'irmao'
+  | 'irma'
+  | 'amigo'
+  | 'responsavel'
+  | 'curador'
+  | 'outro';
+
+export const RELATIONSHIP_META: Record<Relationship, string> = {
+  mae: 'Mãe',
+  pai: 'Pai',
+  filho: 'Filho',
+  filha: 'Filha',
+  conjuge: 'Cônjuge',
+  irmao: 'Irmão',
+  irma: 'Irmã',
+  amigo: 'Amigo(a)',
+  responsavel: 'Responsável',
+  curador: 'Curador(a)',
+  outro: 'Outro',
+};
+
+export const RELATIONSHIPS = Object.keys(RELATIONSHIP_META) as Relationship[];
+
+export interface Contact {
+  id: string;
+  name: string;
+  relationship: Relationship;
+  phone: string; // somente dígitos
+  priority: 1 | 2 | 3;
+  note?: string;
+}
+
+export type SpecialCare =
+  | 'alzheimer'
+  | 'autismo'
+  | 'diabetes'
+  | 'epilepsia'
+  | 'cardiaco'
+  | 'nao_verbal'
+  | 'mobilidade'
+  | 'outro';
+
+export const SPECIAL_CARE_META: Record<SpecialCare, { label: string; detail: string }> = {
+  alzheimer: { label: 'Alzheimer / demência', detail: 'Pode estar confusa, desorientada ou sem memória recente.' },
+  autismo: { label: 'Espectro autista', detail: 'Evite toque repentino, luzes fortes e ambientes barulhentos.' },
+  diabetes: { label: 'Diabetes insulino-dependente', detail: 'Risco de hipoglicemia; pode precisar de açúcar ou insulina.' },
+  epilepsia: { label: 'Epilepsia', detail: 'Em crise: proteja a cabeça, não contenha os movimentos.' },
+  cardiaco: { label: 'Cardiopatia / marca-passo', detail: 'Evite esforço; em mal-estar, acione emergência imediatamente.' },
+  nao_verbal: { label: 'Não verbal', detail: 'Comunique-se com gestos simples, calma e contato visual.' },
+  mobilidade: { label: 'Mobilidade reduzida', detail: 'Pode usar bengala, andador ou cadeira de rodas.' },
+  outro: { label: 'Outro cuidado especial', detail: 'Consulte as instruções específicas abaixo.' },
+};
+
+export const SPECIAL_CARES = Object.keys(SPECIAL_CARE_META) as SpecialCare[];
+
+export type MissingEventKind = 'missing' | 'found' | 'sighting' | 'notified';
+
+export interface MissingEvent {
+  id: string;
+  at: number;
+  kind: MissingEventKind;
+  text: string;
+}
+
+export interface MissingStatus {
+  active: boolean;
+  since: string; // ISO yyyy-mm-dd
+  lastPlace: string;
+  notes: string;
+  history: MissingEvent[];
+}
+
+export const EMPTY_MISSING: MissingStatus = {
+  active: false,
+  since: '',
+  lastPlace: '',
+  notes: '',
+  history: [],
+};
+
 export interface Patient {
   id: string;
   record: string; // ex.: VT-2026-0004
@@ -45,7 +131,13 @@ export interface Patient {
   cpf: string;
   bloodType: BloodType | '';
   allergies: string[];
+  intolerances: string[]; // intolerâncias alimentares
   conditions: string[];
+  medications: string[]; // medicações em uso contínuo
+  specialCare: SpecialCare[];
+  emergencyNotes: string; // instruções para quem encontrar
+  contacts: Contact[]; // rede de aviso (pais, filhos, curadores…)
+  missing: MissingStatus;
   photo: string | null; // dataURL ou caminho
   photoHash: string | null; // assinatura visual (dHash 64-bit)
   fingerprint: Fingerprint | null;
@@ -55,7 +147,7 @@ export interface Patient {
 
 export type IdMethod = 'face' | 'finger';
 
-export type IdResult = 'match' | 'review' | 'none';
+export type IdResult = 'match' | 'review' | 'none' | 'notify' | 'found';
 
 export interface IdEvent {
   id: string;
@@ -67,6 +159,7 @@ export interface IdEvent {
   result: IdResult;
   at: number;
   thumb: string | null;
+  detail?: string;
 }
 
 export interface AppState {
@@ -80,6 +173,7 @@ export type Route =
   | { name: 'identify' }
   | { name: 'patients' }
   | { name: 'record'; id: string }
+  | { name: 'missing' }
   | { name: 'settings' };
 
 export interface MatchCandidate {
