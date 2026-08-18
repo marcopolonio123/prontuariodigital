@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <defs>
+    <linearGradient id="bgA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e4ede7"/>
+      <stop offset="1" stop-color="#c9dcd0"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#bgA)"/>
+  <circle cx="400" cy="470" r="345" fill="#f2f6f2" opacity="0.75"/>
+  <!-- corpo / blusa -->
+  <path d="M108 1000 C126 778 240 690 400 690 C560 690 674 778 692 1000 Z" fill="#0e5f45"/>
+  <path d="M240 742 C300 716 350 704 400 704 C450 704 500 716 560 742 L520 1000 L280 1000 Z" fill="#0c523c"/>
+  <path d="M330 690 L400 782 L470 690 Z" fill="#b5764c"/>
+  <!-- pescoço -->
+  <path d="M352 556 L352 656 C352 690 372 708 400 708 C428 708 448 690 448 656 L448 556 Z" fill="#c98a5e"/>
+  <path d="M352 556 L448 556 L448 606 C420 626 380 626 352 606 Z" fill="#b5764c"/>
+  <!-- rosto -->
+  <path d="M400 196 C300 196 238 274 238 386 C238 420 244 452 256 480 C282 552 336 596 400 596 C464 596 518 552 544 480 C556 452 562 420 562 386 C562 274 500 196 400 196 Z" fill="#cf9265"/>
+  <circle cx="240" cy="420" r="26" fill="#cf9265"/>
+  <circle cx="560" cy="420" r="26" fill="#cf9265"/>
+  <!-- cabelo cacheado -->
+  <path d="M400 152 C290 152 214 230 214 348 C214 378 218 402 226 424 C228 328 268 266 330 248 C300 290 292 318 292 346 C320 298 356 276 400 274 C444 276 480 298 508 346 C508 318 500 290 470 248 C532 266 572 328 574 424 C582 402 586 378 586 348 C586 230 510 152 400 152 Z" fill="#2b1d15"/>
+  <circle cx="250" cy="302" r="54" fill="#2b1d15"/>
+  <circle cx="550" cy="302" r="54" fill="#2b1d15"/>
+  <circle cx="284" cy="220" r="60" fill="#2b1d15"/>
+  <circle cx="516" cy="220" r="60" fill="#2b1d15"/>
+  <circle cx="400" cy="178" r="72" fill="#2b1d15"/>
+  <circle cx="328" cy="180" r="56" fill="#2b1d15"/>
+  <circle cx="472" cy="180" r="56" fill="#2b1d15"/>
+  <circle cx="232" cy="376" r="36" fill="#2b1d15"/>
+  <circle cx="568" cy="376" r="36" fill="#2b1d15"/>
+  <!-- sobrancelhas -->
+  <path d="M298 380 C314 368 344 366 362 374" stroke="#2b1d15" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M438 374 C456 366 486 368 502 380" stroke="#2b1d15" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <!-- olhos -->
+  <circle cx="330" cy="418" r="13" fill="#241710"/>
+  <circle cx="470" cy="418" r="13" fill="#241710"/>
+  <circle cx="334" cy="414" r="4" fill="#ffffff"/>
+  <circle cx="474" cy="414" r="4" fill="#ffffff"/>
+  <!-- nariz -->
+  <path d="M400 428 C396 452 392 466 384 476 C392 484 408 484 416 476 C408 466 404 452 400 428 Z" fill="#b5764c" opacity="0.9"/>
+  <!-- lábios -->
+  <path d="M356 514 C372 506 388 510 400 510 C412 510 428 506 444 514 C432 534 414 542 400 542 C386 542 368 534 356 514 Z" fill="#a44f3e"/>
+  <!-- bochechas -->
+  <circle cx="298" cy="468" r="21" fill="#c57b52" opacity="0.45"/>
+  <circle cx="502" cy="468" r="21" fill="#c57b52" opacity="0.45"/>
+  <!-- brincos -->
+  <circle cx="240" cy="454" r="9" fill="#d9a441"/>
+  <circle cx="560" cy="454" r="9" fill="#d9a441"/>
+</svg>
