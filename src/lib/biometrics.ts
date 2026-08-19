@@ -245,6 +245,14 @@ export function emergencyAlertText(
   return lines.join('\n');
 }
 
+export function foundPersonAlertText(personName: string, age: number | null, location: string): string {
+  const lines = [
+    `Olá! Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} acabou de ser ENCONTRADA e identificada pelo app${location ? ` — ${location}` : ''}.`,
+    'Por favor, responda com urgência para confirmar o recebimento e combinar os próximos passos.',
+  ];
+  return lines.join('\n');
+}
+
 export function missingAlertText(personName: string, age: number | null, lastPlace: string): string {
   const lines = [
     `Olá! Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} foi localizada agora há pouco, identificada pelo app.`,

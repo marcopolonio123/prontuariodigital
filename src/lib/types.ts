@@ -167,6 +167,7 @@ export interface EmergencyStatus {
   location: string;
   notes: string;
   history: EmergencyEvent[];
+  attachments: Attachment[]; // fotos/arquivos do caso
 }
 
 export interface MissingEvent {
@@ -182,9 +183,10 @@ export interface MissingStatus {
   lastPlace: string;
   notes: string;
   history: MissingEvent[];
+  attachments: Attachment[]; // fotos/arquivos do caso
 }
 
-export const EMPTY_MISSING: MissingStatus = { active: false, since: '', lastPlace: '', notes: '', history: [] };
+export const EMPTY_MISSING: MissingStatus = { active: false, since: '', lastPlace: '', notes: '', history: [], attachments: [] };
 
 export const EMPTY_EMERGENCY: EmergencyStatus = {
   active: false,
@@ -193,6 +195,7 @@ export const EMPTY_EMERGENCY: EmergencyStatus = {
   location: '',
   notes: '',
   history: [],
+  attachments: [],
 };
 
 export interface Patient {

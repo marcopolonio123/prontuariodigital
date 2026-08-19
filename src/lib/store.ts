@@ -145,6 +145,7 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
       lastPlace: String(missingRaw?.lastPlace ?? ''),
       notes: String(missingRaw?.notes ?? ''),
       history: asArray<Patient['missing']['history'][number]>(missingRaw?.history),
+      attachments: asArray<Patient['missing']['attachments'][number]>(missingRaw?.attachments),
     },
     emergency: (() => {
       const emRaw = (raw.emergency ?? null) as Partial<Patient['emergency']> | null;
@@ -155,6 +156,7 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
         location: String(emRaw?.location ?? ''),
         notes: String(emRaw?.notes ?? ''),
         history: asArray<Patient['emergency']['history'][number]>(emRaw?.history),
+        attachments: asArray<Patient['emergency']['attachments'][number]>(emRaw?.attachments),
       };
     })(),
     photo: (raw.photo as string | null) ?? null,
@@ -217,6 +219,18 @@ function seedPatients(): Patient[] {
           { id: uid(), at: daysAgo(2), kind: 'missing', text: 'Desaparecimento registrado pela família.' },
           { id: uid(), at: daysAgo(1), kind: 'sighting', text: 'Vista próxima à feira livre da Rua das Flores (não confirmado).' },
         ],
+        attachments: [
+          {
+            id: 'att-ana-ref',
+            name: 'retrato-de-referencia.svg',
+            kind: 'image',
+            mime: 'image/svg+xml',
+            sizeKb: 9,
+            dataUrl: '/portraits/ana.svg',
+            addedAt: daysAgo(2),
+            addedBy: 'Marina Sampaio Reis',
+          },
+        ],
       },
       emergency: { ...EMPTY_EMERGENCY },
       photo: '/portraits/ana.svg', photoHash: null,
@@ -275,6 +289,18 @@ function seedPatients(): Patient[] {
         history: [
           { id: uid(), at: daysAgo(1), kind: 'emergency', text: 'Emergência registrada pelo serviço social do hospital.' },
           { id: uid(), at: daysAgo(1) + 3_600_000, kind: 'notified', text: 'Avisos enviados via app para: Rafael Menezes.' },
+        ],
+        attachments: [
+          {
+            id: 'att-car-ref',
+            name: 'retrato-de-referencia.svg',
+            kind: 'image',
+            mime: 'image/svg+xml',
+            sizeKb: 9,
+            dataUrl: '/portraits/carlos.svg',
+            addedAt: daysAgo(1),
+            addedBy: 'Serviço social — Hospital São Lucas',
+          },
         ],
       },
       photo: '/portraits/carlos.svg', photoHash: null,

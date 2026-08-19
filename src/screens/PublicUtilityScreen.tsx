@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react';
-import type { EmergencySituation, IdEvent, Patient } from '../lib/types';
+import type { Attachment, EmergencySituation, IdEvent, Patient } from '../lib/types';
 import { EMERGENCY_SITUATIONS, EMERGENCY_SITUATION_META } from '../lib/types';
 import { uid } from '../lib/store';
 import {
-  ageFromBirth, daysSince, emergencyAlertText, formatDateBR, formatDateTime, missingAlertText, waLink,
+  ageFromBirth, daysSince, emergencyAlertText, foundPersonAlertText, formatDateBR, formatDateTime,
+  missingAlertText, waLink,
 } from '../lib/biometrics';
 import { Avatar, BloodBadge, Btn, EmptyState, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
 import { ContactRow } from '../components/EmergencyCard';
+import { AttachmentModal, AttachmentPicker, AttachmentStrip } from '../components/attachments';
+import { FieldIdentifyModal, type FieldIdentifyResult } from '../components/FieldIdentify';
 import {
-  IconAlert, IconBell, IconChart, IconCheck, IconEye, IconMapPin, IconMegaphone, IconMessage, IconPlus, IconUsers,
+  IconAlert, IconBell, IconChart, IconCheck, IconEye, IconFace, IconMapPin, IconMegaphone,
+  IconMessage, IconPlus, IconUsers, IconX,
 } from '../components/icons';
 
 type Tab = 'missing' | 'emergency';
@@ -91,23 +95,28 @@ function NotifySheet({
   mode,
   onClose,
   onLogged,
+  customText,
+  customSubtitle,
 }: {
   patient: Patient;
   mode: 'missing' | 'emergency';
   onClose: () => void;
   onLogged: (names: string[]) => void;
+  customText?: string;
+  customSubtitle?: string;
 }) {
   const [notified, setNotified] = useState<Set<string>>(new Set());
   const age = ageFromBirth(patient.birthDate);
   const alertText =
-    mode === 'emergency'
+    customText ??
+    (mode === 'emergency'
       ? emergencyAlertText(
           patient.name,
           age,
           patient.emergency.situation ? EMERGENCY_SITUATION_META[patient.emergency.situation].label : 'emergência',
           patient.emergency.location,
         )
-      : missingAlertText(patient.name, age, patient.missing.lastPlace);
+      : missingAlertText(patient.name, age, patient.missing.lastPlace));
 
   return (
     <Modal
@@ -115,9 +124,10 @@ function NotifySheet({
       onClose={onClose}
       title={`Avisar rede — ${patient.name}`}
       subtitle={
-        mode === 'emergency'
+        customSubtitle ??
+        (mode === 'emergency'
           ? 'A pessoa está em situação de emergência/vulnerabilidade. Abra o WhatsApp ou ligue, depois registre cada aviso.'
-          : 'A pessoa está desaparecida. Abra o WhatsApp ou ligue, depois registre cada aviso.'
+          : 'A pessoa está desaparecida. Abra o WhatsApp ou ligue, depois registre cada aviso.')
       }
       width="max-w-xl"
     >
@@ -170,18 +180,32 @@ function NotifySheet({
 export function PublicUtilityScreen({
   patients,
   log,
+  accountName,
   onUpdate,
   onOpenRecord,
   onGoPatients,
+  onLogEvent,
+  onNewPatientWithPhoto,
 }: {
   patients: Patient[];
   log: IdEvent[];
+  accountName: string;
   onUpdate: (p: Patient) => void;
   onOpenRecord: (id: string) => void;
   onGoPatients: () => void;
+  onLogEvent: (e: IdEvent) => void;
+  onNewPatientWithPhoto: (photo: string) => void;
 }) {
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('missing');
+
+  // identificação em campo
+  const [fieldOpen, setFieldOpen] = useState(false);
+  const [identified, setIdentified] = useState<(FieldIdentifyResult & { photo: Attachment | null }) | null>(null);
+  const [notifyFoundFor, setNotifyFoundFor] = useState<Patient | null>(null);
+
+  // anexos visíveis
+  const [viewAtt, setViewAtt] = useState<Attachment | null>(null);
 
   // desaparecidos
   const [reportOpen, setReportOpen] = useState(false);
@@ -207,6 +231,43 @@ export function PublicUtilityScreen({
   const [resolvedFor, setResolvedFor] = useState<Patient | null>(null);
   const [resolvedText, setResolvedText] = useState('');
   const [notifyEmergencyFor, setNotifyEmergencyFor] = useState<Patient | null>(null);
+
+  // anexos dos formulários de caso
+  const [rAttachments, setRAttachments] = useState<Attachment[]>([]);
+  const [eAttachments, setEAttachments] = useState<Attachment[]>([]);
+
+  const handleFieldResult = (r: FieldIdentifyResult) => {
+    setFieldOpen(false);
+    let photo: Attachment | null = null;
+    if (r.photoUrl) {
+      photo = {
+        id: uid(),
+        name: `retrato-capturado-${new Date().toISOString().slice(0, 10)}.jpg`,
+        kind: 'image',
+        mime: 'image/jpeg',
+        sizeKb: Math.max(1, Math.round((r.photoUrl.length * 0.75) / 1024)),
+        dataUrl: r.photoUrl,
+        addedAt: Date.now(),
+        addedBy: accountName,
+      };
+    }
+    setIdentified({ ...r, photo });
+    if (r.patient.missing.active) setTab('missing');
+    else if (r.patient.emergency.active) setTab('emergency');
+  };
+
+  const prefillMissing = (p: Patient, photo: Attachment | null) => {
+    setRPerson(p.id);
+    setRAttachments(photo ? [photo] : []);
+    setReportOpen(true);
+  };
+
+  const prefillEmergency = (p: Patient, photo: Attachment | null) => {
+    setEPerson(p.id);
+    setEAttachments(photo ? [photo] : []);
+    setTab('emergency');
+    setEOpen(true);
+  };
 
   const missing = useMemo(
     () =>
@@ -254,8 +315,14 @@ export function PublicUtilityScreen({
         notes: rNotes.trim(),
         history: [
           ...person.missing.history,
-          { id: uid(), at: Date.now(), kind: 'missing', text: `Desaparecimento registrado${rPlace.trim() ? ` — último local: ${rPlace.trim()}` : ''}.` },
+          {
+            id: uid(),
+            at: Date.now(),
+            kind: 'missing',
+            text: `Desaparecimento registrado${rPlace.trim() ? ` — último local: ${rPlace.trim()}` : ''}${rAttachments.length > 0 ? ` · ${rAttachments.length} anexo(s)` : ''}.`,
+          },
         ],
+        attachments: rAttachments,
       },
     });
     toast('success', `Alerta ativado: ${person.name} agora aparece como desaparecida na identificação.`);
@@ -264,6 +331,7 @@ export function PublicUtilityScreen({
     setRPlace('');
     setRNotes('');
     setRErr('');
+    setRAttachments([]);
   };
 
   const markFound = () => {
@@ -319,8 +387,14 @@ export function PublicUtilityScreen({
         notes: eNotes.trim(),
         history: [
           ...person.emergency.history,
-          { id: uid(), at: Date.now(), kind: 'emergency', text: `${label} registrada${eLocation.trim() ? ` — ${eLocation.trim()}` : ''}.` },
+          {
+            id: uid(),
+            at: Date.now(),
+            kind: 'emergency',
+            text: `${label} registrada${eLocation.trim() ? ` — ${eLocation.trim()}` : ''}${eAttachments.length > 0 ? ` · ${eAttachments.length} anexo(s)` : ''}.`,
+          },
         ],
+        attachments: eAttachments,
       },
     });
     toast('success', `Alerta de emergência/vulnerabilidade ativado para ${person.name}.`);
@@ -330,6 +404,7 @@ export function PublicUtilityScreen({
     setELocation('');
     setENotes('');
     setEErr('');
+    setEAttachments([]);
   };
 
   const markResolved = () => {
@@ -365,16 +440,76 @@ export function PublicUtilityScreen({
 
   return (
     <div>
-      <header className="rise mb-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">utilidade pública</p>
-        <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Utilidade pública</h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-mute">
-          Central de proteção à vida: <strong className="text-ink">pessoas desaparecidas</strong> e{' '}
-          <strong className="text-ink">pessoas em situação de emergência/vulnerabilidade</strong> (acidentes, internações
-          sem contato, encontradas desorientadas, vulnerabilidade social ou vítimas de violência). Ao identificar alguém
-          na base, o Vitalis dispara o alerta e a rede de avisos.
-        </p>
+      <header className="rise mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">utilidade pública</p>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Utilidade pública</h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-mute">
+            Central de proteção à vida: <strong className="text-ink">pessoas desaparecidas</strong> e{' '}
+            <strong className="text-ink">pessoas em situação de emergência/vulnerabilidade</strong> (acidentes, internações
+            sem contato, encontradas desorientadas, vulnerabilidade social ou vítimas de violência). Ao identificar alguém
+            na base, o Vitalis dispara o alerta e a rede de avisos.
+          </p>
+        </div>
+        <Btn variant="dark" size="lg" onClick={() => setFieldOpen(true)} title={hasPeople ? undefined : 'Cadastre pessoas primeiro'}>
+          <IconFace size={18} /> Identificar alguém agora
+        </Btn>
       </header>
+
+      {/* --------------------- pessoa identificada em campo --------------------- */}
+      {identified && (
+        <section className="rise mb-6 overflow-hidden rounded-xl border border-moss-500/50 shadow-lift">
+          <div className="flex items-center gap-2.5 border-b border-pine-700 bg-pine-900 px-4 py-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-moss-500/20 text-moss-300">
+              <IconCheck size={14} />
+            </span>
+            <p className="font-display text-sm font-bold uppercase tracking-[0.16em] text-moss-300">
+              Pessoa identificada em campo
+            </p>
+            <span className="ml-auto font-mono text-xs text-pine-200/70">
+              {identified.method === 'face' ? 'por retrato' : 'por digital'} · {identified.confidence}%
+            </span>
+            <button onClick={() => setIdentified(null)} className="rounded p-1 text-pine-200/70 transition-colors hover:text-white" aria-label="Dispensar">
+              <IconX size={16} />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 bg-card px-4 py-4">
+            <Avatar patient={identified.patient} size={64} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-display text-xl font-bold text-ink">{identified.patient.name}</h2>
+                <BloodBadge type={identified.patient.bloodType} size="sm" />
+                {identified.patient.missing.active && <Tag tone="danger">já consta como desaparecida</Tag>}
+                {identified.patient.emergency.active && <Tag tone="warn">já em emergência/vulnerabilidade</Tag>}
+                {!identified.patient.missing.active && !identified.patient.emergency.active && (
+                  <Tag tone="mute">sem alerta ativo — registre a situação</Tag>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-mute">
+                {(() => {
+                  const age = ageFromBirth(identified.patient.birthDate);
+                  return age !== null ? `${age} anos · ` : '';
+                })()}
+                ficha <span className="font-mono">{identified.patient.record}</span> · {identified.patient.contacts.length} contato(s) na rede
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Btn onClick={() => setNotifyFoundFor(identified.patient)}>
+                <IconBell size={15} /> Avisar rede de contatos
+              </Btn>
+              <Btn variant="outline" onClick={() => prefillMissing(identified.patient, identified.photo)}>
+                <IconMegaphone size={14} /> Registrar desaparecimento
+              </Btn>
+              <Btn variant="outline" onClick={() => prefillEmergency(identified.patient, identified.photo)}>
+                <IconAlert size={14} /> Registrar emergência/vulnerabilidade
+              </Btn>
+              <Btn variant="ghost" onClick={() => onOpenRecord(identified.patient.id)}>
+                <IconChart size={14} /> Prontuário
+              </Btn>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="rise mb-5 inline-flex max-w-full overflow-x-auto rounded-xl border border-line bg-card p-1 shadow-lift no-scrollbar" style={{ animationDelay: '40ms' }}>
         {(
@@ -464,9 +599,14 @@ export function PublicUtilityScreen({
                               <span><strong>Último local conhecido:</strong> {p.missing.lastPlace}</span>
                             </p>
                           )}
-                          {p.missing.notes && <p className="mt-1.5 text-[13px] leading-relaxed text-mute">{p.missing.notes}</p>}
-                          <EventLog history={p.missing.history} empty="Sem eventos ainda." />
-                          <ConsultTrail log={log} patientId={p.id} />
+                      {p.missing.notes && <p className="mt-1.5 text-[13px] leading-relaxed text-mute">{p.missing.notes}</p>}
+                      {p.missing.attachments.length > 0 && (
+                        <div className="mt-3">
+                          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-mute">Fotos & arquivos do caso</p>
+                          <AttachmentStrip items={p.missing.attachments} onView={setViewAtt} />
+                        </div>
+                      )}
+                      <EventLog history={p.missing.history} empty="Sem eventos ainda." />                          <ConsultTrail log={log} patientId={p.id} />
                         </div>
                         <div className="flex flex-col gap-2 border-t border-line pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
                           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-mute">Ações</p>
@@ -586,6 +726,12 @@ export function PublicUtilityScreen({
                             </p>
                           )}
                           {p.emergency.notes && <p className="mt-1.5 text-[13px] leading-relaxed text-mute">{p.emergency.notes}</p>}
+                          {p.emergency.attachments.length > 0 && (
+                            <div className="mt-3">
+                              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-mute">Fotos & arquivos do caso</p>
+                              <AttachmentStrip items={p.emergency.attachments} onView={setViewAtt} />
+                            </div>
+                          )}
                           <EventLog history={p.emergency.history} empty="Sem eventos ainda." />
                           <ConsultTrail log={log} patientId={p.id} />
                         </div>
@@ -670,6 +816,12 @@ export function PublicUtilityScreen({
           <Field label="Observações">
             <textarea className={`${inputCls} min-h-16 resize-y`} value={rNotes} onChange={(e) => setRNotes(e.target.value)} placeholder="Roupas, horários, circunstâncias…" />
           </Field>
+          <Field label="Fotos / arquivos do caso" hint="retrato recente, boletim de ocorrência…">
+            <div className="space-y-2">
+              <AttachmentPicker byName={accountName} onAdd={(a) => setRAttachments((s) => [...s, a])} />
+              <AttachmentStrip items={rAttachments} onView={setViewAtt} onRemove={(id) => setRAttachments((s) => s.filter((x) => x.id !== id))} />
+            </div>
+          </Field>
           {rErr && <p className="text-xs font-medium text-danger-600">{rErr}</p>}
         </div>
         <div className="mt-4 flex justify-end gap-2">
@@ -732,6 +884,12 @@ export function PublicUtilityScreen({
           </div>
           <Field label="Descrição da situação">
             <textarea className={`${inputCls} min-h-16 resize-y`} value={eNotes} onChange={(e) => setENotes(e.target.value)} placeholder="Estado da pessoa, circunstâncias, quem registrou…" />
+          </Field>
+          <Field label="Fotos / arquivos do caso" hint="foto do local, registro hospitalar…">
+            <div className="space-y-2">
+              <AttachmentPicker byName={accountName} onAdd={(a) => setEAttachments((s) => [...s, a])} />
+              <AttachmentStrip items={eAttachments} onView={setViewAtt} onRemove={(id) => setEAttachments((s) => s.filter((x) => x.id !== id))} />
+            </div>
           </Field>
           {eErr && <p className="text-xs font-medium text-danger-600">{eErr}</p>}
         </div>
@@ -796,6 +954,50 @@ export function PublicUtilityScreen({
           }}
         />
       )}
+
+      {/* pessoa encontrada em campo: aviso à rede mesmo sem caso aberto */}
+      {notifyFoundFor && (
+        <NotifySheet
+          patient={notifyFoundFor}
+          mode="emergency"
+          customText={foundPersonAlertText(notifyFoundFor.name, ageFromBirth(notifyFoundFor.birthDate), '')}
+          customSubtitle="A pessoa foi encontrada e identificada em campo. Abra o WhatsApp ou ligue para a rede de contatos e registre cada aviso."
+          onClose={() => setNotifyFoundFor(null)}
+          onLogged={(names) => {
+            onLogEvent({
+              id: uid(),
+              at: Date.now(),
+              method: 'face',
+              patientId: notifyFoundFor.id,
+              patientName: notifyFoundFor.name,
+              confidence: 0,
+              quality: null,
+              result: 'notify',
+              thumb: null,
+              detail: `utilidade pública — ${names.join(', ')}`,
+              byName: accountName,
+            });
+            toast('success', `${names.length} aviso(s) registrado(s) na auditoria.`);
+          }}
+        />
+      )}
+
+      {/* identificação em campo */}
+      <FieldIdentifyModal
+        open={fieldOpen}
+        onClose={() => setFieldOpen(false)}
+        patients={patients}
+        byName={accountName}
+        onLogEvent={onLogEvent}
+        onResult={handleFieldResult}
+        onNewPerson={(photo) => {
+          setFieldOpen(false);
+          onNewPatientWithPhoto(photo);
+        }}
+      />
+
+      {/* lightbox de anexos */}
+      <AttachmentModal att={viewAtt} onClose={() => setViewAtt(null)} />
     </div>
   );
 }

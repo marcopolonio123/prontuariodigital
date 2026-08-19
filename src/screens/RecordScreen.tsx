@@ -4,6 +4,7 @@ import { ENTRY_META, ENTRY_TYPES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/
 import { ageFromBirth, formatDateBR, formatDateTime } from '../lib/biometrics';
 import { uid } from '../lib/store';
 import { downloadAttachment, fileToAttachment, formatSizeKb } from '../lib/attachments';
+import { AttachmentModal, AttachmentStrip } from '../components/attachments';
 import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, MicButton, Modal, Tag, useToast } from '../components/ui';
 import {
   IconActivity, IconAlert, IconArchive, IconCalendar, IconChart, IconChevronDown, IconChevronLeft,
@@ -20,83 +21,6 @@ const ENTRY_VISUAL: Record<EntryType, { icon: ReactNode; chip: string; node: str
   procedimento: { icon: <IconActivity size={15} />, chip: 'bg-danger-100 text-danger-600', node: 'bg-danger-500' },
   observacao: { icon: <IconFileText size={15} />, chip: 'bg-pine-900/6 text-mute', node: 'bg-mute' },
 };
-
-/* ------------------------- anexos: lista & lightbox ---------------------- */
-
-function AttachmentStrip({
-  items,
-  onView,
-  onRemove,
-}: {
-  items: Attachment[];
-  onView: (a: Attachment) => void;
-  onRemove?: (id: string) => void;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <ul className="flex flex-wrap gap-2">
-      {items.map((a) =>
-        a.kind === 'image' ? (
-          <li key={a.id} className="group relative">
-            <button
-              onClick={() => onView(a)}
-              className="block h-16 w-16 overflow-hidden rounded-lg border border-line transition-all hover:-translate-y-0.5 hover:border-moss-400 hover:shadow-lift active:scale-95"
-              aria-label={`Ver anexo ${a.name}`}
-            >
-              <img src={a.dataUrl} alt={a.name} className="h-full w-full object-cover" />
-            </button>
-            <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-lg bg-pine-950/70 px-1 py-0.5 text-center font-mono text-[9px] text-pine-100 opacity-0 transition-opacity group-hover:opacity-100">
-              {formatSizeKb(a.sizeKb)}
-            </span>
-            {onRemove && (
-              <button
-                onClick={() => onRemove(a.id)}
-                className="absolute -right-1.5 -top-1.5 rounded-full bg-danger-500 p-0.5 text-white shadow-sm transition-transform hover:scale-110"
-                aria-label={`Remover ${a.name}`}
-              >
-                <IconX size={11} />
-              </button>
-            )}
-          </li>
-        ) : (
-          <li key={a.id}>
-            <button
-              onClick={() => onView(a)}
-              className="flex h-16 items-center gap-2 rounded-lg border border-line bg-white/70 px-3 transition-all hover:-translate-y-0.5 hover:border-moss-400 hover:shadow-lift active:scale-95"
-            >
-              <span className="rounded-md bg-danger-100 p-1.5 text-danger-600">
-                <IconFileText size={15} />
-              </span>
-              <span className="max-w-32 text-left">
-                <span className="block truncate text-xs font-bold text-ink">{a.name}</span>
-                <span className="block font-mono text-[10px] text-mute">PDF · {formatSizeKb(a.sizeKb)}</span>
-              </span>
-            </button>
-          </li>
-        ),
-      )}
-    </ul>
-  );
-}
-
-function AttachmentModal({ att, onClose }: { att: Attachment | null; onClose: () => void }) {
-  if (!att) return null;
-  return (
-    <Modal open onClose={onClose} title={att.name} subtitle={`${att.kind === 'image' ? 'Imagem' : 'PDF'} · ${formatSizeKb(att.sizeKb)} · anexado por ${att.addedBy || 'conta local'} em ${formatDateTime(att.addedAt)}`} width="max-w-2xl">
-      {att.kind === 'image' ? (
-        <img src={att.dataUrl} alt={att.name} className="max-h-[62vh] w-full rounded-lg border border-line object-contain bg-pine-950/90" />
-      ) : (
-        <iframe title={att.name} src={att.dataUrl} className="h-[62vh] w-full rounded-lg border border-line bg-white" />
-      )}
-      <div className="mt-4 flex justify-end gap-2">
-        <Btn variant="outline" onClick={onClose}>Fechar</Btn>
-        <Btn onClick={() => downloadAttachment(att)}>
-          <IconDownload size={15} /> Baixar arquivo
-        </Btn>
-      </div>
-    </Modal>
-  );
-}
 
 /* --------------------- seção prescritiva do formulário ------------------- */
 

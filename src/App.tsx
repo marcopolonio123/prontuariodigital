@@ -59,6 +59,17 @@ const DEMO_SCENARIOS = [
     expect: 'Dois serviços públicos no mesmo hub: desaparecidos (vermelho) e emergências (âmbar), ambos com rede de avisos e trilha de auditoria.',
   },
   {
+    title: 'Identificar alguém em campo',
+    badge: 'utilidade pública',
+    steps: [
+      'Na Utilidade pública, clique em “Identificar alguém agora” (canto superior direito).',
+      'Fotografe a pessoa, envie uma imagem ou use “simular com exemplo”. O app cruza o retrato com a base em segundos.',
+      'Ao confirmar a identidade, você pode avisar a rede de contatos na hora ou registrar um desaparecimento/emergência já com a foto capturada anexada ao caso.',
+      'Se a pessoa não estiver na base, o app oferece cadastrá-la como nova pessoa com o retrato capturado.',
+    ],
+    expect: 'Fluxo de resgate: encontrar → identificar → avisar parentes/amigos → registrar o caso com evidências (fotos/arquivos).',
+  },
+  {
     title: 'Consultor IA',
     badge: 'prontuário + sintomas',
     steps: [
@@ -339,7 +350,7 @@ function Shell() {
           >
             <IconFileText size={17} />
             Roteiro de demonstração
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">8 casos</span>
+            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">9 casos</span>
           </button>
         </div>
 
@@ -446,9 +457,15 @@ function Shell() {
                 <PublicUtilityScreen
                   patients={state.patients}
                   log={state.log}
+                  accountName={account?.name ?? 'conta local'}
                   onUpdate={updatePatient}
                   onOpenRecord={(id) => setRoute({ name: 'record', id })}
                   onGoPatients={() => setRoute({ name: 'patients' })}
+                  onLogEvent={logEvent}
+                  onNewPatientWithPhoto={(photo) => {
+                    setPendingPhoto(photo);
+                    setRoute({ name: 'patients' });
+                  }}
                 />
               )}
               {route.name === 'consultor' && (
