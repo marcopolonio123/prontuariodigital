@@ -48,14 +48,15 @@ const DEMO_SCENARIOS = [
     expect: 'Cada opção vem com o motivo cruzado do prontuário + sinais de emergência + aviso médico.',
   },
   {
-    title: 'Especialidades + arquivar',
+    title: 'Prescrição, exames e anexos',
     badge: 'prontuário',
     steps: [
-      'No prontuário da Ana, filtre a linha do tempo por “Neurologia” e clique em Exportar.',
-      'Passe o mouse sobre um registro e clique no ícone de arquivo — ele é arquivado, nunca excluído.',
-      'Em Pessoas & prontuários, arquive alguém e depois restaure.',
+      'No prontuário da Ana, clique na seta do registro “Avaliação geriátrica” — abre a prescrição e os exames solicitados.',
+      'Crie um novo registro e preencha “Prescrição médica” e/ou “Exames solicitados” — dá para descrever e anexar foto ou PDF da receita.',
+      'Filtre por especialidade (ex.: Neurologia) e use Compartilhar/Exportar — o texto sai no resumo e os anexos no JSON.',
+      'Passe o mouse sobre um registro e clique no ícone de arquivo — é arquivado, nunca excluído (anexos preservados).',
     ],
-    expect: 'Filtros por especialidade, exportação JSON e arquivamento reversível (nada some).',
+    expect: 'Registros com receita/exames descritivos ou digitalizados, visualização, download e exportação por especialidade.',
   },
   {
     title: 'Câmera ao vivo',
@@ -409,6 +410,7 @@ function Shell() {
               {route.name === 'record' && (
                 <RecordScreen
                   patient={currentPatient}
+                  byName={account?.name ?? 'conta local'}
                   onBack={() => setRoute({ name: 'patients' })}
                   onEditPatient={(id) => {
                     setPendingEditId(id);

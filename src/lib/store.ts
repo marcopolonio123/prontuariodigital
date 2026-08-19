@@ -27,6 +27,24 @@ function asArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
+function normalizeSection(raw: unknown): ClinicalEntry['prescription'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = raw as Record<string, unknown>;
+  const text = String(s.text ?? '');
+  const attachments = asArray<Record<string, unknown>>(s.attachments).map((a) => ({
+    id: String(a.id ?? uid()),
+    name: String(a.name ?? 'anexo'),
+    kind: (a.kind === 'pdf' ? 'pdf' : 'image') as 'pdf' | 'image',
+    mime: String(a.mime ?? ''),
+    sizeKb: Number(a.sizeKb ?? 0),
+    dataUrl: String(a.dataUrl ?? ''),
+    addedAt: Number(a.addedAt ?? Date.now()),
+    addedBy: String(a.addedBy ?? ''),
+  }));
+  if (!text && attachments.length === 0) return null;
+  return { text, attachments };
+}
+
 function normalizeEntry(raw: Record<string, unknown>): ClinicalEntry {
   return {
     id: String(raw.id ?? uid()),
@@ -37,6 +55,8 @@ function normalizeEntry(raw: Record<string, unknown>): ClinicalEntry {
     createdAt: Number(raw.createdAt ?? Date.now()),
     specialty: String(raw.specialty ?? ''),
     archived: Boolean(raw.archived),
+    prescription: normalizeSection(raw.prescription),
+    exams: normalizeSection(raw.exams),
   };
 }
 
@@ -121,6 +141,18 @@ const now = Date.now();
 const daysAgo = (d: number) => now - d * 86_400_000;
 const iso = (d: number) => new Date(daysAgo(d)).toISOString();
 
+/** registro clínico com campos de prescrição/exames padronizados */
+function E(
+  base: Omit<ClinicalEntry, 'id' | 'createdAt' | 'archived' | 'prescription' | 'exams'> & {
+    agoDays: number;
+    prescription?: ClinicalEntry['prescription'];
+    exams?: ClinicalEntry['exams'];
+  },
+): ClinicalEntry {
+  const { agoDays, prescription = null, exams = null, ...rest } = base;
+  return { ...rest, id: uid(), createdAt: daysAgo(agoDays), archived: false, prescription, exams };
+}
+
 function seedPatients(): Patient[] {
   return [
     {
@@ -146,9 +178,29 @@ function seedPatients(): Patient[] {
       photo: '/portraits/ana.svg', photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(120), quality: 91 },
       entries: [
-        { id: uid(), type: 'consulta', title: 'Avaliação geriátrica — estadiamento cognitivo', notes: 'CDR 1 (demência leve). Mantida Donepezila; orientada a família sobre segurança em saídas.', date: iso(34).slice(0, 10), createdAt: daysAgo(34), specialty: 'Geriatria', archived: false },
-        { id: uid(), type: 'exame', title: 'Ressonância magnética do crânio', notes: 'Atrofia hipocampal bilateral compatível com doença de Alzheimer.', date: iso(61).slice(0, 10), createdAt: daysAgo(61), specialty: 'Neurologia', archived: false },
-        { id: uid(), type: 'medicacao', title: 'Ajuste de Metformina', notes: 'HbA1c 6,9%. Mantida dose atual, reavaliar em 3 meses.', date: iso(90).slice(0, 10), createdAt: daysAgo(90), specialty: 'Endocrinologia', archived: false },
+        E({
+          agoDays: 34, type: 'consulta', title: 'Avaliação geriátrica — estadiamento cognitivo',
+          notes: 'CDR 1 (demência leve). Mantida Donepezila; orientada a família sobre segurança em saídas.',
+          date: iso(34).slice(0, 10), specialty: 'Geriatria',
+          prescription: {
+            text: 'Donepezila 10 mg — 1 comprimido à noite\nMetformina 850 mg — 1 comprimido 2x/dia (café e jantar)\nLosartana 50 mg — 1 comprimido pela manhã\nRetorno em 90 dias com a cuidadora.',
+            attachments: [],
+          },
+          exams: {
+            text: 'Hemograma completo, HbA1c, creatinina e TSH — colher em jejum de 8h.',
+            attachments: [],
+          },
+        }),
+        E({
+          agoDays: 61, type: 'exame', title: 'Ressonância magnética do crânio',
+          notes: 'Atrofia hipocampal bilateral compatível com doença de Alzheimer.',
+          date: iso(61).slice(0, 10), specialty: 'Neurologia',
+        }),
+        E({
+          agoDays: 90, type: 'medicacao', title: 'Ajuste de Metformina',
+          notes: 'HbA1c 6,9%. Mantida dose atual, reavaliar em 3 meses.',
+          date: iso(90).slice(0, 10), specialty: 'Endocrinologia',
+        }),
       ],
       createdAt: daysAgo(420), primarySpecialty: 'Geriatria', archived: false, ownerAccountId: 'acc-ana',
     },
@@ -167,8 +219,21 @@ function seedPatients(): Patient[] {
       photo: '/portraits/carlos.svg', photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(98), quality: 88 },
       entries: [
-        { id: uid(), type: 'procedimento', title: 'Implante de marca-passo definitivo', notes: 'Procedimento sem intercorrências. Repouso relativo por 7 dias.', date: iso(300).slice(0, 10), createdAt: daysAgo(300), specialty: 'Cardiologia', archived: false },
-        { id: uid(), type: 'consulta', title: 'Retorno cardiológico', notes: 'Holter 24h sem novas arritmias significativas.', date: iso(45).slice(0, 10), createdAt: daysAgo(45), specialty: 'Cardiologia', archived: false },
+        E({
+          agoDays: 300, type: 'procedimento', title: 'Implante de marca-passo definitivo',
+          notes: 'Procedimento sem intercorrências. Repouso relativo por 7 dias.',
+          date: iso(300).slice(0, 10), specialty: 'Cardiologia',
+          prescription: {
+            text: 'Amiodarona 200 mg — 1x/dia\nRosuvastatina 20 mg — à noite\nCefalexina 500 mg — 6/6h por 7 dias (profilaxia)\nCurativo diário; retirar pontos em 10 dias.',
+            attachments: [],
+          },
+        }),
+        E({
+          agoDays: 45, type: 'consulta', title: 'Retorno cardiológico',
+          notes: 'Holter 24h sem novas arritmias significativas.',
+          date: iso(45).slice(0, 10), specialty: 'Cardiologia',
+          exams: { text: 'Ecocardiograma transtorácico + Holter 24h para o próximo retorno.', attachments: [] },
+        }),
       ],
       createdAt: daysAgo(380), primarySpecialty: 'Cardiologia', archived: false, ownerAccountId: 'acc-carlos',
     },
@@ -186,8 +251,20 @@ function seedPatients(): Patient[] {
       photo: null, photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(40), quality: 74 },
       entries: [
-        { id: uid(), type: 'vacina', title: 'Tríplice viral — reforço', notes: 'Sem reações adversas.', date: iso(180).slice(0, 10), createdAt: daysAgo(180), specialty: 'Pediatria', archived: false },
-        { id: uid(), type: 'consulta', title: 'Pediatria — puericultura', notes: 'Crescimento e desenvolvimento adequados. Prescrita caneta de epinefrina (EpiPen).', date: iso(70).slice(0, 10), createdAt: daysAgo(70), specialty: 'Pediatria', archived: false },
+        E({
+          agoDays: 180, type: 'vacina', title: 'Tríplice viral — reforço',
+          notes: 'Sem reações adversas.', date: iso(180).slice(0, 10), specialty: 'Pediatria',
+        }),
+        E({
+          agoDays: 70, type: 'consulta', title: 'Pediatria — puericultura',
+          notes: 'Crescimento e desenvolvimento adequados.',
+          date: iso(70).slice(0, 10), specialty: 'Pediatria',
+          prescription: {
+            text: 'Caneta de epinefrina 0,15 mg (EpiPen Jr) — portar sempre na mochila da escola.\nDesloratadina xarope 2,5 ml — 1x/dia, por 10 dias, se crises de rinite.',
+            attachments: [],
+          },
+          exams: { text: 'IgE específica para amendoim e leite (rast) — repetir em 6 meses.', attachments: [] },
+        }),
       ],
       createdAt: daysAgo(200), primarySpecialty: 'Pediatria', archived: false, ownerAccountId: 'acc-juliana',
     },

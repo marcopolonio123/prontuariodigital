@@ -193,6 +193,26 @@ export const IconLock = (p: IconProps) => (
   </I>
 );
 
+export const IconPaperclip = (p: IconProps) => (
+  <I {...p}>
+    <path d="M20.5 11.5l-8 8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
+  </I>
+);
+
+export const IconChevronDown = (p: IconProps) => (
+  <I {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </I>
+);
+
+export const IconPrescription = (p: IconProps) => (
+  <I {...p}>
+    <path d="M6 3h6a4 4 0 0 1 0 8H6V3z" />
+    <path d="M6 11v10" />
+    <path d="M12.5 14.5l6 6M18.5 14.5l-6 6" />
+  </I>
+);
+
 export const IconDroplet = (p: IconProps) => (
   <I {...p}><path d="M12 2.9S6.2 9.3 6.2 13.6a5.8 5.8 0 0 0 11.6 0C17.8 9.3 12 2.9 12 2.9z" /></I>
 );

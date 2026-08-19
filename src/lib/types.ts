@@ -69,6 +69,22 @@ export const ENTRY_META: Record<EntryType, { label: string; plural: string }> = 
   observacao: { label: 'Observação', plural: 'Observações' },
 };
 
+export interface Attachment {
+  id: string;
+  name: string;
+  kind: 'image' | 'pdf';
+  mime: string;
+  sizeKb: number;
+  dataUrl: string; // conteúdo local (imagem redimensionada ou PDF)
+  addedAt: number;
+  addedBy: string; // conta que anexou
+}
+
+export interface ClinicalSection {
+  text: string; // descritivo (prescrição ou exames solicitados)
+  attachments: Attachment[]; // receita/exame anexado (foto, scan ou PDF)
+}
+
 export interface ClinicalEntry {
   id: string;
   type: EntryType;
@@ -78,6 +94,8 @@ export interface ClinicalEntry {
   createdAt: number;
   specialty: string;
   archived: boolean;
+  prescription: ClinicalSection | null; // prescrição médica (descritiva e/ou receita anexada)
+  exams: ClinicalSection | null; // exames solicitados (descritivo e/ou pedido anexado)
 }
 
 export type MissingEventKind = 'missing' | 'found' | 'sighting' | 'notified';
