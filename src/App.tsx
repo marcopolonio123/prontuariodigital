@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
 import type { Account, AppState, ClinicalEntry, IdEvent, Patient, Route } from './lib/types';
 import { accessiblePatients, emptyState, loadState, saveState, seedDemoState } from './lib/store';
 import { ageFromBirth } from './lib/biometrics';
@@ -447,10 +447,54 @@ function Shell() {
   );
 }
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[Vitalis] erro de runtime:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-paper p-6">
+          <div className="w-full max-w-lg rounded-xl border border-danger-500/40 bg-card p-6 shadow-float">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-danger-600">vitalis · falha na interface</p>
+            <h1 className="mt-2 font-display text-2xl font-bold text-ink">Algo impediu a execução</h1>
+            <p className="mt-2 text-sm leading-relaxed text-mute">
+              O app encontrou um erro ao iniciar. O detalhe técnico abaixo ajuda no diagnóstico — seus dados locais
+              não foram afetados.
+            </p>
+            <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-pine-950 p-3 font-mono text-xs leading-relaxed text-danger-100">
+              {String(this.state.error?.message ?? this.state.error)}
+            </pre>
+            <button
+              onClick={() => {
+                this.setState({ error: null });
+                window.location.reload();
+              }}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-moss-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-moss-700 active:scale-[0.97]"
+            >
+              Recarregar o Vitalis
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <ToastProvider>
-      <Shell />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <Shell />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

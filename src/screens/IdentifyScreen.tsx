@@ -78,6 +78,10 @@ export function IdentifyScreen({
     let cancelled = false;
     Promise.all(pending.map(ensurePatientHash)).then((updated) => {
       if (cancelled) return;
+      // só atualiza o estado se alguma assinatura foi realmente gerada —
+      // evita loop infinito quando a imagem não pode ser processada
+      const gained = updated.filter((u) => u.photoHash && !pending.find((p) => p.id === u.id)?.photoHash);
+      if (gained.length === 0) return;
       onPatientsUpdated(patients.map((p) => updated.find((u) => u.id === p.id) ?? p));
     });
     return () => {
