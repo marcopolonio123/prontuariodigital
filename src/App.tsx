@@ -136,7 +136,7 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
 const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'consultor' | 'settings'; label: string; short: string; icon: ReactNode }> = [
   { key: 'identify', label: 'Identificação', short: 'Identificar', icon: <IconFace size={18} /> },
   { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
-  { key: 'missing', label: 'Utilidade pública', short: 'Pública', icon: <IconMegaphone size={18} /> },
+  { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
 ];
@@ -339,7 +339,7 @@ function Shell() {
           >
             <IconFileText size={17} />
             Roteiro de demonstração
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">7 casos</span>
+            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">8 casos</span>
           </button>
         </div>
 

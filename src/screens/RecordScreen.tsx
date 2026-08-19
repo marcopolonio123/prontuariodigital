@@ -566,7 +566,16 @@ export function RecordScreen({
           <div className="relative flex items-center gap-2 border-t border-danger-500/30 bg-danger-100/70 px-5 py-2 sm:px-6">
             <span className="blink-dot h-2 w-2 rounded-full bg-danger-500" />
             <p className="text-xs font-bold text-danger-600">
-              DESAPARECIDA desde {formatDateBR(patient.missing.since)} — gerencie o alerta na tela Desaparecidos.
+              DESAPARECIDA desde {formatDateBR(patient.missing.since)} — gerencie o alerta em Utilidade pública.
+            </p>
+          </div>
+        )}
+        {patient.emergency.active && (
+          <div className="relative flex items-center gap-2 border-t border-warn-500/30 bg-warn-100/70 px-5 py-2 sm:px-6">
+            <span className="blink-dot h-2 w-2 rounded-full bg-warn-500" />
+            <p className="text-xs font-bold text-warn-600">
+              EMERGÊNCIA ATIVA desde {formatDateBR(patient.emergency.since)}
+              {patient.emergency.location ? ` — ${patient.emergency.location}` : ''} · gerencie em Utilidade pública.
             </p>
           </div>
         )}
