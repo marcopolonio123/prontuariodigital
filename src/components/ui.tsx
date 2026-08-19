@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 /* ------------------------------- botões -------------------------------- */
 
 export const inputCls =
-  'w-full rounded-lg border border-line bg-white/85 px-3 py-2 text-sm text-ink placeholder:text-mute/60 transition-colors focus:border-moss-400 focus:outline-none';
+  'w-full rounded-lg border border-line bg-white/85 px-3 py-2 text-[16px] leading-snug text-ink placeholder:text-mute/60 transition-colors focus:border-moss-400 focus:outline-none sm:text-sm';
 
 type BtnVariant = 'primary' | 'outline' | 'ghost' | 'danger' | 'dark';
 

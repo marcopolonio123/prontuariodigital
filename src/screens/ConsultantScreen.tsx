@@ -244,7 +244,7 @@ export function ConsultantScreen({
   };
 
   return (
-    <div className="flex h-[calc(100vh-8.5rem)] flex-col">
+    <div className="flex flex-col lg:h-[calc(100dvh-6.5rem)]">
       <header className="rise mb-4 flex flex-wrap items-center gap-3">
         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-pine-900 text-moss-300">
           <IconBrain size={22} />
@@ -275,7 +275,7 @@ export function ConsultantScreen({
         </p>
       </div>
 
-      <div ref={scrollRef} className="rise flex-1 space-y-4 overflow-y-auto rounded-xl border border-line bg-card/60 p-4 shadow-lift" style={{ animationDelay: '80ms' }}>
+      <div ref={scrollRef} className="rise min-h-[46vh] flex-1 space-y-4 overflow-y-auto rounded-xl border border-line bg-card/60 p-3 sm:p-4 shadow-lift lg:min-h-0" style={{ animationDelay: '80ms' }}>
         {messages.length === 0 && !thinking && (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pine-900 text-moss-300">

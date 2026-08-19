@@ -84,9 +84,10 @@ function MedicationsEditor({ value, onChange }: { value: ContinuousMed[]; onChan
                 <button
                   type="button"
                   onClick={() => remove(m.id)}
-                  className="flex h-9 w-full items-center justify-center rounded-lg border border-line text-mute transition-all hover:border-danger-500/40 hover:bg-danger-100 hover:text-danger-600 sm:w-9"
+                  className="flex h-9 w-full max-w-[130px] items-center justify-center gap-1.5 rounded-lg border border-line text-mute transition-all hover:border-danger-500/40 hover:bg-danger-100 hover:text-danger-600 sm:w-9 sm:max-w-none"
                   aria-label={`Remover medicamento ${i + 1}`}
                 >
+                  <span className="text-[11px] font-bold sm:hidden">remover</span>
                   <IconTrash size={14} />
                 </button>
               </div>
@@ -442,7 +443,7 @@ function PatientForm({
         <div className="space-y-4">
           <div>
             <p className="mb-1.5 text-[13px] font-semibold text-ink">Retrato</p>
-            <div className="relative">
+            <div className="relative mx-auto w-full max-w-[230px] sm:max-w-none">
               {f.photo ? (
                 <img src={f.photo} alt="Retrato" className="aspect-[4/5] w-full rounded-xl border border-line object-cover" />
               ) : (

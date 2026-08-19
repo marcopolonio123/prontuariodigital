@@ -326,7 +326,11 @@ export function IdentifyScreen({
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rise space-y-4" style={{ animationDelay: '90ms' }}>
           <div className="overflow-hidden rounded-xl border border-line bg-card shadow-lift">
-            <div className="relative aspect-[4/3] bg-pine-950">
+            <div
+              className={`relative overflow-hidden bg-pine-950 ${
+                method === 'finger' ? 'h-[420px] sm:h-auto sm:aspect-[4/3]' : 'aspect-[4/3]'
+              }`}
+            >
               {method === 'face' ? (
                 <>
                   {capturedUrl ? (

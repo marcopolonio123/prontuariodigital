@@ -261,7 +261,7 @@ function NewEntryForm({
       <p className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-ink">
         <IconPlus size={15} className="text-moss-600" /> Novo registro clínico
       </p>
-      <div className="grid gap-4 sm:grid-cols-[150px_1fr_150px_170px]">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[150px_1fr_150px_170px] lg:gap-4">
         <Field label="Tipo">
           <select className={inputCls} value={type} onChange={(e) => setType(e.target.value as EntryType)}>
             {ENTRY_TYPES.map((t) => (

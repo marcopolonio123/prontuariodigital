@@ -122,12 +122,12 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'consultor' | 'settings'; label: string; icon: ReactNode }> = [
-  { key: 'identify', label: 'Identificação', icon: <IconFace size={18} /> },
-  { key: 'patients', label: 'Pessoas & prontuários', icon: <IconUsers size={18} /> },
-  { key: 'missing', label: 'Desaparecidos', icon: <IconSearch size={18} /> },
-  { key: 'consultor', label: 'Consultor IA', icon: <IconBrain size={18} /> },
-  { key: 'settings', label: 'Dados & privacidade', icon: <IconGear size={18} /> },
+const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'consultor' | 'settings'; label: string; short: string; icon: ReactNode }> = [
+  { key: 'identify', label: 'Identificação', short: 'Identificar', icon: <IconFace size={18} /> },
+  { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
+  { key: 'missing', label: 'Desaparecidos', short: 'Alertas', icon: <IconSearch size={18} /> },
+  { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
+  { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
 ];
 
 function Shell() {
@@ -220,12 +220,12 @@ function Shell() {
         <button
           key={item.key}
           onClick={() => setRoute({ name: item.key } as Route)}
-          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-all ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
             active ? 'bg-moss-600 text-white' : 'text-pine-200 hover:bg-pine-800 hover:text-white'
           }`}
         >
           {item.icon}
-          {item.label}
+          {item.short}
           {badge}
         </button>
       );
@@ -367,7 +367,7 @@ function Shell() {
               <IconLogout size={16} />
             </button>
           </div>
-          <nav className="flex gap-1.5 overflow-x-auto px-3 py-2.5">{NAV.map((n) => navButton(n, true))}</nav>
+          <nav className="no-scrollbar flex gap-1 overflow-x-auto px-2.5 py-2">{NAV.map((n) => navButton(n, true))}</nav>
         </header>
 
         <div className="dotted-ground">
