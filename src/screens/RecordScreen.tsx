@@ -574,7 +574,7 @@ export function RecordScreen({
           <div className="relative flex items-center gap-2 border-t border-warn-500/30 bg-warn-100/70 px-5 py-2 sm:px-6">
             <span className="blink-dot h-2 w-2 rounded-full bg-warn-500" />
             <p className="text-xs font-bold text-warn-600">
-              EMERGÊNCIA ATIVA desde {formatDateBR(patient.emergency.since)}
+              EMERGÊNCIA/VULNERABILIDADE ATIVA desde {formatDateBR(patient.emergency.since)}
               {patient.emergency.location ? ` — ${patient.emergency.location}` : ''} · gerencie em Utilidade pública.
             </p>
           </div>

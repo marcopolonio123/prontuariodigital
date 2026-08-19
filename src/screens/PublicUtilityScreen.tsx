@@ -116,7 +116,7 @@ function NotifySheet({
       title={`Avisar rede — ${patient.name}`}
       subtitle={
         mode === 'emergency'
-          ? 'A pessoa está em situação de emergência. Abra o WhatsApp ou ligue, depois registre cada aviso.'
+          ? 'A pessoa está em situação de emergência/vulnerabilidade. Abra o WhatsApp ou ligue, depois registre cada aviso.'
           : 'A pessoa está desaparecida. Abra o WhatsApp ou ligue, depois registre cada aviso.'
       }
       width="max-w-xl"
@@ -323,7 +323,7 @@ export function PublicUtilityScreen({
         ],
       },
     });
-    toast('success', `Alerta de emergência ativado para ${person.name}.`);
+    toast('success', `Alerta de emergência/vulnerabilidade ativado para ${person.name}.`);
     setEOpen(false);
     setEPerson('');
     setESituation('');
@@ -345,7 +345,7 @@ export function PublicUtilityScreen({
         ],
       },
     });
-    toast('success', `Emergência de ${resolvedFor.name} marcada como resolvida.`);
+    toast('success', `Situação de ${resolvedFor.name} marcada como resolvida.`);
     setResolvedFor(null);
     setResolvedText('');
   };
@@ -370,8 +370,9 @@ export function PublicUtilityScreen({
         <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Utilidade pública</h1>
         <p className="mt-1.5 max-w-2xl text-sm text-mute">
           Central de proteção à vida: <strong className="text-ink">pessoas desaparecidas</strong> e{' '}
-          <strong className="text-ink">pessoas em situação de emergência</strong> (acidentes, internações sem contato,
-          encontradas desorientadas). Ao identificar alguém na base, o Vitalis dispara o alerta e a rede de avisos.
+          <strong className="text-ink">pessoas em situação de emergência/vulnerabilidade</strong> (acidentes, internações
+          sem contato, encontradas desorientadas, vulnerabilidade social ou vítimas de violência). Ao identificar alguém
+          na base, o Vitalis dispara o alerta e a rede de avisos.
         </p>
       </header>
 
@@ -379,7 +380,7 @@ export function PublicUtilityScreen({
         {(
           [
             { key: 'missing', label: `Desaparecidos · ${missing.length}` },
-            { key: 'emergency', label: `Situações de emergência · ${emergencies.length}` },
+            { key: 'emergency', label: `Emergência/Vulnerabilidade · ${emergencies.length}` },
           ] as Array<{ key: Tab; label: string }>
         ).map((t) => (
           <button
@@ -533,15 +534,15 @@ export function PublicUtilityScreen({
         <>
           <div className="rise mb-4 flex justify-end" style={{ animationDelay: '80ms' }}>
             <Btn className="bg-warn-500 hover:bg-warn-600" onClick={() => setEOpen(true)} disabled={eligibleEmergency.length === 0} title={eligibleEmergency.length === 0 ? 'Não há pessoas elegíveis' : undefined}>
-              <IconAlert size={16} /> Registrar situação de emergência
+              <IconAlert size={16} /> Registrar emergência/vulnerabilidade
             </Btn>
           </div>
 
           {emergencies.length === 0 ? (
             <EmptyState
               icon={<IconMegaphone size={24} />}
-              title="Nenhuma emergência ativa"
-              desc="Se alguém for encontrado em situação crítica — acidente, internação sem contato com a família, desorientação — registre aqui para acionar a rede de avisos e exibir o cartão de emergência na identificação."
+              title="Nenhuma emergência/vulnerabilidade ativa"
+              desc="Se alguém for encontrado em situação crítica — acidente, internação sem contato com a família, desorientação, vulnerabilidade social ou violência — registre aqui para acionar a rede de avisos e exibir o cartão de emergência na identificação."
             >
               {eligibleEmergency.length > 0 && (
                 <Btn variant="outline" onClick={() => setEOpen(true)}>
@@ -703,7 +704,7 @@ export function PublicUtilityScreen({
         </div>
       </Modal>
 
-      <Modal open={eOpen} onClose={() => setEOpen(false)} title="Registrar situação de emergência" subtitle="Ativa o alerta de emergência para a próxima identificação.">
+      <Modal open={eOpen} onClose={() => setEOpen(false)} title="Registrar emergência/vulnerabilidade" subtitle="Ativa o alerta para a próxima identificação desta pessoa.">
         <div className="space-y-3">
           <Field label="Pessoa" required>
             <select className={inputCls} value={ePerson} onChange={(e) => setEPerson(e.target.value)}>
@@ -742,7 +743,7 @@ export function PublicUtilityScreen({
         </div>
       </Modal>
 
-      <Modal open={resolvedFor !== null} onClose={() => setResolvedFor(null)} title={`Resolver emergência — ${resolvedFor?.name ?? ''}`} subtitle="Encerra o alerta de emergência.">
+      <Modal open={resolvedFor !== null} onClose={() => setResolvedFor(null)} title={`Resolver emergência/vulnerabilidade — ${resolvedFor?.name ?? ''}`} subtitle="Encerra o alerta ativo.">
         <Field label="Como foi resolvida?">
           <textarea className={`${inputCls} min-h-20 resize-y`} value={resolvedText} onChange={(e) => setResolvedText(e.target.value)} placeholder="ex.: família chegou ao hospital; alta médica…" />
         </Field>

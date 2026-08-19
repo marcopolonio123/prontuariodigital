@@ -239,7 +239,7 @@ export function emergencyAlertText(
   location: string,
 ): string {
   const lines = [
-    `URGENTE — Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} está em situação de emergência (${situationLabel})${location ? ` — ${location}` : ''}.`,
+    `URGENTE — Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} está em situação de emergência/vulnerabilidade (${situationLabel})${location ? ` — ${location}` : ''}.`,
     'Por favor, entre em contato com urgência ou responda para confirmar o recebimento.',
   ];
   return lines.join('\n');

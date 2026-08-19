@@ -48,11 +48,11 @@ const DEMO_SCENARIOS = [
     expect: 'Fluxo completo: identificar → alertar → avisar → localizar, tudo auditado com o seu nome.',
   },
   {
-    title: 'Utilidade pública — emergência ativa',
+    title: 'Utilidade pública — emergência/vulnerabilidade',
     badge: 'utilidade pública',
     steps: [
-      'Abra a tela Utilidade pública: a aba “Situações de emergência” mostra o Carlos internado sem contato com a família.',
-      'Na Identificação, envie a foto do Carlos (ou teste com o retrato dele): o alerta âmbar de emergência dispara junto do cartão médico.',
+      'Abra a tela Utilidade pública: a aba “Emergência/Vulnerabilidade” mostra o Carlos internado sem contato com a família.',
+      'Na Identificação, envie a foto do Carlos (ou teste com o retrato dele): o alerta âmbar dispara junto do cartão médico.',
       'Avise a rede de contatos pelo WhatsApp e marque a situação como resolvida.',
       'Na aba “Desaparecidos”, reporte um desaparecimento e registre avistamentos na linha do tempo do caso.',
     ],

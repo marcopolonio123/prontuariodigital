@@ -640,7 +640,7 @@ export function IdentifyScreen({
             <div className="overflow-hidden rounded-xl border-2 border-warn-500 bg-warn-100/70 shadow-lift">
               <div className="flex flex-wrap items-center gap-3 bg-warn-500 px-4 py-2.5 text-white">
                 <span className="blink-dot h-2.5 w-2.5 rounded-full bg-white" />
-                <p className="font-display text-sm font-bold uppercase tracking-[0.18em]">Situação de emergência — alerta ativo</p>
+                <p className="font-display text-sm font-bold uppercase tracking-[0.18em]">Emergência/Vulnerabilidade — alerta ativo</p>
                 <span className="ml-auto font-mono text-xs opacity-90">
                   {activePatient.emergency.situation
                     ? EMERGENCY_SITUATION_META[activePatient.emergency.situation].label
@@ -766,8 +766,8 @@ export function IdentifyScreen({
       <Modal
         open={resolvedOpen}
         onClose={() => setResolvedOpen(false)}
-        title={`Resolver emergência — ${activePatient?.name ?? ''}`}
-        subtitle="Encerra o alerta de emergência e arquiva o caso."
+        title={`Resolver emergência/vulnerabilidade — ${activePatient?.name ?? ''}`}
+        subtitle="Encerra o alerta ativo e arquiva o caso."
       >
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-semibold text-ink">Como foi resolvida?</span>

@@ -125,6 +125,8 @@ export type EmergencySituation =
   | 'desorientada'
   | 'clinica'
   | 'desastre'
+  | 'vulneravel'
+  | 'violencia'
   | 'outro';
 
 export const EMERGENCY_SITUATIONS: EmergencySituation[] = [
@@ -133,6 +135,8 @@ export const EMERGENCY_SITUATIONS: EmergencySituation[] = [
   'desorientada',
   'clinica',
   'desastre',
+  'vulneravel',
+  'violencia',
   'outro',
 ];
 
@@ -142,6 +146,8 @@ export const EMERGENCY_SITUATION_META: Record<EmergencySituation, { label: strin
   desorientada: { label: 'Encontrada desorientada' },
   clinica: { label: 'Emergência clínica' },
   desastre: { label: 'Desastre / calamidade' },
+  vulneravel: { label: 'Vulnerabilidade social / situação de rua' },
+  violencia: { label: 'Vítima de violência / risco' },
   outro: { label: 'Outra situação' },
 };
 
