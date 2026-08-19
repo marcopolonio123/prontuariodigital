@@ -2,7 +2,7 @@ import type { Contact, Patient } from '../lib/types';
 import { RELATIONSHIP_META, SPECIAL_CARE_META } from '../lib/types';
 import { ageFromBirth, formatDateBR, formatPhone, missingAlertText, telLink, waLink } from '../lib/biometrics';
 import { Avatar, BloodBadge, Tag } from './ui';
-import { IconAlert, IconCheck, IconDroplet, IconInfo, IconMessage, IconPhone, IconPill, IconUsers } from './icons';
+import { IconAlert, IconCheck, IconCreditCard, IconDroplet, IconInfo, IconMessage, IconPhone, IconPill, IconUsers } from './icons';
 
 export function ContactRow({
   contact,
@@ -159,15 +159,51 @@ export function EmergencyCard({ patient }: { patient: Patient }) {
           {patient.medications.length > 0 && (
             <div>
               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-mute">
-                <IconPill size={13} /> Medicações em uso
+                <IconPill size={13} /> Medicamentos de uso contínuo
               </p>
               <ul className="space-y-1">
                 {patient.medications.map((m) => (
-                  <li key={m} className="flex items-center gap-2 text-[13px] text-ink">
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-moss-500" />
-                    {m}
+                  <li key={m.id} className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-ink">
+                    <span className="h-1 w-1 shrink-0 translate-y-[-2px] rounded-full bg-moss-500" />
+                    <strong>{m.name}</strong>
+                    {m.dose && <span className="font-mono text-xs text-mute">{m.dose}</span>}
+                    {m.frequency && <span className="text-xs text-mute">· {m.frequency}</span>}
+                    {m.reason && <span className="text-xs italic text-mute/80">({m.reason})</span>}
                   </li>
                 ))}
+              </ul>
+            </div>
+          )}
+
+          {patient.insurances.length > 0 && (
+            <div>
+              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-mute">
+                <IconCreditCard size={13} /> Convênios / seguro saúde
+              </p>
+              <ul className="space-y-1.5">
+                {patient.insurances.map((ins) => {
+                  const expired = !!ins.validUntil && ins.validUntil < new Date().toISOString().slice(0, 10);
+                  return (
+                    <li key={ins.id} className="flex items-center gap-2.5 rounded-lg border border-line bg-white/70 px-2.5 py-2">
+                      {ins.image ? (
+                        <img src={ins.image} alt={`Carteirinha ${ins.operator}`} className="h-9 w-14 shrink-0 rounded border border-line object-cover" />
+                      ) : (
+                        <span className="flex h-9 w-14 shrink-0 items-center justify-center rounded border border-dashed border-line text-mute">
+                          <IconCreditCard size={15} />
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-bold text-ink">{ins.operator}{ins.plan ? ` · ${ins.plan}` : ''}</span>
+                        <span className="block font-mono text-[11px] text-mute">{ins.cardNumber || 'nº não informado'}</span>
+                      </span>
+                      {ins.validUntil ? (
+                        <Tag tone={expired ? 'danger' : 'moss'}>{expired ? 'vencido' : `vál. ${formatDateBR(ins.validUntil)}`}</Tag>
+                      ) : (
+                        <Tag tone="mute">validade n/d</Tag>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

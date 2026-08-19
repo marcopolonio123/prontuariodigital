@@ -27,6 +27,16 @@ const DEMO_SCENARIOS = [
     expect: 'Você entra direto no contexto da Ana, com o seletor de prontuário no topo.',
   },
   {
+    title: 'Medicamentos contínuos & convênios',
+    badge: 'cadastro',
+    steps: [
+      'Em Pessoas & prontuários, edite a Ana: a seção “Medicamentos de uso contínuo” tem nome, dose, frequência e motivo.',
+      'Logo abaixo, em “Convênios & seguro saúde”, adicione um plano com nº da carteirinha, validade e a foto da carteirinha (câmera ou arquivo).',
+      'Volte à Identificação e “Testar com exemplo” — o Cartão de Emergência exibe os medicamentos e o convênio com validade.',
+    ],
+    expect: 'Cartão de emergência completo para hospitais: o que toma, alergias e o plano de saúde com a carteirinha.',
+  },
+  {
     title: 'Desaparecida + alerta na identificação',
     badge: 'caso principal',
     steps: [
@@ -48,11 +58,11 @@ const DEMO_SCENARIOS = [
     expect: 'Cada opção vem com o motivo cruzado do prontuário + sinais de emergência + aviso médico.',
   },
   {
-    title: 'Prescrição, exames e anexos',
+    title: 'Prescrição, exames, anexos e voz',
     badge: 'prontuário',
     steps: [
       'No prontuário da Ana, clique na seta do registro “Avaliação geriátrica” — abre a prescrição e os exames solicitados.',
-      'Crie um novo registro e preencha “Prescrição médica” e/ou “Exames solicitados” — dá para descrever e anexar foto ou PDF da receita.',
+      'Crie um novo registro: nos campos de prescrição/exames/anotações, use o botão “ditar” para escrever pela voz (Chrome/Edge) ou anexe foto/PDF da receita.',
       'Filtre por especialidade (ex.: Neurologia) e use Compartilhar/Exportar — o texto sai no resumo e os anexos no JSON.',
       'Passe o mouse sobre um registro e clique no ícone de arquivo — é arquivado, nunca excluído (anexos preservados).',
     ],
@@ -318,7 +328,7 @@ function Shell() {
           >
             <IconFileText size={17} />
             Roteiro de demonstração
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">6 casos</span>
+            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">7 casos</span>
           </button>
         </div>
 

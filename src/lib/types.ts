@@ -85,6 +85,25 @@ export interface ClinicalSection {
   attachments: Attachment[]; // receita/exame anexado (foto, scan ou PDF)
 }
 
+export interface ContinuousMed {
+  id: string;
+  name: string; // princípio ativo / nome comercial
+  dose: string; // ex.: 50 mg
+  frequency: string; // ex.: 1x ao dia
+  reason: string; // motivo (opcional)
+}
+
+export interface Insurance {
+  id: string;
+  operator: string; // operadora (Unimed, Bradesco Saúde…)
+  plan: string; // nome do plano
+  cardNumber: string; // número da carteirinha / beneficiário
+  validUntil: string; // validade (ISO yyyy-mm-dd) ou ''
+  image: string | null; // foto da carteirinha (armazenada localmente)
+  notes: string;
+  addedAt: number;
+}
+
 export interface ClinicalEntry {
   id: string;
   type: EntryType;
@@ -128,7 +147,8 @@ export interface Patient {
   allergies: string[];
   intolerances: string[];
   conditions: string[];
-  medications: string[];
+  medications: ContinuousMed[]; // uso contínuo (nome, dose, frequência, motivo)
+  insurances: Insurance[]; // convênios / seguros saúde
   specialCare: SpecialCare[];
   emergencyNotes: string;
   contacts: Contact[];

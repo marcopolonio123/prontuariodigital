@@ -262,6 +262,22 @@ export const IconFileText = (p: IconProps) => (
   </I>
 );
 
+export const IconMic = (p: IconProps) => (
+  <I {...p}>
+    <path d="M12 2.5a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0v-6a3 3 0 0 1 3-3z" />
+    <path d="M19 11.5v.5a7 7 0 0 1-14 0v-.5" />
+    <path d="M12 19v2.5M8.5 21.5h7" />
+  </I>
+);
+
+export const IconCreditCard = (p: IconProps) => (
+  <I {...p}>
+    <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+    <path d="M2.5 10h19" />
+    <path d="M6 15h4.5" />
+  </I>
+);
+
 export const IconRefresh = (p: IconProps) => (
   <I {...p}>
     <path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" />

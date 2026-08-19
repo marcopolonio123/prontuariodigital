@@ -4,7 +4,7 @@ import { ENTRY_META, ENTRY_TYPES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/
 import { ageFromBirth, formatDateBR, formatDateTime } from '../lib/biometrics';
 import { uid } from '../lib/store';
 import { downloadAttachment, fileToAttachment, formatSizeKb } from '../lib/attachments';
-import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
+import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, MicButton, Modal, Tag, useToast } from '../components/ui';
 import {
   IconActivity, IconAlert, IconArchive, IconCalendar, IconChart, IconChevronDown, IconChevronLeft,
   IconDownload, IconEye, IconFace, IconFileText, IconFingerprint, IconFlask, IconInfo, IconPaperclip,
@@ -188,7 +188,8 @@ function SectionEditor({
             }}
           />
         </label>
-        <span className="text-[11px] text-mute">imagens são otimizadas · máx. 1,5 MB por arquivo</span>
+        <MicButton onAppend={(t) => onChange({ ...section, text: (section.text ? section.text + ' ' : '') + t })} />
+        <span className="text-[11px] text-mute">digite, dite por voz ou anexe · máx. 1,5 MB por arquivo</span>
         {hasContent && (
           <button
             type="button"
@@ -286,8 +287,11 @@ function NewEntryForm({
         </Field>
       </div>
       <div className="mt-4">
-        <Field label="Anotações clínicas" hint="descritivo do atendimento">
-          <textarea className={`${inputCls} min-h-20 resize-y`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Evolução, conduta, observações do atendimento…" />
+        <Field label="Anotações clínicas" hint="digite ou dite por voz">
+          <div className="relative">
+            <textarea className={`${inputCls} min-h-20 resize-y`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Evolução, conduta, observações do atendimento…" />
+            <MicButton className="absolute bottom-2 right-2" onAppend={(t) => setNotes((n) => (n ? n + ' ' : '') + t)} />
+          </div>
         </Field>
       </div>
 

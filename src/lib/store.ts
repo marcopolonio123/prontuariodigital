@@ -111,7 +111,31 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
     allergies: asArray<string>(raw.allergies),
     intolerances: asArray<string>(raw.intolerances),
     conditions: asArray<string>(raw.conditions),
-    medications: asArray<string>(raw.medications),
+    medications: asArray<unknown>(raw.medications).map((m) => {
+      // migração: strings antigas → medicamento estruturado
+      if (typeof m === 'string') {
+        const [name, ...rest] = m.split('—');
+        return { id: uid(), name: name.trim(), dose: '', frequency: rest.join('—').trim(), reason: '' };
+      }
+      const r = (m ?? {}) as Record<string, unknown>;
+      return {
+        id: String(r.id ?? uid()),
+        name: String(r.name ?? ''),
+        dose: String(r.dose ?? ''),
+        frequency: String(r.frequency ?? ''),
+        reason: String(r.reason ?? ''),
+      };
+    }),
+    insurances: asArray<Record<string, unknown>>(raw.insurances).map((r) => ({
+      id: String(r.id ?? uid()),
+      operator: String(r.operator ?? ''),
+      plan: String(r.plan ?? ''),
+      cardNumber: String(r.cardNumber ?? ''),
+      validUntil: String(r.validUntil ?? ''),
+      image: (r.image as string | null) ?? null,
+      notes: String(r.notes ?? ''),
+      addedAt: Number(r.addedAt ?? Date.now()),
+    })),
     specialCare: asArray<Patient['specialCare'][number]>(raw.specialCare),
     emergencyNotes: String(raw.emergencyNotes ?? ''),
     contacts: asArray<Patient['contacts'][number]>(raw.contacts),
@@ -140,6 +164,7 @@ export function emptyState(): AppState {
 const now = Date.now();
 const daysAgo = (d: number) => now - d * 86_400_000;
 const iso = (d: number) => new Date(daysAgo(d)).toISOString();
+const ahead = (d: number) => new Date(now + d * 86_400_000).toISOString().slice(0, 10);
 
 /** registro clínico com campos de prescrição/exames padronizados */
 function E(
@@ -159,7 +184,14 @@ function seedPatients(): Patient[] {
       id: 'p-ana', record: 'VT-2024-0001', name: 'Ana Beatriz Sampaio', birthDate: '1951-03-12', sex: 'F',
       cpf: '312.445.908-77', bloodType: 'O+',
       allergies: ['Penicilina'], intolerances: ['Lactose'], conditions: ['Hipertensão arterial'],
-      medications: ['Donepezila 10 mg — 1x/dia', 'Metformina 850 mg — 2x/dia', 'Losartana 50 mg — 1x/dia'],
+      medications: [
+        { id: 'm-ana-1', name: 'Donepezila', dose: '10 mg', frequency: '1x ao dia, pela manhã', reason: 'Doença de Alzheimer' },
+        { id: 'm-ana-2', name: 'Metformina', dose: '850 mg', frequency: '2x ao dia, com refeições', reason: 'Diabetes tipo 2' },
+        { id: 'm-ana-3', name: 'Losartana', dose: '50 mg', frequency: '1x ao dia', reason: 'Hipertensão arterial' },
+      ],
+      insurances: [
+        { id: 'ins-ana-1', operator: 'Unimed BH', plan: 'Unipart Enfermaria', cardNumber: '0834 5521 7790 02', validUntil: ahead(320), image: null, notes: 'Titular da carteirinha: a própria Ana.', addedAt: daysAgo(210) },
+      ],
       specialCare: ['alzheimer', 'diabetes'],
       emergencyNotes: 'Pode não reconhecer familiares e repetir perguntas. Fale com calma, use frases curtas e não a deixe sozinha. Usa pulseira de identificação.',
       contacts: [
@@ -208,7 +240,13 @@ function seedPatients(): Patient[] {
       id: 'p-carlos', record: 'VT-2024-0002', name: 'Carlos Eduardo Menezes', birthDate: '1966-09-02', sex: 'M',
       cpf: '198.552.347-10', bloodType: 'A-',
       allergies: ['Dipirona'], intolerances: ['Glúten (sensibilidade)'], conditions: ['Arritmia controlada'],
-      medications: ['Amiodarona 200 mg — 1x/dia', 'Rosuvastatina 20 mg — à noite'],
+      medications: [
+        { id: 'm-car-1', name: 'Amiodarona', dose: '200 mg', frequency: '1x ao dia', reason: 'Arritmia controlada' },
+        { id: 'm-car-2', name: 'Rosuvastatina', dose: '20 mg', frequency: 'à noite', reason: 'Colesterol' },
+      ],
+      insurances: [
+        { id: 'ins-car-1', operator: 'Bradesco Saúde', plan: 'Nacional Flex', cardNumber: '77120 4455 9023 8', validUntil: ahead(140), image: null, notes: 'Dependente: Tereza Menezes (esposa).', addedAt: daysAgo(300) },
+      ],
       specialCare: ['cardiaco'],
       emergencyNotes: 'Portador de marca-passo (lado esquerdo do tórax). Em desmaio ou dor no peito, acionar SAMU 192 imediatamente.',
       contacts: [
@@ -241,7 +279,14 @@ function seedPatients(): Patient[] {
       id: 'p-sofia', record: 'VT-2025-0003', name: 'Sofia Almeida Costa', birthDate: '2016-05-21', sex: 'F',
       cpf: '', bloodType: 'B+',
       allergies: ['Amendoim (anafilaxia)', 'Picada de abelha'], intolerances: ['Leite de vaca'],
-      conditions: [], medications: [], specialCare: [],
+      conditions: [],
+      medications: [
+        { id: 'm-sof-1', name: 'Desloratadina xarope', dose: '2,5 ml', frequency: '1x ao dia, se crises de rinite', reason: 'Rinite alérgica' },
+      ],
+      insurances: [
+        { id: 'ins-sof-1', operator: 'SulAmérica', plan: 'Clássico 100', cardNumber: '90233 1187 4402 5', validUntil: ahead(410), image: null, notes: 'Dependente no plano da mãe (Juliana Almeida).', addedAt: daysAgo(180) },
+      ],
+      specialCare: [],
       emergencyNotes: 'ALERTA: alergia grave a amendoim. Em reação (inchaço, falta de ar) usar caneta de epinefrina na mochila e chamar SAMU 192.',
       contacts: [
         { id: 'c-sof-1', name: 'Juliana Almeida', relationship: 'mae', phone: '5531991204477', priority: 1 },

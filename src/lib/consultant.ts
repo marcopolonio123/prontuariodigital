@@ -174,8 +174,14 @@ export function analyze(question: string, p: Patient): Consultation {
   }
   if (p.specialCare.includes('epilepsia')) recordAlerts.push('Epilepsia: não interromper nem combinar medicações sem o neurologista.');
 
-  const medsText = norm(p.medications.join(' '));
-  if (medsText) recordAlerts.push(`Medicações em uso contínuo: ${p.medications.join('; ')}.`);
+  const medsText = norm(p.medications.map((m) => [m.name, m.dose, m.frequency, m.reason].join(' ')).join(' '));
+  if (p.medications.length > 0) {
+    recordAlerts.push(
+      `Medicamentos de uso contínuo: ${p.medications
+        .map((m) => `${m.name}${m.dose ? ` ${m.dose}` : ''}${m.frequency ? ` — ${m.frequency}` : ''}`)
+        .join('; ')}.`,
+    );
+  }
   if (/(anticoagul|varfarina|xarelto|rivaroxabana|marevan)/.test(medsText)) tags.add('anticoagulante');
   if (/(donepezila|memantina)/.test(medsText)) {
     recordAlerts.push('Medicação cognitiva em uso — qualquer novo remédio deve ser validado pelo geriatra/neurologista.');

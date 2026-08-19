@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BloodType, Contact, Patient, Relationship, SpecialCare } from '../lib/types';
+import type { BloodType, Contact, ContinuousMed, Insurance, Patient, Relationship, SpecialCare } from '../lib/types';
 import { BLOOD_TYPES, RELATIONSHIPS, RELATIONSHIP_META, SPECIAL_CARES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/types';
 import { newRecordNumber, uid } from '../lib/store';
-import { ageFromBirth, daysSince, dHash, fileToDataURL, makeThumb, maskCPF, timeAgo } from '../lib/biometrics';
-import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, Tag, useToast } from '../components/ui';
+import { ageFromBirth, daysSince, dHash, fileToDataURL, formatDateBR, makeThumb, maskCPF, timeAgo } from '../lib/biometrics';
+import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
 import { CameraCapture } from '../components/CameraCapture';
 import { FingerprintPad } from '../components/FingerprintPad';
 import {
-  IconAlert, IconArchive, IconCamera, IconChart, IconFace, IconFingerprint, IconPencil,
-  IconPhone, IconPlus, IconRefresh, IconSearch, IconUpload, IconUsers, IconX,
+  IconAlert, IconArchive, IconCamera, IconChart, IconCreditCard, IconFace, IconFingerprint,
+  IconPencil, IconPhone, IconPlus, IconRefresh, IconSearch, IconTrash, IconUpload, IconUsers, IconX,
 } from '../components/icons';
 
 function TagInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder: string }) {
@@ -49,6 +49,206 @@ function TagInput({ value, onChange, placeholder }: { value: string[]; onChange:
   );
 }
 
+/* --------------------- medicamentos de uso contínuo -------------------- */
+
+function MedicationsEditor({ value, onChange }: { value: ContinuousMed[]; onChange: (v: ContinuousMed[]) => void }) {
+  const update = (id: string, patch: Partial<ContinuousMed>) =>
+    onChange(value.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const add = () => onChange([...value, { id: uid(), name: '', dose: '', frequency: '', reason: '' }]);
+  const remove = (id: string) => onChange(value.filter((m) => m.id !== id));
+  const cols = 'grid gap-2 sm:grid-cols-[1.2fr_80px_1fr_1.2fr_34px]';
+  return (
+    <div className="rounded-xl border border-line bg-white/60 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+          <span className="rounded-md bg-moss-100 p-1 text-moss-700"><IconPlus size={13} /></span>
+          Medicamentos de uso contínuo
+        </p>
+        <Btn variant="outline" size="sm" onClick={add}>
+          <IconPlus size={13} /> Adicionar
+        </Btn>
+      </div>
+      {value.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-line bg-paper/70 px-3 py-3 text-center text-xs text-mute">
+          Nenhum medicamento contínuo — descreva aqui o que a pessoa toma todos os dias.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {value.map((m, i) => (
+            <li key={m.id}>
+              <div className={cols}>
+                <input className={inputCls} value={m.name} placeholder="Medicamento *" onChange={(e) => update(m.id, { name: e.target.value })} />
+                <input className={inputCls} value={m.dose} placeholder="Dose" onChange={(e) => update(m.id, { dose: e.target.value })} />
+                <input className={inputCls} value={m.frequency} placeholder="Frequência" onChange={(e) => update(m.id, { frequency: e.target.value })} />
+                <input className={inputCls} value={m.reason} placeholder="Motivo (opcional)" onChange={(e) => update(m.id, { reason: e.target.value })} />
+                <button
+                  type="button"
+                  onClick={() => remove(m.id)}
+                  className="flex h-9 w-full items-center justify-center rounded-lg border border-line text-mute transition-all hover:border-danger-500/40 hover:bg-danger-100 hover:text-danger-600 sm:w-9"
+                  aria-label={`Remover medicamento ${i + 1}`}
+                >
+                  <IconTrash size={14} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {value.length > 0 && (
+        <p className="mt-2 text-[11px] text-mute">Linhas sem nome são ignoradas ao salvar. O Consultor cruza esses dados com os sintomas.</p>
+      )}
+    </div>
+  );
+}
+
+/* ----------------------- convênios / seguro saúde ---------------------- */
+
+const emptyInsForm = { operator: '', plan: '', cardNumber: '', validUntil: '', notes: '', image: null as string | null };
+
+function InsuranceEditor({ value, onChange }: { value: Insurance[]; onChange: (v: Insurance[]) => void }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [camOpen, setCamOpen] = useState(false);
+  const [form, setForm] = useState({ ...emptyInsForm });
+  const [err, setErr] = useState('');
+
+  const save = () => {
+    if (!form.operator.trim()) {
+      setErr('Informe a operadora ou seguradora.');
+      return;
+    }
+    onChange([
+      ...value,
+      { id: uid(), operator: form.operator.trim(), plan: form.plan.trim(), cardNumber: form.cardNumber.trim(), validUntil: form.validUntil, image: form.image, notes: form.notes.trim(), addedAt: Date.now() },
+    ]);
+    setForm({ ...emptyInsForm });
+    setErr('');
+    setOpen(false);
+    toast('success', 'Convênio adicionado à ficha.');
+  };
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const url = await fileToDataURL(file, 900, 0.82);
+      setForm((f) => ({ ...f, image: url }));
+    } catch {
+      toast('error', 'Não foi possível ler a imagem da carteirinha.');
+    }
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div>
+      {value.length > 0 && (
+        <ul className="mb-3 grid gap-2 sm:grid-cols-2">
+          {value.map((ins) => {
+            const expired = !!ins.validUntil && ins.validUntil < today;
+            return (
+              <li key={ins.id} className="group flex items-center gap-3 rounded-xl border border-line bg-white/70 p-2.5 transition-all hover:border-moss-300">
+                {ins.image ? (
+                  <img src={ins.image} alt={`Carteirinha ${ins.operator}`} className="h-14 w-22 shrink-0 rounded-lg border border-line object-cover" style={{ width: 88 }} />
+                ) : (
+                  <span className="flex h-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-line bg-paper text-mute" style={{ width: 88 }}>
+                    <IconCreditCard size={20} />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-ink">{ins.operator}{ins.plan ? ` · ${ins.plan}` : ''}</p>
+                  <p className="font-mono text-[11px] text-mute">{ins.cardNumber || 'nº não informado'}</p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {ins.validUntil ? (
+                      <Tag tone={expired ? 'danger' : 'moss'}>{expired ? 'vencido' : `vál. ${formatDateBR(ins.validUntil)}`}</Tag>
+                    ) : (
+                      <Tag tone="mute">validade n/d</Tag>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChange(value.filter((x) => x.id !== ins.id))}
+                  className="rounded-md p-1.5 text-mute opacity-0 transition-all hover:bg-danger-100 hover:text-danger-600 group-hover:opacity-100"
+                  aria-label={`Remover ${ins.operator}`}
+                >
+                  <IconTrash size={15} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <Btn variant="dark" size="sm" onClick={() => setOpen(true)}>
+        <IconCreditCard size={14} /> Adicionar convênio / seguro
+      </Btn>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Convênio ou seguro saúde"
+        subtitle="A carteirinha fica armazenada somente neste dispositivo."
+        width="max-w-xl"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Operadora / seguradora" required>
+            <input className={`${inputCls} ${err ? 'border-danger-500' : ''}`} value={form.operator} onChange={(e) => setForm({ ...form, operator: e.target.value })} placeholder="ex.: Unimed, Bradesco Saúde" />
+            {err && <p className="mt-1 text-xs font-medium text-danger-600">{err}</p>}
+          </Field>
+          <Field label="Nome do plano">
+            <input className={inputCls} value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="ex.: Unipart Enfermaria" />
+          </Field>
+          <Field label="Nº da carteirinha / beneficiário">
+            <input className={inputCls} value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} placeholder="ex.: 0834 5521 7790 02" />
+          </Field>
+          <Field label="Validade">
+            <input type="date" className={inputCls} value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
+          </Field>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1.5 text-[13px] font-semibold text-ink">Foto da carteirinha</p>
+          <div className="flex items-start gap-3">
+            {form.image ? (
+              <img src={form.image} alt="Carteirinha do plano" className="h-24 rounded-lg border border-line object-cover" />
+            ) : (
+              <div className="flex h-24 w-40 items-center justify-center rounded-lg border-2 border-dashed border-line bg-paper text-mute">
+                <IconCreditCard size={22} />
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <Btn variant="outline" size="sm" onClick={() => setCamOpen(true)}>
+                <IconCamera size={13} /> Fotografar
+              </Btn>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-card px-2.5 py-1.5 text-xs font-semibold text-ink transition-all hover:border-moss-300 hover:bg-moss-50 active:scale-[0.97]">
+                <IconUpload size={13} /> Enviar arquivo
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
+              </label>
+              {form.image && (
+                <Btn variant="ghost" size="sm" onClick={() => setForm({ ...form, image: null })}>
+                  <IconTrash size={12} /> Remover
+                </Btn>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <Field label="Observações" hint="opcional">
+            <textarea className={`${inputCls} min-h-16 resize-y`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="ex.: dependente no plano do cônjuge, reembolso mediante nota…" />
+          </Field>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Btn variant="ghost" onClick={() => setOpen(false)}>Cancelar</Btn>
+          <Btn onClick={save}>Salvar convênio</Btn>
+        </div>
+      </Modal>
+
+      <CameraCapture open={camOpen} onClose={() => setCamOpen(false)} onCapture={(url) => setForm((f) => ({ ...f, image: url }))} title="Foto da carteirinha" />
+    </div>
+  );
+}
+
 const emptyForm = () => ({
   name: '',
   birthDate: '',
@@ -59,7 +259,8 @@ const emptyForm = () => ({
   allergies: [] as string[],
   intolerances: [] as string[],
   conditions: [] as string[],
-  medications: [] as string[],
+  medications: [] as ContinuousMed[],
+  insurances: [] as Insurance[],
   specialCare: [] as SpecialCare[],
   emergencyNotes: '',
   contacts: [] as Contact[],
@@ -100,6 +301,7 @@ function PatientForm({
           intolerances: [...initial.intolerances],
           conditions: [...initial.conditions],
           medications: [...initial.medications],
+          insurances: [...initial.insurances],
           specialCare: [...initial.specialCare],
           emergencyNotes: initial.emergencyNotes,
           contacts: [...initial.contacts],
@@ -191,6 +393,7 @@ function PatientForm({
       intolerances: [],
       conditions: [],
       medications: [],
+      insurances: [],
       specialCare: [],
       emergencyNotes: '',
       contacts: [],
@@ -215,7 +418,8 @@ function PatientForm({
       allergies: f.allergies,
       intolerances: f.intolerances,
       conditions: f.conditions,
-      medications: f.medications,
+      medications: f.medications.filter((m) => m.name.trim()),
+      insurances: f.insurances,
       specialCare: f.specialCare,
       emergencyNotes: f.emergencyNotes.trim(),
       contacts: f.contacts,
@@ -350,7 +554,9 @@ function PatientForm({
               <Field label="Alergias"><TagInput value={f.allergies} onChange={(v) => set('allergies', v)} placeholder="Enter para adicionar" /></Field>
               <Field label="Intolerâncias alimentares"><TagInput value={f.intolerances} onChange={(v) => set('intolerances', v)} placeholder="ex.: lactose, glúten" /></Field>
               <Field label="Condições crônicas"><TagInput value={f.conditions} onChange={(v) => set('conditions', v)} placeholder="ex.: hipertensão" /></Field>
-              <Field label="Medicações em uso"><TagInput value={f.medications} onChange={(v) => set('medications', v)} placeholder="ex.: Losartana 50 mg 1x/dia" /></Field>
+            </div>
+            <div className="mt-4">
+              <MedicationsEditor value={f.medications} onChange={(v) => set('medications', v)} />
             </div>
             <div className="mt-4">
               <p className="mb-1.5 text-[13px] font-semibold text-ink">Cuidados especiais</p>
@@ -377,6 +583,15 @@ function PatientForm({
               <Field label="Instruções para quem encontrar" hint="como abordar, o que evitar, quem chamar">
                 <textarea className={`${inputCls} min-h-20 resize-y`} value={f.emergencyNotes} onChange={(e) => set('emergencyNotes', e.target.value)} placeholder="ex.: pode estar confusa — fale com calma e não a deixe sozinha…" />
               </Field>
+            </div>
+            <div className="mt-5 border-t border-line pt-4">
+              <h4 className="mb-1 flex items-center gap-2 text-[13px] font-semibold text-ink">
+                <IconCreditCard size={15} className="text-moss-600" /> Convênios & seguro saúde
+              </h4>
+              <p className="mb-3 text-xs text-mute">
+                Aparecem no cartão de emergência — úteis em internações e atendimentos de urgência.
+              </p>
+              <InsuranceEditor value={f.insurances} onChange={(v) => set('insurances', v)} />
             </div>
           </section>
 

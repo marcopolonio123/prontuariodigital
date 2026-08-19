@@ -3,12 +3,13 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import type { Patient } from '../lib/types';
 import { avatarTone, initials } from '../lib/biometrics';
-import { IconAlert, IconCheck, IconInfo, IconX } from './icons';
+import { IconAlert, IconCheck, IconInfo, IconMic, IconX } from './icons';
 
 /* ------------------------------- toasts -------------------------------- */
 
@@ -202,6 +203,105 @@ export function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+/* --------------------------- ditado por voz ---------------------------- */
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((e: { error?: string }) => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+function getSpeechCtor(): (new () => SpeechRecognitionLike) | null {
+  const w = window as unknown as Record<string, unknown>;
+  return (w.SpeechRecognition as new () => SpeechRecognitionLike) ??
+    (w.webkitSpeechRecognition as new () => SpeechRecognitionLike) ??
+    null;
+}
+
+/** Botão de microfone: dita o texto falado e o anexa ao campo via onAppend. */
+export function MicButton({
+  onAppend,
+  className = '',
+  title = 'Ditar por voz',
+}: {
+  onAppend: (text: string) => void;
+  className?: string;
+  title?: string;
+}) {
+  const toast = useToast();
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<SpeechRecognitionLike | null>(null);
+
+  const stop = useCallback(() => {
+    recRef.current?.stop();
+    recRef.current = null;
+    setListening(false);
+  }, []);
+
+  useEffect(() => () => recRef.current?.abort(), []);
+
+  const start = () => {
+    const Ctor = getSpeechCtor();
+    if (!Ctor) {
+      toast('error', 'Reconhecimento de voz não é suportado neste navegador — use Chrome ou Edge.');
+      return;
+    }
+    const rec = new Ctor();
+    rec.lang = 'pt-BR';
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      let text = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) text += e.results[i][0].transcript;
+      }
+      if (text.trim()) onAppend(text.trim());
+    };
+    rec.onend = () => {
+      recRef.current = null;
+      setListening(false);
+    };
+    rec.onerror = (e) => {
+      recRef.current = null;
+      setListening(false);
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        toast('error', 'Permissão de microfone negada — libere o acesso no navegador.');
+      } else if (e.error !== 'aborted') {
+        toast('error', 'Não foi possível captar o áudio. Tente novamente.');
+      }
+    };
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={listening ? stop : start}
+      title={listening ? 'Parar ditado' : title}
+      aria-label={listening ? 'Parar ditado por voz' : 'Ditar por voz'}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+        listening
+          ? 'border-danger-500 bg-danger-500 text-white shadow-sm'
+          : 'border-line bg-card text-mute hover:border-moss-300 hover:bg-moss-50 hover:text-moss-700'
+      } ${className}`}
+    >
+      <span className="relative flex items-center justify-center">
+        {listening && <span className="absolute h-4 w-4 animate-ping rounded-full bg-white/50" />}
+        <IconMic size={14} className="relative" />
+      </span>
+      {listening ? 'ouvindo…' : 'ditar'}
+    </button>
   );
 }
 
