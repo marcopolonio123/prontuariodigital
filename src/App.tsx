@@ -144,10 +144,9 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'consultor' | 'settings'; label: string; short: string; icon: ReactNode }> = [
-  { key: 'identify', label: 'Identificação', short: 'Identificar', icon: <IconFace size={18} /> },
-  { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
+const NAV: Array<{ key: 'missing' | 'patients' | 'consultor' | 'settings'; label: string; short: string; icon: ReactNode }> = [
   { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
+  { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
 ];
@@ -155,7 +154,7 @@ const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'consultor' | 'set
 function Shell() {
   const toast = useToast();
   const [state, setState] = useState<AppState>(() => loadState());
-  const [route, setRoute] = useState<Route>({ name: 'identify' });
+  const [route, setRoute] = useState<Route>({ name: 'missing' });
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
