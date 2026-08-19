@@ -119,6 +119,50 @@ export interface ClinicalEntry {
 
 export type MissingEventKind = 'missing' | 'found' | 'sighting' | 'notified';
 
+export type EmergencySituation =
+  | 'acidente'
+  | 'internacao'
+  | 'desorientada'
+  | 'clinica'
+  | 'desastre'
+  | 'outro';
+
+export const EMERGENCY_SITUATIONS: EmergencySituation[] = [
+  'acidente',
+  'internacao',
+  'desorientada',
+  'clinica',
+  'desastre',
+  'outro',
+];
+
+export const EMERGENCY_SITUATION_META: Record<EmergencySituation, { label: string }> = {
+  acidente: { label: 'Acidente' },
+  internacao: { label: 'Internação sem contato com a família' },
+  desorientada: { label: 'Encontrada desorientada' },
+  clinica: { label: 'Emergência clínica' },
+  desastre: { label: 'Desastre / calamidade' },
+  outro: { label: 'Outra situação' },
+};
+
+export type EmergencyEventKind = 'emergency' | 'notified' | 'resolved' | 'update';
+
+export interface EmergencyEvent {
+  id: string;
+  at: number;
+  kind: EmergencyEventKind;
+  text: string;
+}
+
+export interface EmergencyStatus {
+  active: boolean;
+  since: string; // ISO yyyy-mm-dd
+  situation: EmergencySituation | '';
+  location: string;
+  notes: string;
+  history: EmergencyEvent[];
+}
+
 export interface MissingEvent {
   id: string;
   at: number;
@@ -135,6 +179,15 @@ export interface MissingStatus {
 }
 
 export const EMPTY_MISSING: MissingStatus = { active: false, since: '', lastPlace: '', notes: '', history: [] };
+
+export const EMPTY_EMERGENCY: EmergencyStatus = {
+  active: false,
+  since: '',
+  situation: '',
+  location: '',
+  notes: '',
+  history: [],
+};
 
 export interface Patient {
   id: string;
@@ -153,6 +206,7 @@ export interface Patient {
   emergencyNotes: string;
   contacts: Contact[];
   missing: MissingStatus;
+  emergency: EmergencyStatus;
   photo: string | null;
   photoHash: string | null;
   fingerprint: Fingerprint | null;

@@ -232,6 +232,19 @@ export function waLink(phone: string, text: string): string {
   return `https://wa.me/${phoneDigits(phone)}?text=${encodeURIComponent(text)}`;
 }
 
+export function emergencyAlertText(
+  personName: string,
+  age: number | null,
+  situationLabel: string,
+  location: string,
+): string {
+  const lines = [
+    `URGENTE — Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} está em situação de emergência (${situationLabel})${location ? ` — ${location}` : ''}.`,
+    'Por favor, entre em contato com urgência ou responda para confirmar o recebimento.',
+  ];
+  return lines.join('\n');
+}
+
 export function missingAlertText(personName: string, age: number | null, lastPlace: string): string {
   const lines = [
     `Olá! Alerta do app Vitalis: ${personName}${age !== null ? ` (${age} anos)` : ''} foi localizada agora há pouco, identificada pelo app.`,

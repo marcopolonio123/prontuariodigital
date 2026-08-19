@@ -1,5 +1,5 @@
 import type { AccessGrant, Account, AppState, ClinicalEntry, IdEvent, Patient } from './types';
-import { EMPTY_MISSING } from './types';
+import { EMPTY_EMERGENCY, EMPTY_MISSING } from './types';
 import { makeFingerprintTemplate } from './biometrics';
 
 const KEY = 'vitalis.state.v3';
@@ -146,6 +146,17 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
       notes: String(missingRaw?.notes ?? ''),
       history: asArray<Patient['missing']['history'][number]>(missingRaw?.history),
     },
+    emergency: (() => {
+      const emRaw = (raw.emergency ?? null) as Partial<Patient['emergency']> | null;
+      return {
+        active: Boolean(emRaw?.active),
+        since: String(emRaw?.since ?? ''),
+        situation: (emRaw?.situation as Patient['emergency']['situation']) ?? '',
+        location: String(emRaw?.location ?? ''),
+        notes: String(emRaw?.notes ?? ''),
+        history: asArray<Patient['emergency']['history'][number]>(emRaw?.history),
+      };
+    })(),
     photo: (raw.photo as string | null) ?? null,
     photoHash: (raw.photoHash as string | null) ?? null,
     fingerprint: (raw.fingerprint as Patient['fingerprint']) ?? null,
@@ -207,6 +218,7 @@ function seedPatients(): Patient[] {
           { id: uid(), at: daysAgo(1), kind: 'sighting', text: 'Vista próxima à feira livre da Rua das Flores (não confirmado).' },
         ],
       },
+      emergency: { ...EMPTY_EMERGENCY },
       photo: '/portraits/ana.svg', photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(120), quality: 91 },
       entries: [
@@ -254,6 +266,17 @@ function seedPatients(): Patient[] {
         { id: 'c-car-2', name: 'Tereza Menezes', relationship: 'conjuge', phone: '5521988112093', priority: 2 },
       ],
       missing: { ...EMPTY_MISSING },
+      emergency: {
+        active: true,
+        since: iso(1).slice(0, 10),
+        situation: 'internacao',
+        location: 'Hospital São Lucas — Emergência, leito 12',
+        notes: 'Admitido após acidente de trânsito. Sedado, sem condições de se identificar. Reconhecido pelo app Vitalis; equipe acionou a rede de avisos.',
+        history: [
+          { id: uid(), at: daysAgo(1), kind: 'emergency', text: 'Emergência registrada pelo serviço social do hospital.' },
+          { id: uid(), at: daysAgo(1) + 3_600_000, kind: 'notified', text: 'Avisos enviados via app para: Rafael Menezes.' },
+        ],
+      },
       photo: '/portraits/carlos.svg', photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(98), quality: 88 },
       entries: [
@@ -293,6 +316,7 @@ function seedPatients(): Patient[] {
         { id: 'c-sof-2', name: 'Bruno Costa', relationship: 'pai', phone: '5531982337761', priority: 2 },
       ],
       missing: { ...EMPTY_MISSING },
+      emergency: { ...EMPTY_EMERGENCY },
       photo: null, photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(40), quality: 74 },
       entries: [

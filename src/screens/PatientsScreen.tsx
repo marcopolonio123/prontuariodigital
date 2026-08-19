@@ -399,6 +399,7 @@ function PatientForm({
       emergencyNotes: '',
       contacts: [],
       missing: { active: false, since: '', lastPlace: '', notes: '', history: [] },
+      emergency: { active: false, since: '', situation: '', location: '', notes: '', history: [] },
       photo: null,
       photoHash: null,
       fingerprint: null,

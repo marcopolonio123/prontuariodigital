@@ -5,13 +5,13 @@ import { ageFromBirth } from './lib/biometrics';
 import { Avatar, Btn, Ecg, Modal, ToastProvider, useToast } from './components/ui';
 import {
   IconBrain, IconChart, IconChevronRight, IconFace, IconFileText, IconGear, IconLogout,
-  IconMapPin, IconSearch, IconUsers, LogoMark,
+  IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
 import { IdentifyScreen } from './screens/IdentifyScreen';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { RecordScreen } from './screens/RecordScreen';
-import { MissingScreen } from './screens/MissingScreen';
+import { PublicUtilityScreen } from './screens/PublicUtilityScreen';
 import { ConsultantScreen } from './screens/ConsultantScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
@@ -46,6 +46,17 @@ const DEMO_SCENARIOS = [
       'Clique em “Marcar como localizada” para encerrar o caso.',
     ],
     expect: 'Fluxo completo: identificar → alertar → avisar → localizar, tudo auditado com o seu nome.',
+  },
+  {
+    title: 'Utilidade pública — emergência ativa',
+    badge: 'utilidade pública',
+    steps: [
+      'Abra a tela Utilidade pública: a aba “Situações de emergência” mostra o Carlos internado sem contato com a família.',
+      'Na Identificação, envie a foto do Carlos (ou teste com o retrato dele): o alerta âmbar de emergência dispara junto do cartão médico.',
+      'Avise a rede de contatos pelo WhatsApp e marque a situação como resolvida.',
+      'Na aba “Desaparecidos”, reporte um desaparecimento e registre avistamentos na linha do tempo do caso.',
+    ],
+    expect: 'Dois serviços públicos no mesmo hub: desaparecidos (vermelho) e emergências (âmbar), ambos com rede de avisos e trilha de auditoria.',
   },
   {
     title: 'Consultor IA',
@@ -125,7 +136,7 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
 const NAV: Array<{ key: 'identify' | 'patients' | 'missing' | 'consultor' | 'settings'; label: string; short: string; icon: ReactNode }> = [
   { key: 'identify', label: 'Identificação', short: 'Identificar', icon: <IconFace size={18} /> },
   { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
-  { key: 'missing', label: 'Desaparecidos', short: 'Alertas', icon: <IconSearch size={18} /> },
+  { key: 'missing', label: 'Utilidade pública', short: 'Pública', icon: <IconMegaphone size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
 ];
@@ -205,14 +216,14 @@ function Shell() {
 
   const activeKey = route.name === 'record' ? 'patients' : route.name;
   const currentPatient = route.name === 'record' ? state.patients.find((p) => p.id === route.id) : undefined;
-  const missingCount = state.patients.filter((p) => !p.archived && p.missing.active).length;
+  const alertCount = state.patients.filter((p) => !p.archived && (p.missing.active || p.emergency.active)).length;
 
   const navButton = (item: (typeof NAV)[number], mobile: boolean) => {
     const active = activeKey === item.key;
     const badge =
-      item.key === 'missing' && missingCount > 0 ? (
+      item.key === 'missing' && alertCount > 0 ? (
         <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-500 px-1.5 font-mono text-[11px] font-bold text-white">
-          {missingCount}
+          {alertCount}
         </span>
       ) : null;
     if (mobile) {
@@ -432,7 +443,7 @@ function Shell() {
                 />
               )}
               {route.name === 'missing' && (
-                <MissingScreen
+                <PublicUtilityScreen
                   patients={state.patients}
                   log={state.log}
                   onUpdate={updatePatient}

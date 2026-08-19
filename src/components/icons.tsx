@@ -295,6 +295,13 @@ export const IconDatabase = (p: IconProps) => (
   </I>
 );
 
+export const IconMegaphone = (p: IconProps) => (
+  <I {...p}>
+    <path d="m3 11 18-5v12L3 14v-3z" />
+    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+  </I>
+);
+
 export const IconMapPin = (p: IconProps) => (
   <I {...p}>
     <path d="M20 10.4c0 5.8-8 11.6-8 11.6s-8-5.8-8-11.6a8 8 0 0 1 16 0z" />

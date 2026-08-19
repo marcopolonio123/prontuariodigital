@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type { IdEvent, Patient } from '../lib/types';
 import { uid } from '../lib/store';
 import {
-  ageFromBirth, dHash, daysSince, ensurePatientHash, fileToDataURL, formatDateBR, makeThumb,
-  MATCH_THRESHOLD, rankCandidates, REVIEW_THRESHOLD, timeAgo, type MatchCandidate,
+  ageFromBirth, dHash, daysSince, emergencyAlertText, ensurePatientHash, fileToDataURL, formatDateBR,
+  makeThumb, MATCH_THRESHOLD, missingAlertText, rankCandidates, REVIEW_THRESHOLD, timeAgo, type MatchCandidate,
 } from '../lib/biometrics';
+import { EMERGENCY_SITUATION_META } from '../lib/types';
 import { Avatar, Btn, Corners, EmptyState, Gauge, Modal, Tag, useToast } from '../components/ui';
 import { CameraCapture } from '../components/CameraCapture';
 import { FingerprintPad } from '../components/FingerprintPad';
@@ -69,6 +70,8 @@ export function IdentifyScreen({
   const [notified, setNotified] = useState<Set<string>>(new Set());
   const [foundOpen, setFoundOpen] = useState(false);
   const [foundText, setFoundText] = useState('');
+  const [resolvedOpen, setResolvedOpen] = useState(false);
+  const [resolvedText, setResolvedText] = useState('');
 
   const identifiable = useMemo(() => patients.filter((p) => !p.archived && p.photo && p.photoHash), [patients]);
 
@@ -214,15 +217,31 @@ export function IdentifyScreen({
     return null;
   }, [result, manualPickId, patients]);
 
+  const activeAlertText = useMemo(() => {
+    if (!activePatient) return '';
+    if (activePatient.emergency.active) {
+      return emergencyAlertText(
+        activePatient.name,
+        ageFromBirth(activePatient.birthDate),
+        activePatient.emergency.situation ? EMERGENCY_SITUATION_META[activePatient.emergency.situation].label : 'emergência',
+        activePatient.emergency.location,
+      );
+    }
+    return missingAlertText(activePatient.name, ageFromBirth(activePatient.birthDate), activePatient.missing.lastPlace);
+  }, [activePatient]);
+
   const logNotifications = () => {
     if (!activePatient || notified.size === 0) return;
     const names = activePatient.contacts.filter((c) => notified.has(c.id)).map((c) => c.name);
+    const inEmergency = activePatient.emergency.active;
     onPatientsUpdated(
-      patients.map((p) =>
-        p.id === activePatient.id
-          ? { ...p, missing: { ...p.missing, history: [...p.missing.history, { id: uid(), at: Date.now(), kind: 'notified', text: `Avisos enviados via app para: ${names.join(', ')} (por ${accountName}).` }] } }
-          : p,
-      ),
+      patients.map((p) => {
+        if (p.id !== activePatient.id) return p;
+        const evt = { id: uid(), at: Date.now(), kind: 'notified' as const, text: `Avisos enviados via app para: ${names.join(', ')} (por ${accountName}).` };
+        return inEmergency
+          ? { ...p, emergency: { ...p.emergency, history: [...p.emergency.history, evt] } }
+          : { ...p, missing: { ...p.missing, history: [...p.missing.history, evt] } };
+      }),
     );
     emitLog({
       method: result?.method ?? 'face',
@@ -259,6 +278,40 @@ export function IdentifyScreen({
     setFoundOpen(false);
     setFoundText('');
     toast('success', `${activePatient.name} marcada como localizada. Caso encerrado.`);
+  };
+
+  const confirmResolved = () => {
+    if (!activePatient) return;
+    onPatientsUpdated(
+      patients.map((p) =>
+        p.id === activePatient.id
+          ? {
+              ...p,
+              emergency: {
+                ...p.emergency,
+                active: false,
+                history: [
+                  ...p.emergency.history,
+                  { id: uid(), at: Date.now(), kind: 'resolved', text: resolvedText.trim() || `Emergência resolvida após identificação no app (por ${accountName}).` },
+                ],
+              },
+            }
+          : p,
+      ),
+    );
+    emitLog({
+      method: result?.method ?? 'face',
+      patientId: activePatient.id,
+      patientName: activePatient.name,
+      confidence: result?.confidence ?? 0,
+      quality: null,
+      result: 'found',
+      thumb: null,
+      detail: 'emergência resolvida',
+    });
+    setResolvedOpen(false);
+    setResolvedText('');
+    toast('success', `Emergência de ${activePatient.name} marcada como resolvida.`);
   };
 
   const onUpload = async (file: File | undefined) => {
@@ -583,6 +636,39 @@ export function IdentifyScreen({
             </div>
           )}
 
+          {activePatient.emergency.active && (
+            <div className="overflow-hidden rounded-xl border-2 border-warn-500 bg-warn-100/70 shadow-lift">
+              <div className="flex flex-wrap items-center gap-3 bg-warn-500 px-4 py-2.5 text-white">
+                <span className="blink-dot h-2.5 w-2.5 rounded-full bg-white" />
+                <p className="font-display text-sm font-bold uppercase tracking-[0.18em]">Situação de emergência — alerta ativo</p>
+                <span className="ml-auto font-mono text-xs opacity-90">
+                  {activePatient.emergency.situation
+                    ? EMERGENCY_SITUATION_META[activePatient.emergency.situation].label
+                    : 'emergência'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3.5">
+                <p className="text-sm text-ink">
+                  Registrada em <strong>{formatDateBR(activePatient.emergency.since)}</strong>
+                </p>
+                {activePatient.emergency.location && (
+                  <p className="flex items-center gap-1.5 text-sm text-ink">
+                    <IconMapPin size={15} className="text-warn-600" />
+                    local: <strong>{activePatient.emergency.location}</strong>
+                  </p>
+                )}
+                <div className="ml-auto flex gap-2">
+                  <Btn variant="dark" size="sm" onClick={() => setResolvedOpen(true)}>
+                    <IconCheck size={14} /> Marcar como resolvida
+                  </Btn>
+                </div>
+              </div>
+              {activePatient.emergency.notes && (
+                <p className="border-t border-warn-500/25 px-4 py-2.5 text-[13px] text-mute">{activePatient.emergency.notes}</p>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
             <EmergencyCard patient={activePatient} />
 
@@ -593,7 +679,9 @@ export function IdentifyScreen({
               <p className="mb-3 mt-1 text-xs text-mute">
                 {activePatient.missing.active
                   ? 'Avise os responsáveis e registre cada aviso na auditoria.'
-                  : 'Contatos autorizados para acionar em caso de necessidade.'}
+                  : activePatient.emergency.active
+                    ? 'Situação crítica: avise a rede imediatamente e registre cada aviso.'
+                    : 'Contatos autorizados para acionar em caso de necessidade.'}
               </p>
               {activePatient.contacts.length === 0 ? (
                 <div className="rounded-lg bg-paper px-3 py-4 text-center">
@@ -611,9 +699,7 @@ export function IdentifyScreen({
                         <ContactRow
                           key={c.id}
                           contact={c}
-                          personName={activePatient.name}
-                          age={ageFromBirth(activePatient.birthDate)}
-                          lastPlace={activePatient.missing.lastPlace}
+                          alertText={activeAlertText}
                           notified={notified.has(c.id)}
                           onToggle={() =>
                             setNotified((s) => {
@@ -623,7 +709,7 @@ export function IdentifyScreen({
                               return n;
                             })
                           }
-                          alertMode={activePatient.missing.active}
+                          alertMode={activePatient.missing.active || activePatient.emergency.active}
                         />
                       ))}
                   </ul>
@@ -631,9 +717,12 @@ export function IdentifyScreen({
                     <IconCheck size={15} />
                     Registrar {notified.size || ''} aviso(s) na auditoria
                   </Btn>
-                  {activePatient.missing.active && (
+                  {(activePatient.missing.active || activePatient.emergency.active) && (
                     <p className="mt-2 text-center text-[11px] text-mute">
-                      Após avisar a rede, marque a pessoa como localizada para encerrar o caso.
+                      Após avisar a rede,{' '}
+                      {activePatient.missing.active
+                        ? 'marque a pessoa como localizada para encerrar o caso.'
+                        : 'marque a situação como resolvida para encerrar o caso.'}
                     </p>
                   )}
                 </>
@@ -669,6 +758,35 @@ export function IdentifyScreen({
             <Btn variant="ghost" onClick={() => setFoundOpen(false)}>Cancelar</Btn>
             <Btn onClick={confirmFound}>
               <IconCheck size={15} /> Confirmar localização
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={resolvedOpen}
+        onClose={() => setResolvedOpen(false)}
+        title={`Resolver emergência — ${activePatient?.name ?? ''}`}
+        subtitle="Encerra o alerta de emergência e arquiva o caso."
+      >
+        <label className="block">
+          <span className="mb-1.5 block text-[13px] font-semibold text-ink">Como foi resolvida?</span>
+          <textarea
+            className="w-full rounded-lg border border-line bg-white/80 px-3 py-2 text-sm transition-colors focus:border-moss-400"
+            rows={3}
+            value={resolvedText}
+            onChange={(e) => setResolvedText(e.target.value)}
+            placeholder="ex.: família chegou ao hospital; alta médica confirmada…"
+          />
+        </label>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Tag tone="info">
+            <IconBell size={12} className="mr-1" /> {notified.size} aviso(s) marcados nesta sessão
+          </Tag>
+          <div className="ml-auto flex gap-2">
+            <Btn variant="ghost" onClick={() => setResolvedOpen(false)}>Cancelar</Btn>
+            <Btn onClick={confirmResolved}>
+              <IconCheck size={15} /> Confirmar resolução
             </Btn>
           </div>
         </div>

@@ -6,17 +6,13 @@ import { IconAlert, IconCheck, IconCreditCard, IconDroplet, IconInfo, IconMessag
 
 export function ContactRow({
   contact,
-  personName,
-  age,
-  lastPlace,
+  alertText,
   notified,
   onToggle,
   alertMode,
 }: {
   contact: Contact;
-  personName: string;
-  age: number | null;
-  lastPlace: string;
+  alertText: string;
   notified: boolean;
   onToggle: () => void;
   alertMode: boolean;
@@ -36,7 +32,7 @@ export function ContactRow({
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <a
-          href={waLink(contact.phone, missingAlertText(personName, age, lastPlace))}
+          href={waLink(contact.phone, alertText)}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 rounded-md bg-moss-600 px-2.5 py-1 text-xs font-bold text-white transition-all hover:bg-moss-700 active:scale-95"
