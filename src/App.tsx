@@ -154,7 +154,7 @@ const NAV: Array<{ key: 'patients' | 'consultor' | 'settings' | 'missing'; label
 function Shell() {
   const toast = useToast();
   const [state, setState] = useState<AppState>(() => loadState());
-  const [route, setRoute] = useState<Route>({ name: 'missing' });
+  const [route, setRoute] = useState<Route>({ name: 'patients' });
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -216,7 +216,7 @@ function Shell() {
   const login = (accountId: string, patientId: string | null) => setSession({ accountId, patientId });
   const logout = () => {
     setSession(null);
-    setRoute({ name: 'missing' });
+    setRoute({ name: 'patients' });
     toast('info', 'Sessão encerrada. Até logo!');
   };
 
