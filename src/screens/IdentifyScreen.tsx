@@ -44,6 +44,7 @@ export function IdentifyScreen({
   patients,
   log,
   accountName,
+  embedded = false,
   onPatientsUpdated,
   onLogEvent,
   onOpenRecord,
