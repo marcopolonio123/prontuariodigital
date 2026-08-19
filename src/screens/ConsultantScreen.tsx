@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Patient } from '../lib/types';
+import type { AccessGrant, Account, Patient } from '../lib/types';
 import { ageFromBirth } from '../lib/biometrics';
 import { analyze, ANALYSIS_STEPS, DISCLAIMER, type Consultation } from '../lib/consultant';
 import { Avatar, Btn, EmptyState, Tag } from '../components/ui';
@@ -160,11 +160,17 @@ function AssistantCard({ msg, firstName }: { msg: ChatMsg; firstName: string }) 
 }
 
 export function ConsultantScreen({
+  patients,
   patient,
-  onPickRecord,
+  account,
+  grants,
+  onSelect,
 }: {
+  patients: Patient[];
   patient: Patient | null;
-  onPickRecord: () => void;
+  account: Account;
+  grants: AccessGrant[];
+  onSelect: (id: string) => void;
 }) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
@@ -209,18 +215,59 @@ export function ConsultantScreen({
 
   if (!patient) {
     return (
-      <EmptyState
-        icon={<IconBrain size={24} />}
-        title="Consultor precisa de um prontuário ativo"
-        desc="Escolha qual prontuário abrir — o Consultor cruza cada pergunta com as alergias, intolerâncias e medicações dessa pessoa."
-      >
-        <Btn onClick={onPickRecord}>
-          <IconSparkles size={15} /> Escolher prontuário
-        </Btn>
-      </EmptyState>
+      <div>
+        <header className="rise mb-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">consultor ia</p>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Consultor Vitalis</h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-mute">
+            Disponível para qualquer pessoa com acesso. Escolha o prontuário que será analisado —{' '}
+            <strong className="text-ink">o seu ou um delegado</strong> (filho, pai, curador…). Cada resposta cruza o
+            sintoma com as alergias, intolerâncias e medicações dessa pessoa.
+          </p>
+        </header>
+        {patients.length === 0 ? (
+          <EmptyState
+            icon={<IconBrain size={24} />}
+            title="Nenhum prontuário com acesso"
+            desc="Você ainda não tem prontuário próprio nem acesso delegado. Cadastre uma pessoa ou peça a um titular para delegar acesso."
+          />
+        ) : (
+          <ul className="rise grid gap-3 sm:grid-cols-2 xl:grid-cols-3" style={{ animationDelay: '60ms' }}>
+            {patients.map((p) => {
+              const g = grants.find((x) => x.accountId === account.id && x.patientId === p.id);
+              const pAge = ageFromBirth(p.birthDate);
+              return (
+                <li key={p.id} className="rise">
+                  <button
+                    onClick={() => onSelect(p.id)}
+                    className="flex h-full w-full flex-col rounded-xl border border-line bg-card p-4 text-left shadow-lift transition-all duration-200 hover:-translate-y-1 hover:border-moss-300 hover:shadow-float active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar patient={p} size={48} />
+                      <div className="min-w-0">
+                        <p className="truncate font-display text-[15px] font-bold text-ink">{p.name}</p>
+                        <p className="text-xs text-mute">{pAge !== null ? `${pAge} anos` : 'idade n/d'}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {p.allergies.length > 0 && <Tag tone="danger">{p.allergies.length} alergia(s)</Tag>}
+                      {p.medications.length > 0 && <Tag tone="moss">{p.medications.length} medicação(ões)</Tag>}
+                      {g ? <Tag tone="info">delegado por {g.grantedByName.split(' ')[0]}</Tag> : <Tag tone="mute">prontuário titular</Tag>}
+                    </div>
+                    <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-moss-700">
+                      <IconSparkles size={15} /> Consultar sobre {p.name.split(' ')[0]}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     );
   }
 
+  const grant = grants.find((x) => x.accountId === account.id && x.patientId === patient.id);
   const firstName = patient.name.split(' ')[0];
   const age = ageFromBirth(patient.birthDate);
 
@@ -249,18 +296,34 @@ export function ConsultantScreen({
         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-pine-900 text-moss-300">
           <IconBrain size={22} />
         </span>
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink">Consultor Vitalis</h1>
           <p className="text-[13px] text-mute">
-            Consultando o prontuário de{' '}
+            Analisando o prontuário de{' '}
             <strong className="text-ink">
               {patient.name}
               {age !== null ? ` (${age} anos)` : ''}
             </strong>
+            {grant ? (
+              <>
+                {' '}— acesso <strong className="text-info-600">delegado por {grant.grantedByName}</strong>
+              </>
+            ) : (
+              <> — você como {account.name}</>
+            )}
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Avatar patient={patient} size={34} />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <select
+            value={patient.id}
+            onChange={(e) => onSelect(e.target.value)}
+            aria-label="Trocar prontuário analisado"
+            className="rounded-lg border border-line bg-white/85 px-2.5 py-1.5 text-xs font-semibold text-ink transition-colors focus:border-moss-400"
+          >
+            {patients.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           <Btn variant="outline" size="sm" onClick={() => setMessages([])}>
             Nova conversa
           </Btn>
@@ -271,7 +334,9 @@ export function ConsultantScreen({
         <IconAlert size={17} className="mt-0.5 shrink-0" />
         <p>
           <strong>Sempre procure um médico ou especialista antes de se medicar.</strong> O Consultor apenas organiza
-          informações do prontuário e de referências públicas — ele não diagnostica nem prescreve.
+          informações do prontuário e de referências públicas — ele não diagnostica nem prescreve. Cada resposta
+          analisa o prontuário de <strong>{firstName}</strong> (a pessoa logada ou sob sua responsabilidade), cruzando
+          alergias, intolerâncias, medicações e cuidados especiais.
         </p>
       </div>
 

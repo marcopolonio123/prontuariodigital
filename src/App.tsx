@@ -8,7 +8,6 @@ import {
   IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
-import { IdentifyScreen } from './screens/IdentifyScreen';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { RecordScreen } from './screens/RecordScreen';
 import { PublicUtilityScreen } from './screens/PublicUtilityScreen';
@@ -32,7 +31,7 @@ const DEMO_SCENARIOS = [
     steps: [
       'Em Pessoas & prontuários, edite a Ana: a seção “Medicamentos de uso contínuo” tem nome, dose, frequência e motivo.',
       'Logo abaixo, em “Convênios & seguro saúde”, adicione um plano com nº da carteirinha, validade e a foto da carteirinha (câmera ou arquivo).',
-      'Volte à Identificação e “Testar com exemplo” — o Cartão de Emergência exibe os medicamentos e o convênio com validade.',
+      'Na Utilidade pública → aba Identificação, “Testar com exemplo” — o Cartão de Emergência exibe os medicamentos e o convênio com validade.',
     ],
     expect: 'Cartão de emergência completo para hospitais: o que toma, alergias e o plano de saúde com a carteirinha.',
   },
@@ -40,7 +39,7 @@ const DEMO_SCENARIOS = [
     title: 'Desaparecida + alerta na identificação',
     badge: 'caso principal',
     steps: [
-      'Vá em Identificação e clique em “Testar com exemplo”.',
+      'Na Utilidade pública → aba Identificação, clique em “Testar com exemplo”.',
       'Ana é confirmada, o Cartão de Emergência abre e o alerta vermelho de desaparecida dispara.',
       'Na Rede de avisos, abra o WhatsApp da Marina (1º contato) e registre os avisos na auditoria.',
       'Clique em “Marcar como localizada” para encerrar o caso.',
@@ -51,8 +50,8 @@ const DEMO_SCENARIOS = [
     title: 'Utilidade pública — emergência/vulnerabilidade',
     badge: 'utilidade pública',
     steps: [
-      'Abra a tela Utilidade pública: a aba “Emergência/Vulnerabilidade” mostra o Carlos internado sem contato com a família.',
-      'Na Identificação, envie a foto do Carlos (ou teste com o retrato dele): o alerta âmbar dispara junto do cartão médico.',
+      'Na Utilidade pública, a aba “Emergência/Vulnerabilidade” mostra o Carlos internado sem contato com a família.',
+      'Na aba Identificação, envie a foto do Carlos (ou teste com o retrato dele): o alerta âmbar dispara junto do cartão médico.',
       'Avise a rede de contatos pelo WhatsApp e marque a situação como resolvida.',
       'Na aba “Desaparecidos”, reporte um desaparecimento e registre avistamentos na linha do tempo do caso.',
     ],
@@ -70,14 +69,15 @@ const DEMO_SCENARIOS = [
     expect: 'Fluxo de resgate: encontrar → identificar → avisar parentes/amigos → registrar o caso com evidências (fotos/arquivos).',
   },
   {
-    title: 'Consultor IA',
+    title: 'Consultor IA (qualquer pessoa com acesso)',
     badge: 'prontuário + sintomas',
     steps: [
-      'Abra a tela Consultor (precisa de um prontuário ativo).',
+      'Abra o Consultor e escolha um prontuário — o seu ou um delegado (ex.: Marina escolhendo o da mãe, Ana).',
       'Pergunte “Estou com febre e dor no corpo”.',
       'Para a Ana (alergia a dipirona), a dipirona sai como EVITAR e o paracetamol como compatível.',
+      'Use o seletor no topo para trocar de prontuário — cada conversa analisa a pessoa escolhida.',
     ],
-    expect: 'Cada opção vem com o motivo cruzado do prontuário + sinais de emergência + aviso médico.',
+    expect: 'Resposta cruzada com o prontuário da pessoa logada/identificada + sinais de emergência + aviso médico.',
   },
   {
     title: 'Prescrição, exames, anexos e voz',
@@ -94,7 +94,7 @@ const DEMO_SCENARIOS = [
     title: 'Câmera ao vivo',
     badge: 'permissão necessária',
     steps: [
-      'Em Identificação, clique em “Usar câmera” e permita o acesso (exige HTTPS ou localhost).',
+      'Na aba Identificação (Utilidade pública), clique em “Usar câmera” e permita o acesso (exige HTTPS ou localhost).',
       'Enquadre o rosto e capture. Se for bloqueada, use o fallback “Enviar imagem”.',
     ],
     expect: 'Captura espelhada com varredura e análise imediata.',
@@ -144,11 +144,11 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-const NAV: Array<{ key: 'missing' | 'patients' | 'consultor' | 'settings'; label: string; short: string; icon: ReactNode }> = [
-  { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
+const NAV: Array<{ key: 'patients' | 'consultor' | 'settings' | 'missing'; label: string; short: string; icon: ReactNode }> = [
   { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
+  { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
 ];
 
 function Shell() {
@@ -216,7 +216,7 @@ function Shell() {
   const login = (accountId: string, patientId: string | null) => setSession({ accountId, patientId });
   const logout = () => {
     setSession(null);
-    setRoute({ name: 'identify' });
+    setRoute({ name: 'missing' });
     toast('info', 'Sessão encerrada. Até logo!');
   };
 
@@ -406,21 +406,6 @@ function Shell() {
 
           <main>
             <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-9">
-              {route.name === 'identify' && (
-                <IdentifyScreen
-                  patients={state.patients}
-                  log={state.log}
-                  accountName={account.name}
-                  onPatientsUpdated={replacePatients}
-                  onLogEvent={logEvent}
-                  onOpenRecord={(id) => setRoute({ name: 'record', id })}
-                  onNewPatientWithPhoto={(photo) => {
-                    setPendingPhoto(photo);
-                    setRoute({ name: 'patients' });
-                  }}
-                  onGoPatients={() => setRoute({ name: 'patients' })}
-                />
-              )}
               {route.name === 'patients' && (
                 <PatientsScreen
                   patients={state.patients}
@@ -465,12 +450,16 @@ function Shell() {
                     setPendingPhoto(photo);
                     setRoute({ name: 'patients' });
                   }}
+                  onPatientsUpdated={replacePatients}
                 />
               )}
               {route.name === 'consultor' && (
                 <ConsultantScreen
+                  patients={accessible}
                   patient={activePatient}
-                  onPickRecord={() => setRecordMenuOpen(true)}
+                  account={account}
+                  grants={state.grants}
+                  onSelect={(id) => setSession({ accountId: account.id, patientId: id })}
                 />
               )}
               {route.name === 'settings' && (

@@ -8,6 +8,7 @@ import {
 } from '../lib/biometrics';
 import { Avatar, BloodBadge, Btn, EmptyState, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
 import { ContactRow } from '../components/EmergencyCard';
+import { IdentifyScreen } from './IdentifyScreen';
 import { AttachmentModal, AttachmentPicker, AttachmentStrip } from '../components/attachments';
 import { FieldIdentifyModal, type FieldIdentifyResult } from '../components/FieldIdentify';
 import {
@@ -15,7 +16,7 @@ import {
   IconMessage, IconPlus, IconUsers, IconX,
 } from '../components/icons';
 
-type Tab = 'missing' | 'emergency';
+type Tab = 'identify' | 'missing' | 'emergency';
 
 /* --------------------------- linha de eventos --------------------------- */
 
@@ -186,6 +187,7 @@ export function PublicUtilityScreen({
   onGoPatients,
   onLogEvent,
   onNewPatientWithPhoto,
+  onPatientsUpdated,
 }: {
   patients: Patient[];
   log: IdEvent[];
@@ -195,9 +197,10 @@ export function PublicUtilityScreen({
   onGoPatients: () => void;
   onLogEvent: (e: IdEvent) => void;
   onNewPatientWithPhoto: (photo: string) => void;
+  onPatientsUpdated: (p: Patient[]) => void;
 }) {
   const toast = useToast();
-  const [tab, setTab] = useState<Tab>('missing');
+  const [tab, setTab] = useState<Tab>('identify');
 
   // identificação em campo
   const [fieldOpen, setFieldOpen] = useState(false);
@@ -426,17 +429,23 @@ export function PublicUtilityScreen({
   };
 
   const statCards =
-    tab === 'missing'
+    tab === 'identify'
       ? [
-          { value: missing.length, label: 'desaparecidas agora', cls: 'text-danger-600' },
-          { value: networkSize, label: 'contatos na rede de avisos', cls: 'text-ink' },
-          { value: missingResolved.length, label: 'casos localizados', cls: 'text-moss-700' },
+          { value: patients.filter((p) => !p.archived && p.photo && p.photoHash).length, label: 'retratos com assinatura', cls: 'text-ink' },
+          { value: missing.length + emergencies.length, label: 'alertas ativos agora', cls: 'text-danger-600' },
+          { value: log.length, label: 'verificações auditadas', cls: 'text-moss-700' },
         ]
-      : [
-          { value: emergencies.length, label: 'emergências ativas', cls: 'text-warn-600' },
-          { value: networkSize, label: 'contatos na rede de avisos', cls: 'text-ink' },
-          { value: emergenciesResolved.length, label: 'situações resolvidas', cls: 'text-moss-700' },
-        ];
+      : tab === 'missing'
+        ? [
+            { value: missing.length, label: 'desaparecidas agora', cls: 'text-danger-600' },
+            { value: networkSize, label: 'contatos na rede de avisos', cls: 'text-ink' },
+            { value: missingResolved.length, label: 'casos localizados', cls: 'text-moss-700' },
+          ]
+        : [
+            { value: emergencies.length, label: 'emergências ativas', cls: 'text-warn-600' },
+            { value: networkSize, label: 'contatos na rede de avisos', cls: 'text-ink' },
+            { value: emergenciesResolved.length, label: 'situações resolvidas', cls: 'text-moss-700' },
+          ];
 
   return (
     <div>
@@ -514,6 +523,7 @@ export function PublicUtilityScreen({
       <div className="rise mb-5 inline-flex max-w-full overflow-x-auto rounded-xl border border-line bg-card p-1 shadow-lift no-scrollbar" style={{ animationDelay: '40ms' }}>
         {(
           [
+            { key: 'identify', label: 'Identificação' },
             { key: 'missing', label: `Desaparecidos · ${missing.length}` },
             { key: 'emergency', label: `Emergência/Vulnerabilidade · ${emergencies.length}` },
           ] as Array<{ key: Tab; label: string }>
@@ -523,9 +533,11 @@ export function PublicUtilityScreen({
             onClick={() => setTab(t.key)}
             className={`shrink-0 rounded-lg px-4 py-2 text-sm font-bold transition-all ${
               tab === t.key
-                ? t.key === 'missing'
-                  ? 'bg-danger-600 text-white shadow-sm'
-                  : 'bg-warn-500 text-white shadow-sm'
+                ? t.key === 'identify'
+                  ? 'bg-pine-900 text-white shadow-sm'
+                  : t.key === 'missing'
+                    ? 'bg-danger-600 text-white shadow-sm'
+                    : 'bg-warn-500 text-white shadow-sm'
                 : 'text-mute hover:text-ink'
             }`}
           >
@@ -543,7 +555,21 @@ export function PublicUtilityScreen({
         ))}
       </div>
 
-      {!hasPeople ? (
+      {tab === 'identify' && (
+        <IdentifyScreen
+          embedded
+          patients={patients}
+          log={log}
+          accountName={accountName}
+          onPatientsUpdated={onPatientsUpdated}
+          onLogEvent={onLogEvent}
+          onOpenRecord={onOpenRecord}
+          onNewPatientWithPhoto={onNewPatientWithPhoto}
+          onGoPatients={onGoPatients}
+        />
+      )}
+
+      {tab !== 'identify' && (!hasPeople ? (
         <EmptyState icon={<IconUsers size={24} />} title="Nenhuma pessoa na base" desc="Para ativar alertas de desaparecimento ou emergência é preciso primeiro cadastrar a pessoa com dados básicos e contatos.">
           <Btn onClick={onGoPatients}>
             <IconPlus size={15} /> Ir para o cadastro
@@ -793,7 +819,7 @@ export function PublicUtilityScreen({
             </section>
           )}
         </>
-      )}
+      ))}
 
       {/* ------------------------------- modais ------------------------------- */}
 

@@ -277,7 +277,6 @@ export interface AppState {
 }
 
 export type Route =
-  | { name: 'identify' }
   | { name: 'patients' }
   | { name: 'record'; id: string }
   | { name: 'missing' }

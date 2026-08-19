@@ -59,6 +59,7 @@ export function IdentifyScreen({
   onOpenRecord: (id: string) => void;
   onNewPatientWithPhoto: (photo: string) => void;
   onGoPatients: () => void;
+  embedded?: boolean;
 }) {
   const toast = useToast();
   const [method, setMethod] = useState<'face' | 'finger'>('face');
@@ -341,17 +342,29 @@ export function IdentifyScreen({
 
   return (
     <div>
-      <header className="rise mb-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">
-          objetivo secundário 01 — identificação de pessoas
+      {!embedded && (
+        <header className="rise mb-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">
+            objetivo secundário 01 — identificação de pessoas
+          </p>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Central de identificação</h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-mute">
+            Consultando como <strong className="text-ink">{accountName}</strong> — toda busca fica registrada na
+            auditoria. Se a pessoa estiver <strong className="text-danger-600">desaparecida</strong>, o alerta dispara
+            na hora com a rede de avisos e o cartão de emergência.
+          </p>
+        </header>
+      )}
+      {embedded && (
+        <p className="rise mb-4 flex items-start gap-2.5 rounded-xl border border-line bg-card px-4 py-3 text-[13px] leading-relaxed text-mute">
+          <IconSearch size={16} className="mt-0.5 shrink-0 text-moss-600" />
+          <span>
+            Toda busca fica registrada na auditoria em nome de <strong className="text-ink">{accountName}</strong>.
+            Se a pessoa identificada estiver <strong className="text-danger-600">desaparecida</strong> ou em{' '}
+            <strong className="text-warn-600">emergência/vulnerabilidade</strong>, o alerta e a rede de avisos disparam na hora.
+          </span>
         </p>
-        <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Central de identificação</h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-mute">
-          Consultando como <strong className="text-ink">{accountName}</strong> — toda busca fica registrada na
-          auditoria. Se a pessoa estiver <strong className="text-danger-600">desaparecida</strong>, o alerta dispara
-          na hora com a rede de avisos e o cartão de emergência.
-        </p>
-      </header>
+      )}
 
       <div className="rise mb-5 inline-flex rounded-xl border border-line bg-card p-1 shadow-lift" style={{ animationDelay: '50ms' }}>
         {(
