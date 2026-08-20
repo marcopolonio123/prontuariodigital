@@ -1,42 +1,51 @@
-# Publica o Vitalis no GitHub Pages a cada push na branch main.
-# O --base ajusta os caminhos para https://SEU-USUARIO.github.io/vitalis/
-name: Deploy — GitHub Pages
+# ============================================================
+#  MY DOCTOR — Publicação automática na Hostinger
+#  Toda sincronização com o GitHub → build → envio via FTP
+#  para a pasta public_html do domínio mydoctor.med.br
+#
+#  Segredos obrigatórios no GitHub:
+#  Settings → Secrets and variables → Actions → New repository secret
+#    FTP_HOST      ex.: ftp.mydoctor.med.br  (hPanel → Contas FTP)
+#    FTP_USERNAME  usuário da conta FTP
+#    FTP_PASSWORD  senha da conta FTP
+# ============================================================
+name: Deploy → Hostinger
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: deploy
+  cancel-in-progress: true
 
 jobs:
-  build:
+  publicar:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Baixar o projeto
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - run: npm run build -- --base=/vitalis/
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar o site (pasta dist/)
+        run: npm run build
+
+      - name: Enviar para a Hostinger (FTP)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: dist/
+          server-dir: ./
+          exclude: |
+            **/.git*
+            **/.well-known/**
