@@ -239,69 +239,146 @@ export function MicButton({
 }) {
   const toast = useToast();
   const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState('');
   const recRef = useRef<SpeechRecognitionLike | null>(null);
+  const intentRef = useRef(false); // usuário quer continuar ditando
+  const restartsRef = useRef(0);
+  const appendRef = useRef(onAppend);
+  appendRef.current = onAppend;
 
-  const stop = useCallback(() => {
-    recRef.current?.stop();
+  const teardown = useCallback(() => {
+    intentRef.current = false;
+    setInterim('');
+    try {
+      recRef.current?.abort();
+    } catch {
+      /* já encerrado */
+    }
     recRef.current = null;
     setListening(false);
   }, []);
 
-  useEffect(() => () => recRef.current?.abort(), []);
+  useEffect(() => {
+    return () => {
+      intentRef.current = false;
+      try {
+        recRef.current?.abort();
+      } catch {
+        /* já encerrado */
+      }
+    };
+  }, []);
 
-  const start = () => {
+  const startSession = useCallback((): boolean => {
     const Ctor = getSpeechCtor();
-    if (!Ctor) {
-      toast('error', 'Reconhecimento de voz não é suportado neste navegador — use Chrome ou Edge.');
-      return;
-    }
+    if (!Ctor) return false;
     const rec = new Ctor();
     rec.lang = 'pt-BR';
     rec.continuous = true;
-    rec.interimResults = false;
+    rec.interimResults = true; // transcrição ao vivo = feedback imediato
     rec.onresult = (e) => {
-      let text = '';
+      let finalText = '';
+      let interimText = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) text += e.results[i][0].transcript;
+        const r = e.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interimText += r[0].transcript;
       }
-      if (text.trim()) onAppend(text.trim());
+      if (interimText) setInterim(interimText);
+      if (finalText.trim()) {
+        appendRef.current(finalText.trim());
+        setInterim('');
+      }
+    };
+    rec.onerror = (e) => {
+      const code = e?.error ?? '';
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        intentRef.current = false;
+        toast('error', 'Permissão de microfone negada — libere o acesso na barra de endereço do navegador.');
+      } else if (code === 'network') {
+        intentRef.current = false;
+        toast('error', 'Falha de rede no serviço de voz — o reconhecimento usa os servidores do Google; verifique a conexão.');
+      } else if (code === 'audio-capture') {
+        intentRef.current = false;
+        toast('error', 'Nenhum microfone detectado no dispositivo.');
+      }
+      // 'no-speech' e 'aborted': o onend retoma automaticamente
     };
     rec.onend = () => {
       recRef.current = null;
-      setListening(false);
-    };
-    rec.onerror = (e) => {
-      recRef.current = null;
-      setListening(false);
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        toast('error', 'Permissão de microfone negada — libere o acesso no navegador.');
-      } else if (e.error !== 'aborted') {
-        toast('error', 'Não foi possível captar o áudio. Tente novamente.');
+      // O Chrome encerra a sessão após silêncio — retomamos enquanto o usuário quiser ditar
+      if (intentRef.current && restartsRef.current < 15) {
+        restartsRef.current += 1;
+        window.setTimeout(() => {
+          if (intentRef.current) startSession();
+        }, 250);
+      } else {
+        intentRef.current = false;
+        setInterim('');
+        setListening(false);
       }
     };
-    recRef.current = rec;
+    try {
+      rec.start();
+      recRef.current = rec;
+      return true;
+    } catch {
+      recRef.current = null;
+      return false;
+    }
+  }, [toast]);
+
+  const toggle = () => {
+    if (listening) {
+      teardown();
+      return;
+    }
+    if (!getSpeechCtor()) {
+      toast('error', 'Reconhecimento de voz não é suportado neste navegador — use Chrome ou Edge (desktop ou Android).');
+      return;
+    }
+    restartsRef.current = 0;
+    intentRef.current = true;
     setListening(true);
-    rec.start();
+    if (!startSession()) {
+      intentRef.current = false;
+      setListening(false);
+      toast('error', 'Não foi possível iniciar o ditado — a página precisa estar em HTTPS (ou localhost) e fora de ambientes bloqueados.');
+    }
   };
 
   return (
-    <button
-      type="button"
-      onClick={listening ? stop : start}
-      title={listening ? 'Parar ditado' : title}
-      aria-label={listening ? 'Parar ditado por voz' : 'Ditar por voz'}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-bold transition-all active:scale-95 ${
-        listening
-          ? 'border-danger-500 bg-danger-500 text-white shadow-sm'
-          : 'border-line bg-card text-mute hover:border-moss-300 hover:bg-moss-50 hover:text-moss-700'
-      } ${className}`}
-    >
-      <span className="relative flex items-center justify-center">
-        {listening && <span className="absolute h-4 w-4 animate-ping rounded-full bg-white/50" />}
-        <IconMic size={14} className="relative" />
-      </span>
-      {listening ? 'ouvindo…' : 'ditar'}
-    </button>
+    <span className={`relative inline-flex ${className}`}>
+      {listening && (
+        <span className="toast-in absolute bottom-full right-0 z-30 mb-1.5 flex w-60 max-w-[72vw] items-start gap-2 rounded-lg border border-pine-700 bg-pine-900 px-3 py-2 shadow-float">
+          <span className="blink-dot mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-moss-400" />
+          <span className="min-w-0 text-[11px] leading-snug text-pine-100">
+            {interim ? (
+              <span className="line-clamp-2 italic">{interim}…</span>
+            ) : (
+              'escutando… fale agora — o texto entra no campo ao terminar a frase'
+            )}
+          </span>
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={toggle}
+        title={listening ? 'Parar ditado' : title}
+        aria-label={listening ? 'Parar ditado por voz' : 'Ditar por voz'}
+        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+          listening
+            ? 'border-danger-500 bg-danger-500 text-white shadow-sm'
+            : 'border-line bg-card text-mute hover:border-moss-300 hover:bg-moss-50 hover:text-moss-700'
+        }`}
+      >
+        <span className="relative flex items-center justify-center">
+          {listening && <span className="absolute h-4 w-4 animate-ping rounded-full bg-white/50" />}
+          <IconMic size={14} className="relative" />
+        </span>
+        {listening ? 'parar' : 'ditar'}
+      </button>
+    </span>
   );
 }
 
