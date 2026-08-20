@@ -1,12 +1,16 @@
 # Publicar o Vitalis na Hostinger — passo a passo
 
-## Precisa de banco de dados?
+O Vitalis tem **dois modos de operação** (a escolha é do usuário dentro do app, na tela
+“Nuvem & servidor”):
 
-**Não.** O Vitalis é um app web (PWA) com arquitetura *local-first*: os dados ficam no
-`localStorage` do navegador de cada usuário e nunca transitam pelo servidor. A Hostinger
-só entrega os arquivos — qualquer plano de hospedagem compartilhada serve.
+| Modo | Servidor | Banco de dados | Plano Hostinger |
+|---|---|---|---|
+| **Local** (padrão) | só entrega arquivos | não (dados no dispositivo) | compartilhado (mais barato) |
+| **Nuvem** (portal multiusuário) | API Node (`server/`) | **PostgreSQL/MySQL** | **VPS** |
 
-Isso é também a base da conformidade **LGPD**: não há coleta centralizada de dados de saúde.
+No modo local, nada de banco: os dados ficam no dispositivo (base forte de LGPD).
+No modo nuvem — app + portal conectados ao mesmo servidor com contas, delegações e
+auditoria central — siga também o **Passo 5** abaixo e o `server/README.md`.
 
 ---
 
@@ -62,6 +66,29 @@ auditoria de quem consulta cada ficha · arquivamento reversível (nada é exclu
 
 ---
 
+## Passo 5 — Servidor + banco de dados (modo nuvem / portal completo)
+
+Quando você quiser app **e** portal conectados a um servidor com contas e banco:
+
+1. **Contrate um VPS Hostinger** (Ubuntu 22.04). Hospedagem compartilhada não roda Node.
+2. Siga o **`server/README.md`**: instala Node 20 + PostgreSQL, cria o banco
+   (`npx prisma migrate deploy`), roda a API com PM2 e publica com Nginx + HTTPS
+   em um subdomínio (ex.: `api.seudominio.com`).
+3. No app (web ou APK): **Nuvem & servidor → Servidor real** → informe
+   `https://api.seudominio.com` → crie a conta → **Sincronizar agora**.
+4. O **mesmo domínio do portal** (passos 1–4) e o **APK** (`APK.md`) usam essa mesma API —
+   uma única base de dados para tudo.
+
+> **Dica antes de subir o VPS**: use o **servidor de demonstração embutido** no app para
+> validar o fluxo multiusuário (criar conta, sincronizar, delegar) sem nenhuma infraestrutura.
+
+⚠️ Ao operar o modo nuvem, dados de saúde passam a residir no servidor — isso exige as
+medidas LGPD correspondentes: RIPD, DPO/encarregado, termos de uso e política de
+privacidade publicados. A base técnica (criptografia em trânsito, bcrypt, JWT, auditoria,
+“nunca excluir”) já está implementada.
+
+---
+
 ## Observações
 
 - **Subpasta** (`dominio.com/vitalis`): ajuste `base: '/vitalis/'` no `vite.config.js` e
@@ -71,7 +98,3 @@ auditoria de quem consulta cada ficha · arquivamento reversível (nada é exclu
   `icon-192.png`) — o manifest já os referencia e o upgrade é automático.
 - **Atualizações**: `npm run build` → reenvie o conteúdo de `dist/`. Os nomes com hash
   invalidam o cache automaticamente.
-- **Multiusuário com servidor (fase 2)**: login central, banco de dados e sincronização
-  entre dispositivos exigem backend (ex.: Supabase/PostgreSQL) e análise LGPD adicional
-  (RIPD/DPO), pois os dados de saúde passariam a residir no servidor. O MVP evita isso
-  por arquitetura — é uma decisão de privacidade, não uma limitação técnica.

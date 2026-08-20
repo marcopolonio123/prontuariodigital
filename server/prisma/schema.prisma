@@ -1,0 +1,74 @@
+// Vitalis — modelo do banco de dados
+// PostgreSQL (padrão). Para MySQL na Hostinger, troque o provider e rode as migrações.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(uuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  role         String         @default("titular") // titular | responsavel
+  createdAt    DateTime       @default(now())
+  patients     Patient[]      @relation("owner")
+  grants       AccessGrant[]  @relation("grantee")
+  logs         IdentificationLog[]
+}
+
+// A ficha completa viaja como JSON (mesmo contrato do app), com colunas
+// indexadas para busca e controle de visibilidade.
+model Patient {
+  id           String        @id
+  record       String        @default("")
+  name         String
+  ownerUserId  String
+  owner        User          @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  archived     Boolean       @default(false) // regra do produto: nunca excluir
+  data         Json // ficha completa (contatos, medicamentos, anexos, status…)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  grants       AccessGrant[]
+  logs         IdentificationLog[]
+
+  @@index([ownerUserId, archived])
+  @@index([name])
+}
+
+model AccessGrant {
+  id              String   @id @default(uuid())
+  accountId       String
+  account         User     @relation("grantee", fields: [accountId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  grantedByName   String   @default("")
+  level           String   @default("completo") // completo | leitura
+  createdAt       DateTime @default(now())
+
+  @@unique([accountId, patientId])
+}
+
+model IdentificationLog {
+  id           String   @id @default(uuid())
+  method       String   @default("face") // face | finger
+  patientId    String?
+  patient      Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  patientName  String   @default("—")
+  confidence   Int      @default(0)
+  quality      Int?
+  result       String   @default("none") // match | review | none | notify | found
+  byUserId     String?
+  byUser       User?    @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+  byName       String   @default("")
+  detail       String?
+  at           DateTime @default(now())
+
+  @@index([at])
+  @@index([byUserId])
+}

@@ -1,0 +1,23 @@
+{
+  "appId": "com.vitalis.app",
+  "appName": "Vitalis",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0b1d17"
+  },
+  "ios": {
+    "backgroundColor": "#0b1d17",
+    "contentInset": "automatic"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 900,
+      "backgroundColor": "#0b1d17",
+      "androidSplashResourceName": "splash",
+      "splashFullScreen": true
+    }
+  }
+}

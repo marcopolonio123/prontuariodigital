@@ -295,6 +295,22 @@ export const IconDatabase = (p: IconProps) => (
   </I>
 );
 
+export const IconCloud = (p: IconProps) => (
+  <I {...p}>
+    <path d="M17.5 19H7a4.5 4.5 0 0 1-.84-8.92A6 6 0 0 1 17.9 8.6 4.5 4.5 0 0 1 17.5 19z" />
+    <path d="M9 13.5l2 2 4-4.5" />
+  </I>
+);
+
+export const IconServer = (p: IconProps) => (
+  <I {...p}>
+    <rect x="2" y="3.5" width="20" height="7" rx="2" />
+    <rect x="2" y="13.5" width="20" height="7" rx="2" />
+    <path d="M6 7h.01M6 17h.01" strokeWidth={2.4} />
+    <path d="M11 7h5M11 17h5" />
+  </I>
+);
+
 export const IconMegaphone = (p: IconProps) => (
   <I {...p}>
     <path d="m3 11 18-5v12L3 14v-3z" />

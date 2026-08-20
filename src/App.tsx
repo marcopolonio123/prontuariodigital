@@ -5,13 +5,14 @@ import { ageFromBirth } from './lib/biometrics';
 import { Avatar, Btn, Ecg, Modal, ToastProvider, useToast } from './components/ui';
 import {
   IconBrain, IconChart, IconCheck, IconChevronRight, IconDownload, IconFace, IconFileText,
-  IconGear, IconLogout, IconMapPin, IconMegaphone, IconUsers, LogoMark,
+  IconCloud, IconGear, IconLogout, IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
 import { LgpdConsent } from './components/LgpdConsent';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { RecordScreen } from './screens/RecordScreen';
 import { PublicUtilityScreen } from './screens/PublicUtilityScreen';
+import { CloudScreen } from './screens/CloudScreen';
 import { ConsultantScreen } from './screens/ConsultantScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
@@ -109,11 +110,22 @@ const DEMO_SCENARIOS = [
     ],
     expect: 'Leitura com qualidade calculada pela imobilidade do dedo.',
   },
+  {
+    title: 'Nuvem & servidor (multiusuário)',
+    badge: 'novo',
+    steps: [
+      'Abra “Nuvem & servidor” na barra lateral e conecte ao servidor de demonstração (crie uma conta).',
+      'Clique em “Sincronizar agora” — as fichas sobem e o servidor vira a fonte da verdade.',
+      'Desconecte, crie uma segunda conta e sincronize: cada usuário vê só as próprias fichas e as delegadas.',
+      'Para o servidor definitivo, suba a pasta server/ (Node + PostgreSQL) — passo a passo em server/README.md.',
+    ],
+    expect: 'App conectado a um servidor com banco de dados, contas individuais e sincronização real.',
+  },
 ];
 
 function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Modal open={open} onClose={onClose} title="Roteiro de demonstração" subtitle="Seis cenários para testar o Vitalis de ponta a ponta." width="max-w-2xl">
+    <Modal open={open} onClose={onClose} title="Roteiro de demonstração" subtitle={`${DEMO_SCENARIOS.length} cenários para testar o Vitalis de ponta a ponta.`} width="max-w-2xl">
       <ol className="space-y-4">
         {DEMO_SCENARIOS.map((s, i) => (
           <li key={s.title} className="rounded-xl border border-line bg-paper/60 p-4">
@@ -145,9 +157,10 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-const NAV: Array<{ key: 'patients' | 'consultor' | 'settings' | 'missing'; label: string; short: string; icon: ReactNode }> = [
+const NAV: Array<{ key: 'patients' | 'consultor' | 'cloud' | 'settings' | 'missing'; label: string; short: string; icon: ReactNode }> = [
   { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
+  { key: 'cloud', label: 'Nuvem & servidor', short: 'Nuvem', icon: <IconCloud size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
   { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
 ];
@@ -446,7 +459,24 @@ function Shell() {
           </button>
         </div>
 
-        <div className="px-3 pb-4">{installButton(false)}</div>
+        <div className="px-3 pb-4">
+          {installButton(false)}
+          <button
+            onClick={() => setRoute({ name: 'cloud' } as Route)}
+            className={`mt-2 flex w-full items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-semibold transition-all active:scale-[0.98] ${
+              state.cloud.mode !== 'off'
+                ? 'border-moss-500/35 bg-moss-500/10 text-moss-300 hover:bg-moss-500/20'
+                : 'border-pine-700 bg-pine-850 text-pine-200 hover:border-pine-600 hover:text-white'
+            }`}
+          >
+            <span className={`h-2 w-2 shrink-0 rounded-full ${state.cloud.mode !== 'off' ? 'blink-dot bg-moss-400' : 'bg-pine-600'}`} />
+            {state.cloud.mode === 'off'
+              ? 'Modo local'
+              : state.cloud.mode === 'demo'
+                ? 'Nuvem: demonstração'
+                : `Nuvem: ${state.cloud.baseUrl.replace(/^https?:\/\//, '').slice(0, 20)}`}
+          </button>
+        </div>
 
         <div className="border-t border-pine-800 px-4 pb-4 pt-4">
           <div className="mb-3 flex items-center gap-2.5">
@@ -570,6 +600,15 @@ function Shell() {
                   account={account}
                   grants={state.grants}
                   onSelect={(id) => setSession({ accountId: account.id, patientId: id })}
+                />
+              )}
+              {route.name === 'cloud' && (
+                <CloudScreen
+                  patients={state.patients.filter((p) => !p.archived)}
+                  log={state.log}
+                  cloud={state.cloud}
+                  onCloud={(c) => setState((s) => ({ ...s, cloud: c }))}
+                  onPatientsUpdated={replacePatients}
                 />
               )}
               {route.name === 'settings' && (

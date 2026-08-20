@@ -276,6 +276,38 @@ export interface AppState {
   session: Session | null;
   /** Momento em que o titular aceitou o aviso de privacidade (LGPD). null = ainda não aceitou. */
   lgpdConsentedAt: number | null;
+  /** Conexão com o servidor Vitalis (nuvem). Modo 'off' = app 100% local. */
+  cloud: CloudState;
+}
+
+export type CloudMode = 'off' | 'demo' | 'server';
+
+export interface CloudState {
+  mode: CloudMode;
+  baseUrl: string;
+  token: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  connectedAt: number;
+  lastSyncAt: number;
+}
+
+export const EMPTY_CLOUD: CloudState = {
+  mode: 'off',
+  baseUrl: '',
+  token: '',
+  userId: '',
+  userName: '',
+  userEmail: '',
+  connectedAt: 0,
+  lastSyncAt: 0,
+};
+
+export interface CloudUser {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export type Route =
@@ -283,4 +315,5 @@ export type Route =
   | { name: 'record'; id: string }
   | { name: 'missing' }
   | { name: 'consultor' }
+  | { name: 'cloud' }
   | { name: 'settings' };

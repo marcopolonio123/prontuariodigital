@@ -170,8 +170,33 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
   };
 }
 
+function normalizeCloud(raw: unknown): AppState['cloud'] {
+  const r = (raw ?? {}) as Partial<AppState['cloud']>;
+  const mode = r.mode === 'demo' || r.mode === 'server' ? r.mode : 'off';
+  return {
+    mode,
+    baseUrl: String(r.baseUrl ?? ''),
+    token: String(r.token ?? ''),
+    userId: String(r.userId ?? ''),
+    userName: String(r.userName ?? ''),
+    userEmail: String(r.userEmail ?? ''),
+    connectedAt: Number(r.connectedAt ?? 0),
+    lastSyncAt: Number(r.lastSyncAt ?? 0),
+  };
+}
+
 export function emptyState(): AppState {
-  return { rev: 3, seeded: false, patients: [], log: [], accounts: [], grants: [], session: null, lgpdConsentedAt: null };
+  return {
+    rev: 3,
+    seeded: false,
+    patients: [],
+    log: [],
+    accounts: [],
+    grants: [],
+    session: null,
+    lgpdConsentedAt: null,
+    cloud: normalizeCloud(null),
+  };
 }
 
 const now = Date.now();
@@ -412,6 +437,7 @@ export function loadState(): AppState {
         typeof (parsed as Partial<AppState>).lgpdConsentedAt === 'number'
           ? ((parsed as Partial<AppState>).lgpdConsentedAt as number)
           : null,
+      cloud: normalizeCloud((parsed as Partial<AppState>).cloud),
     };
   } catch {
     return emptyState();
@@ -456,6 +482,7 @@ export function parseImport(text: string): AppState | null {
       session: sessionRaw ? { accountId: String(sessionRaw.accountId), patientId: sessionRaw.patientId ?? null } : null,
       lgpdConsentedAt:
         typeof inner.lgpdConsentedAt === 'number' ? (inner.lgpdConsentedAt as number) : null,
+      cloud: normalizeCloud(inner.cloud),
     };
   } catch {
     return null;
