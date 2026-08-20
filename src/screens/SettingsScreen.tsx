@@ -1,23 +1,30 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { AppState } from '../lib/types';
 import { exportJSON, parseImport } from '../lib/store';
-import { Btn, Tag, useToast } from '../components/ui';
+import { formatDateTime } from '../lib/biometrics';
+import { Btn, ConfirmDialog, Tag, useToast } from '../components/ui';
 import {
   IconArchive, IconCheck, IconDatabase, IconDownload, IconFace, IconFingerprint,
-  IconShield, IconUpload,
+  IconLock, IconShield, IconTrash, IconUpload,
 } from '../components/icons';
 
 export function SettingsScreen({
   state,
   onImport,
   onLoadDemo,
+  onWipe,
+  onRevokeConsent,
 }: {
   state: AppState;
   onImport: (s: AppState) => void;
   onLoadDemo: () => void;
+  onWipe: () => void;
+  onRevokeConsent: () => void;
 }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [revokeOpen, setRevokeOpen] = useState(false);
 
   const totalEntries = state.patients.reduce((s, p) => s + p.entries.length, 0);
   const sizeKb = (new Blob([JSON.stringify(state)]).size / 1024).toFixed(1);
@@ -148,7 +155,90 @@ export function SettingsScreen({
             </Tag>
           </div>
         </section>
+
+        <section className="rise rounded-xl border border-moss-500/30 bg-card p-5 shadow-lift lg:col-span-2" style={{ animationDelay: '160ms' }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="flex items-center gap-2 font-display text-base font-bold text-ink">
+              <IconLock size={18} className="text-moss-600" /> Direitos do titular — LGPD (art. 18)
+            </h2>
+            <span className="ml-auto">
+              {state.lgpdConsentedAt ? (
+                <Tag tone="moss">
+                  <IconCheck size={12} className="mr-1" /> consentimento dado em {formatDateTime(state.lgpdConsentedAt)}
+                </Tag>
+              ) : (
+                <Tag tone="warn">consentimento pendente</Tag>
+              )}
+            </span>
+          </div>
+
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">
+            O Vitalis trata <strong className="text-ink">dados pessoais sensíveis de saúde</strong> (LGPD, art. 5º, II)
+            exclusivamente <strong className="text-ink">neste dispositivo</strong>. Você mantém o controle total — os
+            direitos abaixo podem ser exercidos a qualquer momento, sem burocracia:
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-line bg-paper/60 p-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink"><IconDownload size={14} className="text-moss-600" /> Acesso & portabilidade</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Exporte toda a base em JSON (acima) e leve a outro dispositivo ou entregue a um profissional.</p>
+            </div>
+            <div className="rounded-lg border border-line bg-paper/60 p-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink"><IconCheck size={14} className="text-moss-600" /> Correção</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Edite fichas, contatos e registros clínicos sempre que houver dado incompleto ou desatualizado.</p>
+            </div>
+            <div className="rounded-lg border border-line bg-paper/60 p-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink"><IconTrash size={14} className="text-danger-600" /> Eliminação</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Apague definitivamente a base local deste navegador quando não quiser mais os dados aqui.</p>
+              <Btn variant="danger" size="sm" className="mt-2" onClick={() => setWipeOpen(true)}>
+                <IconTrash size={13} /> Apagar base local
+              </Btn>
+            </div>
+            <div className="rounded-lg border border-line bg-paper/60 p-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink"><IconLock size={14} className="text-warn-600" /> Revogação</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">Retire o consentimento de privacidade; o aviso voltará a ser exibido no próximo uso.</p>
+              <Btn variant="outline" size="sm" className="mt-2" onClick={() => setRevokeOpen(true)}>
+                <IconLock size={13} /> Revogar consentimento
+              </Btn>
+            </div>
+          </div>
+
+          <p className="mt-4 text-[11px] leading-relaxed text-mute">
+            Base legal: consentimento do titular (LGPD, art. 7º, I) e tutela da saúde (art. 11, II, “f”). Nenhum dado é
+            compartilhado com terceiros nem transferido a outro país — o processamento é 100% local.
+          </p>
+        </section>
       </div>
+
+      <ConfirmDialog
+        open={wipeOpen}
+        onClose={() => setWipeOpen(false)}
+        onConfirm={onWipe}
+        title="Eliminar base local (direito LGPD)"
+        confirmLabel="Apagar tudo deste navegador"
+        message={
+          <p>
+            Todos os pacientes, prontuários, contatos, contas e o log de identificações serão{' '}
+            <strong className="text-danger-600">removidos permanentemente deste navegador</strong>. Se quiser guardar uma
+            cópia antes, use “Exportar backup”. Esta ação atende ao direito de eliminação (art. 18, VI).
+          </p>
+        }
+      />
+
+      <ConfirmDialog
+        open={revokeOpen}
+        onClose={() => setRevokeOpen(false)}
+        onConfirm={onRevokeConsent}
+        title="Revogar consentimento"
+        confirmLabel="Revogar"
+        tone="default"
+        message={
+          <p>
+            O aviso de privacidade voltará a ser exibido na próxima vez que o app abrir. Seus dados{' '}
+            <strong className="text-ink">não</strong> são apagados — use “Apagar base local” para eliminá-los.
+          </p>
+        }
+      />
 
       <p className="rise mt-6 px-1 pb-4 font-mono text-[11px] text-mute" style={{ animationDelay: '180ms' }}>
         Vitalis v0.2.0 — contas & acesso delegado · consultor IA · especialidades · retenção sem exclusão

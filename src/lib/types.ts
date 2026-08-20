@@ -274,6 +274,8 @@ export interface AppState {
   accounts: Account[];
   grants: AccessGrant[];
   session: Session | null;
+  /** Momento em que o titular aceitou o aviso de privacidade (LGPD). null = ainda não aceitou. */
+  lgpdConsentedAt: number | null;
 }
 
 export type Route =

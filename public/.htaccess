@@ -1,0 +1,124 @@
+# ============================================================
+#  VITALIS — Configuração de produção (Hostinger / LiteSpeed)
+#  Segurança (HTTPS + headers), Performance (cache + gzip)
+# ============================================================
+
+# ------------------------------------------------------------
+# 1) HTTPS OBRIGATÓRIO — todo tráfego HTTP é redirecionado
+#    (a Hostinger oferece SSL grátis; ative-o no hPanel antes)
+# ------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Força HTTPS em qualquer domínio/subdomínio
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Força www -> não-www (opcional; descomente se preferir o inverso)
+  # RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
+  # RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# ------------------------------------------------------------
+# 2) HEADERS DE SEGURANÇA (criptografia de transporte + proteções)
+# ------------------------------------------------------------
+<IfModule mod_headers.c>
+  # HSTS: navegador só aceita HTTPS por 1 ano (inclusive subdomínios)
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+  # Nunca renderizar a app dentro de iframe alheio (anti clickjacking)
+  Header always set X-Frame-Options "DENY"
+
+  # Impede o navegador de "adivinhar" tipo de conteúdo (anti MIME-sniffing)
+  Header always set X-Content-Type-Options "nosniff"
+
+  # Política de referrer restrita (não vaza URL/parâmetros)
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Controle de recursos do navegador (câmera/mic só com gesto do usuário)
+  Header always set Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()"
+
+  # Política de Conteúdo: restringe de onde scripts/estilos/imagens podem vir
+  # (data: e blob: são necessários para os anexos de receita/exame em base64)
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+
+  # Remove cabeçalho que expõe a tecnologia do servidor
+  Header always unset X-Powered-By
+</IfModule>
+
+# Esconde a assinatura do servidor (Apache/LiteSpeed)
+ServerSignature Off
+<IfModule mod_headers.c>
+  Header unset Server
+</IfModule>
+
+# ------------------------------------------------------------
+# 3) PERFORMANCE — compressão (gzip/deflate)
+# ------------------------------------------------------------
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript \
+    application/javascript application/x-javascript application/json application/xml \
+    application/manifest+json image/svg+xml font/woff font/woff2
+</IfModule>
+
+# ------------------------------------------------------------
+# 4) PERFORMANCE — cache de navegador
+# ------------------------------------------------------------
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # HTML sempre revalida (para o usuário receber atualizações na hora)
+  ExpiresByType text/html "access plus 0 seconds"
+  <FilesMatch "\.html$">
+    <IfModule mod_headers.c>
+      Header set Cache-Control "no-cache, must-revalidate"
+    </IfModule>
+  </FilesMatch>
+
+  # Assets com hash no nome (Vite gera app-HASH.js/css): cache imutável de 1 ano
+  <FilesMatch "\.(js|css|woff2?|ttf|eot|otf)$">
+    <IfModule mod_headers.c>
+      Header set Cache-Control "public, max-age=31536000, immutable"
+    </IfModule>
+  </FilesMatch>
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+
+  # Imagens (retratos de exemplo): 30 dias
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+
+  # Manifest/PWA: 1 dia
+  ExpiresByType application/manifest+json "access plus 1 day"
+</IfModule>
+
+# ------------------------------------------------------------
+# 5) BOAS PRÁTICAS — tipos MIME corretos
+# ------------------------------------------------------------
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+  AddType text/css .css
+  AddType application/manifest+json .webmanifest
+  AddType image/svg+xml .svg
+  AddType font/woff2 .woff2
+</IfModule>
+
+# ------------------------------------------------------------
+# 6) PROTEÇÃO — não expor arquivos sensíveis nem listar diretórios
+# ------------------------------------------------------------
+Options -Indexes
+
+# Bloqueia acesso a arquivos de configuração/ambiente/backup
+<FilesMatch "^\.|\.(env|log|ini|sql|bak|old|dist|fla|psd|ai)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>
+
+# Bloqueia diretórios que nunca devem ser públicos
+<IfModule mod_rewrite.c>
+  RewriteRule ^(\.git|node_modules|src|public)/ - [F,L]
+</IfModule>

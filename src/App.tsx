@@ -8,6 +8,7 @@ import {
   IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
+import { LgpdConsent } from './components/LgpdConsent';
 import { PatientsScreen } from './screens/PatientsScreen';
 import { RecordScreen } from './screens/RecordScreen';
 import { PublicUtilityScreen } from './screens/PublicUtilityScreen';
@@ -220,8 +221,29 @@ function Shell() {
     toast('info', 'Sessão encerrada. Até logo!');
   };
 
+  /* --------------------------- LGPD (consentimento) --------------------------- */
+  const acceptConsent = () => {
+    setState((s) => ({ ...s, lgpdConsentedAt: Date.now() }));
+    toast('success', 'Consentimento de privacidade registrado. Bem-vindo(a) ao Vitalis!');
+  };
+  const revokeConsent = () => {
+    setState((s) => ({ ...s, lgpdConsentedAt: null }));
+    toast('info', 'Consentimento revogado — o aviso de privacidade voltará a ser exibido.');
+  };
+  const wipeAll = () => {
+    setState(emptyState());
+    toast('info', 'Base local eliminada deste navegador (direito LGPD).');
+  };
+
+  const consentBanner = state.lgpdConsentedAt === null ? <LgpdConsent onAccept={acceptConsent} /> : null;
+
   if (!state.session || !account) {
-    return <LoginScreen state={state} onSeed={loadDemo} onCreateAccount={addAccount} onLogin={login} />;
+    return (
+      <>
+        <LoginScreen state={state} onSeed={loadDemo} onCreateAccount={addAccount} onLogin={login} />
+        {consentBanner}
+      </>
+    );
   }
 
   const activeKey = route.name === 'record' ? 'patients' : route.name;
@@ -463,7 +485,13 @@ function Shell() {
                 />
               )}
               {route.name === 'settings' && (
-                <SettingsScreen state={state} onImport={importState} onLoadDemo={loadDemo} />
+                <SettingsScreen
+                  state={state}
+                  onImport={importState}
+                  onLoadDemo={loadDemo}
+                  onWipe={wipeAll}
+                  onRevokeConsent={revokeConsent}
+                />
               )}
             </div>
           </main>
@@ -471,6 +499,7 @@ function Shell() {
       </div>
 
       <DemoGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
+      {consentBanner}
     </div>
   );
 }

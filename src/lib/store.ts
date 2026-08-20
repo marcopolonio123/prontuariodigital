@@ -171,7 +171,7 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
 }
 
 export function emptyState(): AppState {
-  return { rev: 3, seeded: false, patients: [], log: [], accounts: [], grants: [], session: null };
+  return { rev: 3, seeded: false, patients: [], log: [], accounts: [], grants: [], session: null, lgpdConsentedAt: null };
 }
 
 const now = Date.now();
@@ -408,6 +408,10 @@ export function loadState(): AppState {
       accounts: asArray<Record<string, unknown>>(parsed.accounts).map(normalizeAccount),
       grants: asArray<Record<string, unknown>>(parsed.grants).map(normalizeGrant),
       session: sessionRaw ? { accountId: String(sessionRaw.accountId), patientId: sessionRaw.patientId ?? null } : null,
+      lgpdConsentedAt:
+        typeof (parsed as Partial<AppState>).lgpdConsentedAt === 'number'
+          ? ((parsed as Partial<AppState>).lgpdConsentedAt as number)
+          : null,
     };
   } catch {
     return emptyState();
@@ -450,6 +454,8 @@ export function parseImport(text: string): AppState | null {
       accounts: asArray<Record<string, unknown>>(inner.accounts).map(normalizeAccount),
       grants: asArray<Record<string, unknown>>(inner.grants).map(normalizeGrant),
       session: sessionRaw ? { accountId: String(sessionRaw.accountId), patientId: sessionRaw.patientId ?? null } : null,
+      lgpdConsentedAt:
+        typeof inner.lgpdConsentedAt === 'number' ? (inner.lgpdConsentedAt as number) : null,
     };
   } catch {
     return null;
