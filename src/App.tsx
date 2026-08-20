@@ -5,7 +5,7 @@ import { ageFromBirth } from './lib/biometrics';
 import { Avatar, Btn, Ecg, Modal, ToastProvider, useToast } from './components/ui';
 import {
   IconBrain, IconChart, IconCheck, IconChevronRight, IconDownload, IconFace, IconFileText,
-  IconCloud, IconGear, IconLogout, IconMapPin, IconMegaphone, IconUsers, LogoMark,
+  IconCloud, IconGear, IconHeartPulse, IconLogout, IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
 import { LgpdConsent } from './components/LgpdConsent';
@@ -14,6 +14,7 @@ import { RecordScreen } from './screens/RecordScreen';
 import { PublicUtilityScreen } from './screens/PublicUtilityScreen';
 import { CloudScreen } from './screens/CloudScreen';
 import { ConsultantScreen } from './screens/ConsultantScreen';
+import { VitalsScreen } from './screens/VitalsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
 const DEMO_SCENARIOS = [
@@ -111,6 +112,17 @@ const DEMO_SCENARIOS = [
     expect: 'Leitura com qualidade calculada pela imobilidade do dedo.',
   },
   {
+    title: 'Sinais vitais (monitorar & gravar)',
+    badge: 'novo',
+    steps: [
+      'Abra “Sinais vitais” — o prontuário ativo é o da pessoa logada ou delegada (ex.: Marina monitorando a mãe).',
+      'Clique em “Iniciar” para uma sessão ao vivo (FC, pressão, SpO₂, temperatura) e deixe “gravar no histórico” ativo.',
+      'Pare a sessão; registre também uma medição manual (ex.: glicemia) e veja os cartões com sparkline e status (normal/atenção/crítico).',
+      'No APK, a mesma tela lê do Health Connect (Android) / HealthKit (iOS) — serviços gratuitos do sistema.',
+    ],
+    expect: 'Histórico de sinais vitais salvo no prontuário da pessoa autorizada, com alertas visuais de valores fora da faixa.',
+  },
+  {
     title: 'Nuvem & servidor (multiusuário)',
     badge: 'novo',
     steps: [
@@ -157,9 +169,10 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-const NAV: Array<{ key: 'patients' | 'consultor' | 'cloud' | 'settings' | 'missing'; label: string; short: string; icon: ReactNode }> = [
+const NAV: Array<{ key: 'patients' | 'consultor' | 'vitals' | 'cloud' | 'settings' | 'missing'; label: string; short: string; icon: ReactNode }> = [
   { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
+  { key: 'vitals', label: 'Sinais vitais', short: 'Vitais', icon: <IconHeartPulse size={18} /> },
   { key: 'cloud', label: 'Nuvem & servidor', short: 'Nuvem', icon: <IconCloud size={18} /> },
   { key: 'settings', label: 'Dados & privacidade', short: 'Dados', icon: <IconGear size={18} /> },
   { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
@@ -455,7 +468,7 @@ function Shell() {
           >
             <IconFileText size={17} />
             Roteiro de demonstração
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">9 casos</span>
+            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">11 casos</span>
           </button>
         </div>
 
@@ -599,6 +612,16 @@ function Shell() {
                   patient={activePatient}
                   account={account}
                   grants={state.grants}
+                  onSelect={(id) => setSession({ accountId: account.id, patientId: id })}
+                />
+              )}
+              {route.name === 'vitals' && (
+                <VitalsScreen
+                  patients={accessible}
+                  patient={activePatient}
+                  account={account}
+                  grants={state.grants}
+                  onUpdate={updatePatient}
                   onSelect={(id) => setSession({ accountId: account.id, patientId: id })}
                 />
               )}

@@ -220,6 +220,7 @@ export interface Patient {
   photoHash: string | null;
   fingerprint: Fingerprint | null;
   entries: ClinicalEntry[];
+  vitals: VitalSample[];
   createdAt: number;
   primarySpecialty: string;
   archived: boolean;
@@ -264,6 +265,27 @@ export interface AccessGrant {
   grantedByName: string;
   level: 'completo' | 'leitura';
   createdAt: number;
+}
+
+export type VitalMetric =
+  | 'heart'
+  | 'systolic'
+  | 'diastolic'
+  | 'spo2'
+  | 'temp'
+  | 'glucose'
+  | 'respiratory'
+  | 'weight';
+
+export type VitalSource = 'manual' | 'monitor' | 'healthconnect' | 'healthkit';
+
+export interface VitalSample {
+  id: string;
+  metric: VitalMetric;
+  value: number;
+  at: number;
+  source: VitalSource;
+  note?: string;
 }
 
 export interface AppState {
@@ -315,5 +337,6 @@ export type Route =
   | { name: 'record'; id: string }
   | { name: 'missing' }
   | { name: 'consultor' }
+  | { name: 'vitals' }
   | { name: 'cloud' }
   | { name: 'settings' };

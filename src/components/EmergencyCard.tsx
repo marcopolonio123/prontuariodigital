@@ -1,8 +1,9 @@
 import type { Contact, Patient } from '../lib/types';
 import { RELATIONSHIP_META, SPECIAL_CARE_META } from '../lib/types';
-import { ageFromBirth, formatDateBR, formatPhone, missingAlertText, telLink, waLink } from '../lib/biometrics';
+import { ageFromBirth, formatDateBR, formatPhone, missingAlertText, telLink, timeAgo, waLink } from '../lib/biometrics';
+import { assess, fmtVital, latestByMetric as latestVitals, metricMeta, STATUS_META } from '../lib/vitals';
 import { Avatar, BloodBadge, Tag } from './ui';
-import { IconAlert, IconCheck, IconCreditCard, IconDroplet, IconInfo, IconMessage, IconPhone, IconPill, IconUsers } from './icons';
+import { IconAlert, IconCheck, IconCreditCard, IconDroplet, IconHeartPulse, IconInfo, IconMessage, IconPhone, IconPill, IconUsers } from './icons';
 
 export function ContactRow({
   contact,
@@ -201,6 +202,29 @@ export function EmergencyCard({ patient }: { patient: Patient }) {
                   );
                 })}
               </ul>
+            </div>
+          )}
+
+          {patient.vitals.length > 0 && (
+            <div>
+              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-mute">
+                <IconHeartPulse size={13} /> Sinais vitais recentes
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...latestVitals(patient.vitals).entries()]
+                  .filter(([m]) => m !== 'weight')
+                  .slice(0, 5)
+                  .map(([m, s]) => {
+                    const st = STATUS_META[assess(m, s.value)];
+                    return (
+                      <span key={m} className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${st.chip}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                        {metricMeta(m).short} {fmtVital(m, s.value)}
+                        <span className="font-sans text-[9px] font-normal opacity-75">{metricMeta(m).unit} · {timeAgo(s.at)}</span>
+                      </span>
+                    );
+                  })}
+              </div>
             </div>
           )}
 

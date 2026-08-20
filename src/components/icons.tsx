@@ -171,6 +171,13 @@ export const IconActivity = (p: IconProps) => (
   <I {...p}><path d="M22 12h-3.4l-2.8 7.4L9.2 4.6 6.4 12H2" /></I>
 );
 
+export const IconHeartPulse = (p: IconProps) => (
+  <I {...p}>
+    <path d="M19.5 13.2 12 20.6l-7.5-7.4a5 5 0 1 1 7.5-6.6 5 5 0 1 1 7.5 6.6z" />
+    <path d="M3.5 12h4l1.3-2.2 2.4 4.4 1.3-2.2h4" />
+  </I>
+);
+
 export const IconShield = (p: IconProps) => (
   <I {...p}>
     <path d="M12 22s8-3.6 8-10V5.2L12 2 4 5.2V12c0 6.4 8 10 8 10z" />

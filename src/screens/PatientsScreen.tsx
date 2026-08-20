@@ -404,6 +404,7 @@ function PatientForm({
       photoHash: null,
       fingerprint: null,
       entries: [],
+      vitals: [],
       createdAt: Date.now(),
       primarySpecialty: '',
       archived: false,

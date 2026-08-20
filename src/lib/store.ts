@@ -1,4 +1,4 @@
-import type { AccessGrant, Account, AppState, ClinicalEntry, IdEvent, Patient } from './types';
+import type { AccessGrant, Account, AppState, ClinicalEntry, IdEvent, Patient, VitalSample } from './types';
 import { EMPTY_EMERGENCY, EMPTY_MISSING } from './types';
 import { makeFingerprintTemplate } from './biometrics';
 
@@ -43,6 +43,17 @@ function normalizeSection(raw: unknown): ClinicalEntry['prescription'] {
   }));
   if (!text && attachments.length === 0) return null;
   return { text, attachments };
+}
+
+function normalizeVital(raw: Record<string, unknown>): VitalSample {
+  return {
+    id: String(raw.id ?? uid()),
+    metric: (raw.metric as VitalSample['metric']) ?? 'heart',
+    value: Number(raw.value ?? 0),
+    at: Number(raw.at ?? Date.now()),
+    source: (raw.source as VitalSample['source']) ?? 'manual',
+    note: raw.note !== undefined ? String(raw.note) : undefined,
+  };
 }
 
 function normalizeEntry(raw: Record<string, unknown>): ClinicalEntry {
@@ -163,6 +174,7 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
     photoHash: (raw.photoHash as string | null) ?? null,
     fingerprint: (raw.fingerprint as Patient['fingerprint']) ?? null,
     entries: asArray<Record<string, unknown>>(raw.entries).map(normalizeEntry),
+    vitals: asArray<Record<string, unknown>>(raw.vitals).map(normalizeVital),
     createdAt: Number(raw.createdAt ?? Date.now()),
     primarySpecialty: String(raw.primarySpecialty ?? ''),
     archived: Boolean(raw.archived),
@@ -203,6 +215,17 @@ const now = Date.now();
 const daysAgo = (d: number) => now - d * 86_400_000;
 const iso = (d: number) => new Date(daysAgo(d)).toISOString();
 const ahead = (d: number) => new Date(now + d * 86_400_000).toISOString().slice(0, 10);
+
+/** amostra de sinal vital para o seed */
+function V(
+  metric: VitalSample['metric'],
+  value: number,
+  d: number,
+  source: VitalSample['source'] = 'manual',
+  note?: string,
+): VitalSample {
+  return { id: uid(), metric, value, at: daysAgo(d) + Math.floor(Math.random() * 6) * 3_600_000, source, note };
+}
 
 /** registro clínico com campos de prescrição/exames padronizados */
 function E(
@@ -260,6 +283,18 @@ function seedPatients(): Patient[] {
       emergency: { ...EMPTY_EMERGENCY },
       photo: '/portraits/ana.svg', photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(120), quality: 91 },
+      vitals: [
+        V('glucose', 96, 7, 'manual', 'jejum'),
+        V('glucose', 152, 5, 'manual', 'pós-almoço'),
+        V('glucose', 118, 1, 'monitor'),
+        V('weight', 68.4, 7, 'manual'),
+        V('heart', 78, 2, 'monitor'),
+        V('heart', 84, 1, 'monitor'),
+        V('systolic', 134, 1, 'monitor'),
+        V('diastolic', 86, 1, 'monitor'),
+        V('spo2', 96, 1, 'monitor'),
+        V('temp', 36.6, 1, 'monitor'),
+      ],
       entries: [
         E({
           agoDays: 34, type: 'consulta', title: 'Avaliação geriátrica — estadiamento cognitivo',
@@ -330,6 +365,15 @@ function seedPatients(): Patient[] {
       },
       photo: '/portraits/carlos.svg', photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(98), quality: 88 },
+      vitals: [
+        V('heart', 62, 3, 'monitor'),
+        V('heart', 58, 1, 'monitor'),
+        V('systolic', 122, 1, 'monitor'),
+        V('diastolic', 78, 1, 'monitor'),
+        V('spo2', 95, 1, 'monitor'),
+        V('temp', 36.2, 1, 'monitor'),
+        V('weight', 84.1, 6, 'manual'),
+      ],
       entries: [
         E({
           agoDays: 300, type: 'procedimento', title: 'Implante de marca-passo definitivo',
@@ -370,6 +414,11 @@ function seedPatients(): Patient[] {
       emergency: { ...EMPTY_EMERGENCY },
       photo: null, photoHash: null,
       fingerprint: { template: makeFingerprintTemplate(), enrolledAt: daysAgo(40), quality: 74 },
+      vitals: [
+        V('weight', 24.8, 10, 'manual', 'consulta pediátrica'),
+        V('heart', 92, 10, 'manual'),
+        V('temp', 36.8, 10, 'manual'),
+      ],
       entries: [
         E({
           agoDays: 180, type: 'vacina', title: 'Tríplice viral — reforço',
