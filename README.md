@@ -1,85 +1,52 @@
-# Vitalis — Prontuário médico para a vida toda
+# 🩺 My Doctor — `mydoctor.med.br`
 
-MVP focado nos dois objetivos secundários iniciais:
+Prontuário médico **para a vida toda**, com foco em proteger quem não consegue se cuidar sozinho: crianças, idosos e pessoas com Alzheimer ou deficiência.
 
-1. **Identificação de pessoas perdidas** — reconhecimento facial (assinatura perceptual dHash, 100% no navegador) e impressão digital (sensor simulado local), com rede de contatos autorizados (pais, filhos, responsáveis/curadores) e fluxo de avisos quando a pessoa é encontrada.
-2. **Cartão de emergência** — exibido no momento da identificação: alergias, intolerâncias alimentares, tipo sanguíneo, medicações, cuidados especiais (Alzheimer, autismo, diabetes…) e instruções de abordagem.
+> **Objetivo principal:** guardar o prontuário médico vitalício de uma pessoa.
+> **Objetivos secundários já funcionando:** identificação de pessoas perdidas (retrato facial + digital) e exibição de informações críticas de saúde em emergências.
 
-Inclui ainda o embrião do objetivo principal: cadastro completo e **linha do tempo clínica** (consultas, exames, medicações, vacinas, procedimentos).
+---
 
-- Dados 100% locais (`localStorage`) com backup/exportação em JSON.
-- Sem backend, sem envio de fotos — a comparação biométrica roda no dispositivo.
+## ✨ O que ele faz
 
-## Rodar localmente
+| Área | Recursos |
+|---|---|
+| **Cadastro** | Dados básicos, alergias, intolerâncias, tipo sanguíneo, medicamentos de uso contínuo, convênios (com foto da carteirinha), rede de contatos autorizados |
+| **Acesso delegado** | Pais, filhos e curadores cuidam do prontuário de quem não opera o app (ex.: filho de pessoa com Alzheimer, pai de criança) |
+| **Prontuário** | Linha do tempo clínica, prescrições e exames (texto, voz ou anexo PDF/imagem), filtros por especialidade, exportação — **nada é excluído, só arquivado** |
+| **Utilidade pública** | "Encontrar alguém…": identifica pessoa perdida por retrato ou digital, **com geolocalização de quem consulta** (antifraude), e dispara avisos à rede de contatos |
+| **Emergência/Vulnerabilidade** | Alerta para pessoa acidentada, internada ou em risco, com cartão de emergência exibido na identificação |
+| **Sinais vitais** | Monitoramento (FC, pressão, SpO₂, temperatura…) com gravação opcional no histórico; pronto para Health Connect / HealthKit |
+| **Consultor IA** | Analisa sintomas cruzando com o prontuário da pessoa logada, sempre com o aviso de procurar um médico |
+| **Nuvem** | Modo local (dados no dispositivo) **ou** conectado ao servidor com banco de dados |
+
+## 🚀 Como rodar
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
-npm run build    # gera dist/
+npm run dev      # desenvolvimento
+npm run build    # gera a pasta dist/ para publicação
 ```
 
-## Publicar no GitHub (passo a passo)
+## 🌐 Publicação
 
-### 1. Configurar identidade Git (uma vez só)
+- **Site/portal** → pasta `dist/` (guia completo em [`HOSTINGER.md`](HOSTINGER.md))
+- **Servidor + banco** → pasta `server/` (guia em [`server/README.md`](server/README.md))
+- **APK / iOS (lojas)** → [`APK.md`](APK.md) (configuração Capacitor pronta)
+- **Sinais vitais nativos** → [`VITAIS.md`](VITAIS.md)
 
-```bash
-git config --global user.name "Seu Nome"
-git config --global user.email "marcopolonio123@gmail.com"
+## 🔐 Segurança & LGPD
+
+- HTTPS obrigatório, HSTS, CSP e headers de segurança via `.htaccess`
+- Dados sensíveis de saúde tratados conforme a LGPD (consentimento, exportação, eliminação)
+- Nada é excluído: arquivamento reversível
+- Auditoria de quem consulta cada ficha (com geolocalização de quem identifica)
+
+## 🗂️ Estrutura
+
 ```
-
-> Dica de privacidade: para não expor o e-mail nos commits, use o endereço
-> `ID+usuario@users.noreply.github.com` (disponível em GitHub → Settings → Emails).
-
-### 2. Criar o repositório no GitHub
-
-- Acesse [github.com/new](https://github.com/new), crie um repositório chamado **`vitalis`**
-  (o nome precisa ser esse para o deploy automático funcionar).
-- **Não** marque "Add a README" nem adicione licença — o repositório deve nascer vazio.
-
-### 3. Enviar o código
-
-```bash
-git init
-git add .
-git commit -m "Vitalis: identificação facial/digital, desaparecidos e cartão de emergência"
-
-git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/vitalis.git
-git push -u origin main
+src/       código do app/site (React + Vite + Tailwind)
+public/    arquivos estáticos (PWA, ícones, retratos demo)
+server/    API Node/Express + Prisma (PostgreSQL/MySQL)
+dist/      build de produção (enviado à hospedagem)
 ```
-
-Substitua `SEU-USUARIO` pelo seu usuário do GitHub. Na primeira vez, ele pedirá
-autenticação — use um **Personal Access Token** (GitHub → Settings → Developer
-settings → Personal access tokens) em vez da senha.
-
-### 4. Ativar o GitHub Pages (deploy automático)
-
-O repositório já inclui o workflow `.github/workflows/deploy.yml`:
-
-1. No GitHub: **Settings → Pages → Source: GitHub Actions**.
-2. Pronto. A cada `git push` na `main`, o site é publicado em
-   **`https://SEU-USUARIO.github.io/vitalis/`**.
-
-O workflow passa `--base=/vitalis/` no build, então o `vite.config.js`
-não precisa ser alterado.
-
-### Alternativas de hospedagem
-
-- **Vercel** ([vercel.com](https://vercel.com)): importe o repositório — detecta Vite sozinho e publica em segundos (domínio `*.vercel.app`).
-- **Netlify** ([netlify.com](https://netlify.com)): mesma lógica, build `npm run build`, pasta `dist`.
-
-Nesses dois casos o app fica na raiz do domínio, sem precisar do `--base`.
-
-## Fluxo de demonstração
-
-Dentro do app: **sidebar → "Roteiro de demonstração"** (4 cenários guiados).
-
-Resumo rápido:
-
-1. **Identificação → "Testar com exemplo"** → Ana é reconhecida; o cartão de
-   emergência abre e o alerta de desaparecida dispara com a rede de avisos
-   (WhatsApp/ligação reais).
-2. **Enviar uma foto que não está na base** → "sem correspondência" →
-   cadastrar como nova pessoa → re-identificar e confirmar.
-3. **Câmera ao vivo** (exige HTTPS/localhost + permissão; há fallback por arquivo).
-4. **Digital**: segure o sensor; mover o dedo reduz a qualidade.
