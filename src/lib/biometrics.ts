@@ -70,7 +70,8 @@ export function confidenceFromDistance(distance: number): number {
 
 export function rankCandidates(patients: Patient[], queryHash: string): MatchCandidate[] {
   return patients
-    .filter((p) => p.photo && p.photoHash && !p.archived)
+    // findable=false bloqueia a identificação pública (consentimento do titular)
+    .filter((p) => p.photo && p.photoHash && !p.archived && p.findable !== false)
     .map((p) => {
       const distance = hamming(p.photoHash as string, queryHash);
       return { patient: p, distance, confidence: confidenceFromDistance(distance) };

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { IdEvent, Patient } from '../lib/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { GeoStamp, IdEvent, Patient } from '../lib/types';
 import { uid } from '../lib/store';
+import { formatGeo, getGeo } from '../lib/geo';
 import {
   dHash, fileToDataURL, makeThumb, MATCH_THRESHOLD, rankCandidates, REVIEW_THRESHOLD,
   type MatchCandidate,
@@ -9,7 +10,7 @@ import { Avatar, Btn, Corners, Gauge, Modal, Tag, useToast } from './ui';
 import { CameraCapture } from './CameraCapture';
 import { FingerprintPad } from './FingerprintPad';
 import {
-  IconArrowRight, IconCamera, IconCheck, IconFace, IconFingerprint, IconRefresh,
+  IconArrowRight, IconCamera, IconCheck, IconFace, IconFingerprint, IconMapPin, IconRefresh,
   IconSearch, IconSpinner, IconUpload, IconUsers,
 } from './icons';
 
@@ -55,9 +56,17 @@ export function FieldIdentifyModal({
   const [isMatch, setIsMatch] = useState(false);
   const [usedMethod, setUsedMethod] = useState<'face' | 'finger'>('face');
 
+  // geolocalização de quem identifica (medida antifraude)
+  const geoRef = useRef<{ geo: GeoStamp | null; denied: boolean }>({ geo: null, denied: false });
+
   // reinicia ao reabrir
   useEffect(() => {
     if (open) {
+      // captura o local de quem está identificando (não bloqueia o fluxo)
+      geoRef.current = { geo: null, denied: false };
+      void getGeo().then((r) => {
+        geoRef.current = r;
+      });
       setMethod('face');
       setCaptured(null);
       setStatus('idle');
@@ -73,8 +82,15 @@ export function FieldIdentifyModal({
   const identifiable = useMemo(() => patients.filter((p) => !p.archived && p.photo && p.photoHash), [patients]);
   const picked = useMemo(() => candidates.find((c) => c.patient.id === pickedId)?.patient ?? null, [candidates, pickedId]);
 
-  const emitLog = (partial: Omit<IdEvent, 'id' | 'at' | 'byName'>) =>
-    onLogEvent({ id: uid(), at: Date.now(), byName, ...partial });
+  const emitLog = (partial: Omit<IdEvent, 'id' | 'at' | 'byName' | 'geo' | 'geoDenied'>) =>
+    onLogEvent({
+      id: uid(),
+      at: Date.now(),
+      byName,
+      geo: geoRef.current.geo,
+      geoDenied: geoRef.current.denied || undefined,
+      ...partial,
+    });
 
   /* ------------------------------ por retrato ----------------------------- */
 
@@ -148,7 +164,8 @@ export function FieldIdentifyModal({
     setDoneSteps(2);
     await delay(300);
 
-    const withFp = patients.filter((p) => !p.archived && p.fingerprint);
+    // findable=false bloqueia a identificação pública (consentimento do titular)
+    const withFp = patients.filter((p) => !p.archived && p.fingerprint && p.findable !== false);
     if (withFp.length === 0) {
       setCandidates([]);
       setConfidence(0);
@@ -189,10 +206,19 @@ export function FieldIdentifyModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Identificar alguém em campo"
+      title="Encontrar alguém"
       subtitle="Encontrou alguém perdido, acidentado ou desorientado? Capture o retrato ou a digital e cruze com a base para acionar a rede de contatos."
       width="max-w-3xl"
     >
+      {/* transparência: o local de quem identifica fica registrado (antifraude) */}
+      <p className="mb-3 flex items-start gap-2 rounded-lg border border-line bg-paper/70 px-3 py-2 text-[12px] leading-relaxed text-mute">
+        <IconMapPin size={14} className="mt-0.5 shrink-0 text-moss-600" />
+        <span>
+          Seu <strong className="text-ink">local</strong> é registrado junto à busca para coibir o uso indevido dos
+          dados de terceiros. Pessoas que optaram por não ser identificadas não aparecem nos resultados.
+        </span>
+      </p>
+
       {/* alternador de método */}
       <div className="mb-4 inline-flex rounded-xl border border-line bg-paper p-1">
         {(
@@ -321,6 +347,10 @@ export function FieldIdentifyModal({
               {usedMethod === 'face' ? <IconFace size={11} className="mr-1" /> : <IconFingerprint size={11} className="mr-1" />}
               {usedMethod === 'face' ? 'retrato' : 'digital'}
             </Tag>
+            <p className="mt-2 flex items-center gap-1.5 text-center font-mono text-[10px] leading-snug text-mute">
+              <IconMapPin size={11} className="shrink-0" />
+              {formatGeo(geoRef.current.geo)}
+            </p>
           </div>
 
           <div>

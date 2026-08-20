@@ -461,7 +461,7 @@ export function PublicUtilityScreen({
           </p>
         </div>
         <Btn variant="dark" size="lg" onClick={() => setFieldOpen(true)} title={hasPeople ? undefined : 'Cadastre pessoas primeiro'}>
-          <IconFace size={18} /> Identificar alguém agora
+          <IconFace size={18} /> Encontrar alguém…
         </Btn>
       </header>
 

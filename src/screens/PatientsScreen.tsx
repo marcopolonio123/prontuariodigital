@@ -7,7 +7,7 @@ import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, Mo
 import { CameraCapture } from '../components/CameraCapture';
 import { FingerprintPad } from '../components/FingerprintPad';
 import {
-  IconAlert, IconArchive, IconCamera, IconChart, IconCreditCard, IconFace, IconFingerprint,
+  IconAlert, IconArchive, IconCamera, IconChart, IconCreditCard, IconFace, IconFingerprint, IconLock,
   IconPencil, IconPhone, IconPlus, IconRefresh, IconSearch, IconTrash, IconUpload, IconUsers, IconX,
 } from '../components/icons';
 
@@ -265,6 +265,7 @@ const emptyForm = () => ({
   specialCare: [] as SpecialCare[],
   emergencyNotes: '',
   contacts: [] as Contact[],
+  findable: true,
 });
 
 type FormState = ReturnType<typeof emptyForm> & {
@@ -298,6 +299,7 @@ function PatientForm({
           cpf: initial.cpf,
           bloodType: initial.bloodType,
           primarySpecialty: initial.primarySpecialty,
+          findable: initial.findable,
           allergies: [...initial.allergies],
           intolerances: [...initial.intolerances],
           conditions: [...initial.conditions],
@@ -409,6 +411,7 @@ function PatientForm({
       primarySpecialty: '',
       archived: false,
       ownerAccountId: defaultOwnerId,
+      findable: true,
     };
     onSave({
       ...base,
@@ -418,6 +421,7 @@ function PatientForm({
       cpf: f.cpf.trim(),
       bloodType: f.bloodType,
       primarySpecialty: f.primarySpecialty,
+      findable: f.findable,
       allergies: f.allergies,
       intolerances: f.intolerances,
       conditions: f.conditions,
@@ -587,6 +591,33 @@ function PatientForm({
                 <textarea className={`${inputCls} min-h-20 resize-y`} value={f.emergencyNotes} onChange={(e) => set('emergencyNotes', e.target.value)} placeholder="ex.: pode estar confusa — fale com calma e não a deixe sozinha…" />
               </Field>
             </div>
+
+            {/* consentimento de identificação em Utilidade pública */}
+            <div className={`mt-5 flex items-start gap-3.5 rounded-xl border p-4 transition-colors ${f.findable ? 'border-moss-500/35 bg-moss-50/60' : 'border-warn-500/40 bg-warn-100/50'}`}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={f.findable}
+                onClick={() => set('findable', !f.findable)}
+                className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${f.findable ? 'bg-moss-600' : 'bg-line'}`}
+                aria-label={f.findable ? 'Desativar identificação pública' : 'Ativar identificação pública'}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${f.findable ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+                />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[13px] font-bold ${f.findable ? 'text-moss-700' : 'text-warn-600'}`}>
+                  {f.findable ? 'Permitir que esta pessoa seja localizada' : 'Identificação pública desativada'}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-mute">
+                  {f.findable
+                    ? 'Se um dia estiver perdida, doente ou em emergência/vulnerabilidade, quem usar o app poderá identificá-la pelo retrato ou digital e acionar a rede de avisos. Recomendado.'
+                    : 'A pessoa optou por não ser identificada. Correspondência facial e digital ficam bloqueadas na Utilidade pública; o prontuário segue acessível apenas à rede autorizada.'}
+                </p>
+              </div>
+            </div>
+
             <div className="mt-5 border-t border-line pt-4">
               <h4 className="mb-1 flex items-center gap-2 text-[13px] font-semibold text-ink">
                 <IconCreditCard size={15} className="text-moss-600" /> Convênios & seguro saúde
@@ -844,6 +875,9 @@ export function PatientsScreen({
                             {p.allergies.length > 0 && <Tag tone="danger">{p.allergies.length} alergia{p.allergies.length === 1 ? '' : 's'}</Tag>}
                             {p.primarySpecialty && <Tag tone="mute">{p.primarySpecialty}</Tag>}
                             {p.archived && <Tag tone="warn">arquivada</Tag>}
+                            {!p.archived && !p.findable && (
+                              <Tag tone="info"><IconLock size={11} className="mr-1" /> não identificável</Tag>
+                            )}
                           </div>
                         </div>
                       </div>

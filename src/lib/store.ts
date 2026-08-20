@@ -179,6 +179,7 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
     primarySpecialty: String(raw.primarySpecialty ?? ''),
     archived: Boolean(raw.archived),
     ownerAccountId: (raw.ownerAccountId as string | null) ?? null,
+    findable: raw.findable === undefined ? true : Boolean(raw.findable),
   };
 }
 
@@ -320,7 +321,7 @@ function seedPatients(): Patient[] {
           date: iso(90).slice(0, 10), specialty: 'Endocrinologia',
         }),
       ],
-      createdAt: daysAgo(420), primarySpecialty: 'Geriatria', archived: false, ownerAccountId: 'acc-ana',
+      createdAt: daysAgo(420), primarySpecialty: 'Geriatria', archived: false, ownerAccountId: 'acc-ana', findable: true,
     },
     {
       id: 'p-carlos', record: 'VT-2024-0002', name: 'Carlos Eduardo Menezes', birthDate: '1966-09-02', sex: 'M',
@@ -391,7 +392,7 @@ function seedPatients(): Patient[] {
           exams: { text: 'Ecocardiograma transtorácico + Holter 24h para o próximo retorno.', attachments: [] },
         }),
       ],
-      createdAt: daysAgo(380), primarySpecialty: 'Cardiologia', archived: false, ownerAccountId: 'acc-carlos',
+      createdAt: daysAgo(380), primarySpecialty: 'Cardiologia', archived: false, ownerAccountId: 'acc-carlos', findable: true,
     },
     {
       id: 'p-sofia', record: 'VT-2025-0003', name: 'Sofia Almeida Costa', birthDate: '2016-05-21', sex: 'F',
@@ -435,7 +436,7 @@ function seedPatients(): Patient[] {
           exams: { text: 'IgE específica para amendoim e leite (rast) — repetir em 6 meses.', attachments: [] },
         }),
       ],
-      createdAt: daysAgo(200), primarySpecialty: 'Pediatria', archived: false, ownerAccountId: 'acc-juliana',
+      createdAt: daysAgo(200), primarySpecialty: 'Pediatria', archived: false, ownerAccountId: 'acc-juliana', findable: false,
     },
   ];
 }

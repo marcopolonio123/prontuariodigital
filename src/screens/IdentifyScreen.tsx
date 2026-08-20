@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { IdEvent, Patient } from '../lib/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { GeoStamp, IdEvent, Patient } from '../lib/types';
 import { uid } from '../lib/store';
+import { getGeo } from '../lib/geo';
 import {
   ageFromBirth, dHash, daysSince, emergencyAlertText, ensurePatientHash, fileToDataURL, formatDateBR,
   makeThumb, MATCH_THRESHOLD, missingAlertText, rankCandidates, REVIEW_THRESHOLD, timeAgo, type MatchCandidate,
@@ -185,7 +186,8 @@ export function IdentifyScreen({
     markStep(1);
     await delay(350);
 
-    const withFp = patients.filter((p) => !p.archived && p.fingerprint);
+    // findable=false bloqueia a identificação pública (consentimento do titular)
+    const withFp = patients.filter((p) => !p.archived && p.fingerprint && p.findable !== false);
     if (withFp.length === 0) {
       setResult({ status: 'none', candidates: [], confidence: 0, method: 'finger', quality });
       emitLog({ method: 'finger', patientId: null, patientName: '—', confidence: 0, quality, result: 'none', thumb: null });

@@ -225,10 +225,23 @@ export interface Patient {
   primarySpecialty: string;
   archived: boolean;
   ownerAccountId: string | null;
+  /**
+   * Consentimento de identificação em Utilidade pública.
+   * true (padrão): a pessoa pode ser localizada quando perdida/doente/em emergência.
+   * false: bloqueia correspondência facial/digital — a pessoa optou por não ser identificada.
+   */
+  findable: boolean;
 }
 
 export type IdMethod = 'face' | 'finger';
 export type IdResult = 'match' | 'review' | 'none' | 'notify' | 'found';
+
+export interface GeoStamp {
+  lat: number;
+  lng: number;
+  accuracy: number;
+  label?: string; // bairro/cidade via geocodificação reversa (OpenStreetMap)
+}
 
 export interface IdEvent {
   id: string;
@@ -242,6 +255,9 @@ export interface IdEvent {
   thumb: string | null;
   detail?: string;
   byName: string;
+  /** Local de quem identificou — medida antifraude. null = não capturado. */
+  geo?: GeoStamp | null;
+  geoDenied?: boolean; // usuário negou a localização
 }
 
 export interface Session {
