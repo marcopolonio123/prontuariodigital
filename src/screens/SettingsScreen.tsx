@@ -4,7 +4,7 @@ import { exportJSON, parseImport } from '../lib/store';
 import { formatDateTime } from '../lib/biometrics';
 import { Btn, ConfirmDialog, Tag, useToast } from '../components/ui';
 import {
-  IconArchive, IconCheck, IconDatabase, IconDownload, IconFace, IconFingerprint,
+  IconArchive, IconCheck, IconCloud, IconDatabase, IconDownload, IconFace, IconFingerprint,
   IconLock, IconShield, IconTrash, IconUpload,
 } from '../components/icons';
 
@@ -14,12 +14,14 @@ export function SettingsScreen({
   onLoadDemo,
   onWipe,
   onRevokeConsent,
+  onOpenCloud,
 }: {
   state: AppState;
   onImport: (s: AppState) => void;
   onLoadDemo: () => void;
   onWipe: () => void;
   onRevokeConsent: () => void;
+  onOpenCloud: () => void;
 }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -239,6 +241,30 @@ export function SettingsScreen({
           </p>
         }
       />
+
+      <section
+        className="rise mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-pine-900 p-5 text-pine-100 shadow-lift"
+        style={{ animationDelay: '160ms' }}
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-pine-800 text-moss-300">
+          <IconCloud size={22} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-base font-bold text-white">Nuvem & servidor</h2>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-pine-200">
+            {state.cloud.mode === 'off' ? (
+              'Modo local ativo. Conecte ao servidor (demonstração ou oficial) para acessar os prontuários em outros dispositivos.'
+            ) : state.cloud.mode === 'demo' ? (
+              <>Conectado ao <strong className="text-moss-300">servidor de demonstração</strong> como {state.cloud.userName}.</>
+            ) : (
+              <>Conectado a <strong className="text-moss-300">{state.cloud.baseUrl}</strong> como {state.cloud.userName}.</>
+            )}
+          </p>
+        </div>
+        <Btn variant="outline" className="border-pine-700 bg-pine-850 text-pine-100 hover:border-moss-400 hover:bg-pine-800 hover:text-moss-300" onClick={onOpenCloud}>
+          <IconCloud size={15} /> Abrir Nuvem
+        </Btn>
+      </section>
 
       <p className="rise mt-6 px-1 pb-4 font-mono text-[11px] text-mute" style={{ animationDelay: '180ms' }}>
         Vitalis v0.2.0 — contas & acesso delegado · consultor IA · especialidades · retenção sem exclusão
