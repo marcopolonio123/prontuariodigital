@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Doctor · Pacote para a Hostinger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --pine-950: #06110d; --pine-900: #0b1d17; --pine-850: #0e231c; --pine-800: #123027;
+      --pine-700: #1a4233; --pine-200: #b9ccc0; --pine-100: #d7e3da;
+      --moss-300: #7fc1a0; --moss-400: #4aa37b; --moss-500: #268760; --moss-600: #0f6e4e; --moss-700: #0c5a40;
+      --warn-500: #d3921f; --danger-500: #c74a3c; --line: #1e3a2f;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      background: var(--pine-950);
+      color: var(--pine-100);
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image: radial-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1.4px);
+      background-size: 22px 22px;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .5;
+      background-image: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.015) 0 1px, transparent 1px 4px);
+    }
+    .wrap { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 22px 60px; }
+
+    /* ---------- topo: ECG + marca ---------- */
+    .top { display: flex; align-items: center; gap: 14px; padding: 22px 0 10px; }
+    .logo { width: 34px; height: 34px; color: var(--moss-300); flex-shrink: 0; }
+    .brand { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 20px; color: #fff; letter-spacing: -.02em; }
+    .brand small { display: block; font-family: 'IBM Plex Mono', monospace; font-weight: 400; font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--pine-200); opacity: .6; margin-top: 2px; }
+    .ecg-line { flex: 1; height: 34px; color: var(--moss-400); opacity: .85; }
+    .ecg-line path { stroke-dasharray: 96 544; animation: ecgsweep 3.4s linear infinite; }
+    @keyframes ecgsweep { from { stroke-dashoffset: 640; } to { stroke-dashoffset: 0; } }
+
+    /* ---------- cabeçalho ---------- */
+    .hero { margin: 34px 0 26px; animation: rise .5s cubic-bezier(.22,1,.36,1) both; }
+    .eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--moss-300); }
+    h1 { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; color: #fff; font-size: clamp(28px, 4.6vw, 46px); letter-spacing: -.025em; line-height: 1.05; margin: 12px 0 14px; max-width: 640px; }
+    h1 em { font-style: normal; color: var(--moss-300); }
+    .hero p { max-width: 620px; font-size: 15px; line-height: 1.65; color: var(--pine-200); }
+
+    /* ---------- grade principal ---------- */
+    .grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 5fr) minmax(0, 4fr); }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--pine-900); border: 1px solid var(--line); border-radius: 14px;
+      padding: 22px; animation: rise .55s cubic-bezier(.22,1,.36,1) both;
+    }
+    .card.delay1 { animation-delay: .08s; }
+    .card.delay2 { animation-delay: .14s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+    /* ---------- ação de download ---------- */
+    .btn-download {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px;
+      background: var(--moss-600); color: #fff; border: none; cursor: pointer;
+      font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px;
+      padding: 18px 20px; border-radius: 12px; transition: all .18s ease;
+      box-shadow: 0 10px 30px -12px rgb(38 135 96 / .55);
+    }
+    .btn-download:hover:not(:disabled) { background: var(--moss-700); transform: translateY(-2px); }
+    .btn-download:active:not(:disabled) { transform: scale(.98); }
+    .btn-download:disabled { opacity: .55; cursor: wait; }
+    .btn-download svg { flex-shrink: 0; }
+    .spin { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status { margin-top: 14px; font-size: 13.5px; line-height: 1.6; color: var(--pine-200); min-height: 22px; }
+    .status.ok { color: var(--moss-300); }
+    .status.err { color: var(--danger-500); }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .chip { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--pine-200); background: var(--pine-850); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; }
+    .chip b { color: var(--moss-300); font-weight: 600; }
+
+    .howto { margin-top: 20px; border-top: 1px dashed var(--line); padding-top: 18px; }
+    .howto h3 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; color: #fff; margin-bottom: 12px; }
+    .step { display: flex; gap: 12px; padding: 9px 0; }
+    .step + .step { border-top: 1px solid rgb(255 255 255 / .04); }
+    .step-n {
+      flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; margin-top: 1px;
+      background: var(--moss-600); color: #fff; font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+    }
+    .step p { font-size: 13.5px; line-height: 1.6; color: var(--pine-200); }
+    .step p b { color: #fff; font-weight: 600; }
+    .step code { font-family: 'IBM Plex Mono', monospace; font-size: 12px; background: var(--pine-850); border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 6px; color: var(--moss-300); }
+
+    /* ---------- manifesto do ZIP ---------- */
+    .manifest-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .manifest-head h2 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; color: #fff; }
+    .manifest-head span { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--pine-200); }
+    .progress { height: 3px; border-radius: 3px; background: var(--pine-850); overflow: hidden; margin-bottom: 14px; }
+    .progress i { display: block; height: 100%; width: 0; background: var(--moss-500); border-radius: 3px; transition: width .3s ease; }
+    ul.files { list-style: none; }
+    ul.files li {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 0 -10px;
+      border-radius: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+      transition: background .15s ease;
+    }
+    ul.files li:hover { background: var(--pine-850); }
+    ul.files li a { color: var(--pine-100); text-decoration: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    ul.files li a:hover { color: var(--moss-300); }
+    ul.files li .sz { color: var(--pine-200); opacity: .6; font-size: 11px; flex-shrink: 0; }
+    ul.files li .st { width: 15px; text-align: center; flex-shrink: 0; font-weight: 600; color: var(--pine-200); opacity: .4; }
+    ul.files li.done .st { color: var(--moss-400); opacity: 1; }
+    ul.files li.fail .st { color: var(--danger-500); opacity: 1; }
+    .manifest-note { margin-top: 12px; font-size: 11.5px; line-height: 1.6; color: var(--pine-200); opacity: .7; }
+
+    /* ---------- nota final ---------- */
+    .footer-note { margin-top: 18px; font-size: 12px; line-height: 1.65; color: var(--pine-200); opacity: .75; animation: rise .55s .2s cubic-bezier(.22,1,.36,1) both; }
+    .footer-note code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--moss-300); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2.4l7.6 2.9v6.1c0 5.1-3.2 8.6-7.6 10.2C7.6 20 4.4 16.5 4.4 11.4V5.3L12 2.4z" fill="currentColor" fill-opacity=".16"/>
+      <path d="M6.8 11.6h2.4l1.2-2.5 2.1 5 1.2-2.5h3.5"/>
+    </svg>
+    <div class="brand">My Doctor<small>mydoctor.med.br</small></div>
+    <svg class="ecg-line" viewBox="0 0 320 40" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 20h40l6-8 8 16 6-12 6 6 8-2h30l5-6 10 14 5-8 5 2h35l6-9 9 17 6-11 5 5 9-2h34l5-7 10 15 6-9 5 3h30l6-8 8 15 6-10 5 4 8-1h30"
+            fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <header class="hero">
+    <p class="eyebrow">pacote de publicação · pronto para a hostinger</p>
+    <h1>Baixe o site do <em>My Doctor</em> empacotado para subir</h1>
+    <p>
+      Este botão monta, direto no seu navegador, o arquivo <b>mydoctor-site.zip</b> com tudo o que o
+      site precisa para rodar na Hostinger: página, código, ícone, configuração de segurança
+      (<code style="font-family:'IBM Plex Mono',monospace;font-size:13px">.htaccess</code>) e as instruções de instalação.
+      Nenhum dado seu é enviado a lugar nenhum — o ZIP é gerado localmente.
+    </p>
+  </header>
+
+  <div class="grid">
+    <!-- coluna de ação -->
+    <section class="card">
+      <button id="btnDownload" class="btn-download">
+        <svg id="iconDl" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        <span id="btnLabel">Baixar mydoctor-site.zip</span>
+      </button>
+      <p id="status" class="status">Clique para empacotar e baixar o site completo.</p>
+      <div class="meta">
+        <span class="chip">versão <b>v0.2.0</b></span>
+        <span class="chip">arquivos <b id="fileCount">—</b></span>
+        <span class="chip">tamanho <b id="totalSize">—</b></span>
+        <span class="chip">pwa <b>instalável + offline</b></span>
+      </div>
+
+      <div class="howto">
+        <h3>Depois de baixar — na Hostinger</h3>
+        <div class="step"><span class="step-n">1</span><p>hPanel → <b>Websites → Gerenciar</b> (mydoctor.med.br) → <b>Arquivos → Gerenciador de Arquivos</b> → abra a pasta <code>public_html</code>.</p></div>
+        <div class="step"><span class="step-n">2</span><p>Apague o <code>default.php</code> / <code>index.html</code> de exemplo da Hostinger, se existir. Ative <b>“mostrar arquivos ocultos”</b> na engrenagem.</p></div>
+        <div class="step"><span class="step-n">3</span><p>Clique em <b>Enviar arquivos</b>, escolha o <code>mydoctor-site.zip</code> e depois clique com o botão direito nele → <b>Extrair</b> (extraia <i>para dentro</i> de public_html).</p></div>
+        <div class="step"><span class="step-n">4</span><p><b>Segurança → SSL → Instalar SSL</b> (grátis). Espere alguns minutos e acesse <code>https://mydoctor.med.br</code> — deve abrir com o cadeado 🔒.</p></div>
+      </div>
+    </section>
+
+    <!-- manifesto -->
+    <section class="card delay1">
+      <div class="manifest-head">
+        <h2>Conteúdo do ZIP</h2>
+        <span id="doneCount">0 / 0</span>
+      </div>
+      <div class="progress"><i id="progressBar"></i></div>
+      <ul class="files" id="fileList"></ul>
+      <p class="manifest-note">
+        Cada linha é um arquivo real do site publicado — você pode clicar para abri-lo.
+        O <b>.htaccess</b> e o <b>LEIA-ME</b> já viajam embutidos no pacote.
+      </p>
+    </section>
+  </div>
+
+  <p class="footer-note">
+    ⚠️ Este ZIP publica o <b>site</b> (fase 1). O servidor com banco de dados (pasta <code>server/</code>)
+    e o APK para as lojas são fases seguintes — os guias estão em <code>HOSTINGER.md</code>,
+    <code>server/README.md</code> e <code>APK.md</code> no projeto. Enquanto isso, o site publicado
+    funciona completo em <b>modo local</b> e com o servidor de demonstração embutido.
+  </p>
+</div>
+
+<!-- conteúdo embutido: .htaccess (não é servido pelo preview) -->
+<script type="text/plain" id="embedHtaccess">
+# ============================================================
+#  MY DOCTOR — Configuração de produção (Hostinger / LiteSpeed)
+#  Segurança (HTTPS + headers), Performance (cache + gzip)
+# ============================================================
+
+# 1) HTTPS OBRIGATÓRIO (ative o SSL grátis no hPanel antes)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# 2) HEADERS DE SEGURANÇA
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+  Header always unset X-Powered-By
+</IfModule>
+ServerSignature Off
+
+# 3) COMPRESSÃO
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json application/xml application/manifest+json image/svg+xml font/woff font/woff2
+</IfModule>
+
+# 4) CACHE
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+  <FilesMatch "\.html$">
+    <IfModule mod_headers.c>
+      Header set Cache-Control "no-cache, must-revalidate"
+    </IfModule>
+  </FilesMatch>
+  <FilesMatch "\.(js|css|woff2?|ttf|eot|otf)$">
+    <IfModule mod_headers.c>
+      Header set Cache-Control "public, max-age=31536000, immutable"
+    </IfModule>
+  </FilesMatch>
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType application/manifest+json "access plus 1 day"
+</IfModule>
+
+# 5) MIME
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+  AddType text/css .css
+  AddType application/manifest+json .webmanifest
+  AddType image/svg+xml .svg
+  AddType font/woff2 .woff2
+</IfModule>
+
+# 6) PROTEÇÃO
+Options -Indexes
+<FilesMatch "^\.|\.(env|log|ini|sql|bak|old|fla|psd|ai)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>
+</script>
+
+<script type="text/plain" id="embedReadme">
+MY DOCTOR (mydoctor.med.br) — INSTALAÇÃO NA HOSTINGER
+======================================================
+
+O que é este arquivo ZIP
+------------------------
+Ele contém o site COMPLETO já compilado para produção. Basta colocar o
+conteúdo na raiz do seu domínio.
+
+INSTALAÇÃO (5 minutos)
+----------------------
+1. hPanel > Websites > Gerenciar (mydoctor.med.br)
+2. Arquivos > Gerenciador de Arquivos > pasta "public_html"
+3. Apague o default.php / index.html de exemplo da Hostinger (se houver)
+4. Envie este ZIP para dentro de public_html
+5. Botão direito no ZIP > Extrair (para dentro de public_html)
+6. Ative "mostrar arquivos ocultos" e CONFIRME que o arquivo .htaccess
+   está lá (ele configura HTTPS, segurança e cache)
+7. Segurança > SSL > Instalar SSL (grátis) > aguarde alguns minutos
+8. Teste: https://mydoctor.med.br deve abrir com o cadeado
+
+CONTEÚDO
+--------
+index.html            página do app
+assets/               código compilado (JS + CSS)
+.htaccess             HTTPS obrigatório + headers de segurança + cache
+manifest.webmanifest  PWA (botão "Instalar app")
+sw.js                 funcionamento offline
+icons/                ícone do app
+portraits/            retratos de demonstração
+
+DEPOIS
+------
+- O site funciona em MODO LOCAL (dados no navegador de cada usuário).
+- Para contas na nuvem + banco de dados, suba a pasta "server/" num VPS
+  (guia: HOSTINGER.md e server/README.md).
+- Para o APK (Google Play) e iOS (App Store), siga APK.md.
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var fileList = $('fileList'), status = $('status'), btn = $('btnDownload'),
+      btnLabel = $('btnLabel'), iconDl = $('iconDl'), bar = $('progressBar'),
+      doneCount = $('doneCount'), totalSize = $('totalSize'), fileCount = $('fileCount');
+
+  var STATIC = ['index.html', 'manifest.webmanifest', 'sw.js', 'icons/icon.svg',
+                'portraits/ana.svg', 'portraits/carlos.svg'];
+
+  function fmt(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(2) + ' MB';
+  }
+
+  // descobre os assets com hash lendo o index.html publicado
+  function discoverAssets() {
+    return fetch('index.html', { cache: 'no-store' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var found = [];
+        var re = /assets\/[A-Za-z0-9._-]+\.(?:js|css)/g, m;
+        while ((m = re.exec(html)) !== null) {
+          if (found.indexOf(m[0]) === -1) found.push(m[0]);
+        }
+        return found.length ? found : ['assets/index-D1pn5q96.js', 'assets/index-DzuAvlYQ.css'];
+      })
+      .catch(function () { return ['assets/index-D1pn5q96.js', 'assets/index-DzuAvlYQ.css']; });
+  }
+
+  function renderRows(paths) {
+    fileList.innerHTML = '';
+    paths.concat(['.htaccess', 'LEIA-ME-instalacao.txt']).forEach(function (p) {
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.textContent = p; a.href = p; a.target = '_blank'; a.rel = 'noopener';
+      if (p === '.htaccess' || p === 'LEIA-ME-instalacao.txt') {
+        a.removeAttribute('href'); a.style.opacity = '.65';
+        a.title = 'embutido no pacote';
+      }
+      var st = document.createElement('span'); st.className = 'st'; st.textContent = '·';
+      var sz = document.createElement('span'); sz.className = 'sz'; sz.textContent = '—';
+      li.appendChild(st); li.appendChild(a); li.appendChild(sz);
+      li.dataset.path = p;
+      fileList.appendChild(li);
+    });
+    fileCount.textContent = paths.length + 2;
+    doneCount.textContent = '0 / ' + (paths.length + 2);
+  }
+
+  function rowFor(path) { return fileList.querySelector('li[data-path="' + path + '"]'); }
+  function markRow(path, ok, size) {
+    var li = rowFor(path); if (!li) return;
+    li.classList.add(ok ? 'done' : 'fail');
+    li.querySelector('.st').textContent = ok ? '✓' : '✗';
+    if (size !== undefined) li.querySelector('.sz').textContent = fmt(size);
+  }
+
+  discoverAssets().then(function (assets) {
+    var all = STATIC.slice();
+    assets.forEach(function (a) { all.push(a); });
+    renderRows(all);
+    window.__paths = all;
+  });
+
+  btn.addEventListener('click', function () {
+    if (typeof JSZip === 'undefined') {
+      status.className = 'status err';
+      status.textContent = 'O empacotador (JSZip) não carregou — verifique sua conexão com a internet e recarregue a página.';
+      return;
+    }
+    var paths = window.__paths || STATIC;
+    var zip = new JSZip();
+    var total = paths.length + 2, done = 0, bytes = 0, failed = [];
+
+    btn.disabled = true;
+    btnLabel.textContent = 'Empacotando…';
+    iconDl.outerHTML = '<svg id="iconDl" class="spin" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-opacity=".3"/><path d="M21 12a9 9 0 0 0-9-9"/></svg>';
+    status.className = 'status';
+    status.textContent = 'Coletando os arquivos publicados…';
+
+    function progress(label) {
+      done++;
+      doneCount.textContent = done + ' / ' + total;
+      bar.style.width = Math.round((done / total) * 100) + '%';
+      status.textContent = label;
+    }
+
+    var chain = Promise.resolve();
+    paths.forEach(function (p) {
+      chain = chain.then(function () {
+        return fetch(p, { cache: 'no-store' }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        }).then(function (blob) {
+          zip.file(p, blob);
+          bytes += blob.size;
+          markRow(p, true, blob.size);
+        }).catch(function () {
+          failed.push(p);
+          markRow(p, false);
+        }).then(function () { progress('Coletando… (' + done + '/' + total + ')'); });
+      });
+    });
+
+    chain.then(function () {
+      // embutidos
+      var ht = document.getElementById('embedHtaccess').textContent.replace(/^\n/, '');
+      var rm = document.getElementById('embedReadme').textContent.replace(/^\n/, '');
+      zip.file('.htaccess', ht); markRow('.htaccess', true, ht.length);
+      bytes += ht.length; progress('Adicionando .htaccess…');
+      zip.file('LEIA-ME-instalacao.txt', rm); markRow('LEIA-ME-instalacao.txt', true, rm.length);
+      bytes += rm.length; progress('Finalizando…');
+
+      totalSize.textContent = fmt(bytes);
+      return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    }).then(function (blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'mydoctor-site.zip';
+      document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+
+      status.className = 'status ok';
+      if (failed.length) {
+        status.textContent = 'ZIP baixado, mas ' + failed.length + ' arquivo(s) falharam: ' + failed.join(', ') + '. Me avise!';
+      } else {
+        status.textContent = '✓ Download iniciado! Agora siga os 4 passos ao lado para subir na Hostinger.';
+      }
+      btn.disabled = false;
+      btnLabel.textContent = 'Baixar novamente';
+      document.getElementById('iconDl').outerHTML = '<svg id="iconDl" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>';
+    }).catch(function (err) {
+      status.className = 'status err';
+      status.textContent = 'Falha ao gerar o ZIP: ' + err.message;
+      btn.disabled = false;
+      btnLabel.textContent = 'Tentar novamente';
+    });
+  });
+})();
+</script>
+</body>
+</html>
