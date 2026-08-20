@@ -50,3 +50,9 @@ public/    arquivos estáticos (PWA, ícones, retratos demo)
 server/    API Node/Express + Prisma (PostgreSQL/MySQL)
 dist/      build de produção (enviado à hospedagem)
 ```
+
+---
+
+## 📝 Changelog
+
+- **v0.2.0** — projeto vinculado ao repositório `mydoctor.med.br` no GitHub.
