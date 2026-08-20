@@ -1,120 +1,77 @@
-# Publicar o Vitalis na Hostinger — com HTTPS, segurança e LGPD
+# Publicar o Vitalis na Hostinger — passo a passo
 
-Este guia coloca o app em produção no seu domínio Hostinger com **criptografia HTTPS
-obrigatória**, headers de segurança, cache de performance e o fluxo de consentimento LGPD
-já embutido no app.
+## Precisa de banco de dados?
+
+**Não.** O Vitalis é um app web (PWA) com arquitetura *local-first*: os dados ficam no
+`localStorage` do navegador de cada usuário e nunca transitam pelo servidor. A Hostinger
+só entrega os arquivos — qualquer plano de hospedagem compartilhada serve.
+
+Isso é também a base da conformidade **LGPD**: não há coleta centralizada de dados de saúde.
 
 ---
 
-## 1. Gerar o pacote de produção
-
-No seu computador (na pasta do projeto):
+## Passo 1 — Gerar o pacote (no seu computador)
 
 ```bash
-npm install
-npm run build
+npm install     # primeira vez
+npm run build   # gera a pasta dist/
 ```
 
-Isso cria a pasta **`dist/`** com o site pronto (HTML, JS e CSS otimizados e minificados).
-O arquivo `public/.htaccess` já foi copiado automaticamente para dentro de `dist/` — ele é
-quem aplica HTTPS, segurança e cache no servidor.
+Conteúdo de `dist/`: `index.html`, `assets/`, `.htaccess`, `manifest.webmanifest`, `sw.js`, `icons/`.
 
-> O Vitalis é um site **100% estático** (sem backend). Isso significa que a Hostinger só
-> precisa servir arquivos — qualquer plano (inclusive o Single Web Hosting) funciona.
+## Passo 2 — Enviar para a Hostinger
 
----
+1. hPanel → **Websites → Gerenciar** → **Arquivos → Gerenciador de Arquivos**
+2. Abra `public_html` e apague o `default.php`/`index.html` de exemplo
+3. Envie **todo o conteúdo de `dist/`** (ative "mostrar arquivos ocultos" para ver o `.htaccess`)
 
-## 2. Ativar o SSL (HTTPS) na Hostinger — faça isso ANTES do upload
+Alternativa: FTP (FileZilla) na porta 21, usuário da conta FTP do hPanel.
 
-1. Acesse o **hPanel** → seu domínio → **Segurança** → **SSL**.
-2. Clique em **Instalar SSL** (gratuito, Let's Encrypt) e aguarde a emissão (alguns minutos).
-3. Confirme que o status ficou **Ativo**.
+## Passo 3 — Ativar HTTPS (obrigatório)
 
-> Sem o SSL ativo, o redirecionamento HTTPS do `.htaccess` pode causar erro de certificado.
-> Por isso instale o SSL primeiro.
+1. hPanel → **Segurança → SSL → Instalar SSL** (Let's Encrypt gratuito, domínio + www)
+2. Aguarde a emissão (minutos) e confirme o cadeado em `https://seudominio.com.br`
 
----
+Sem HTTPS a câmera, o ditado por voz e a **instalação do app** não funcionam.
+O `.htaccess` já força HTTPS + HSTS e redireciona `http://` e `www`.
 
-## 3. Enviar os arquivos para o servidor
+## Passo 4 — Testar
 
-**Opção A — Gerenciador de Arquivos (mais simples):**
-
-1. hPanel → **Arquivos** → **Gerenciador de Arquivos**.
-2. Entre na pasta **`public_html`**.
-3. Se houver um arquivo `default.php` ou `index.html` padrão da Hostinger, **apague-o**.
-4. Faça **upload de todo o conteúdo de `dist/`** (não a pasta `dist` em si, mas o que está
-   dentro dela: `index.html`, `assets/`, `.htaccess`, `portraits/`, etc.).
-5. Marque a opção de **mostrar arquivos ocultos** para garantir que o `.htaccess` subiu.
-
-**Opção B — FTP (FileZilla, para pacotes grandes):**
-
-- Host: o FTP que o hPanel mostra em **Arquivos → Contas FTP**
-- Suba o conteúdo de `dist/` dentro de `/public_html/`
+1. Acesse `https://seudominio.com.br`
+2. No **Chrome/Edge desktop**: ícone de instalação na barra de endereço → "Instalar Vitalis"
+3. No **Android (Chrome)**: menu ⋮ → "Instalar app"
+4. No **iPhone (Safari)**: Compartilhar → "Adicionar à Tela de Início"
+5. Abra pelo ícone: o app roda em tela cheia (sem barra do navegador)
+6. Desligue a internet e recarregue: o app abre **offline** (service worker)
+7. Recarregue online: sessão e dados persistem
 
 ---
 
-## 4. O que o `.htaccess` já garante (não precisa configurar nada)
+## O que já vem de fábrica (segurança + LGPD + performance)
 
-O arquivo `public/.htaccess` incluído no build aplica automaticamente na Hostinger:
+**Servidor (`.htaccess`):** HTTPS obrigatório · HSTS 1 ano · CSP anti-XSS ·
+`X-Frame-Options: DENY` · `X-Content-Type-Options` · `Referrer-Policy` ·
+Brotli/Gzip · cache de 1 ano para assets com hash.
 
-| Camada | O que faz |
-|---|---|
-| **HTTPS obrigatório** | Redireciona todo `http://` para `https://` (301) |
-| **HSTS** | Navegador só aceita HTTPS por 1 ano (`Strict-Transport-Security`) |
-| **CSP** | Política de Conteúdo: bloqueia scripts/origens não autorizadas |
-| **Anti-clickjacking** | `X-Frame-Options: DENY` |
-| **Anti MIME-sniffing** | `X-Content-Type-Options: nosniff` |
-| **Referrer restrito** | Não vaza URLs em cabeçalhos de referência |
-| **Permissions-Policy** | Câmera/microfone só com gesto do usuário; geolocalização bloqueada |
-| **Compressão** | gzip/deflate para texto, JS, CSS, SVG e fontes |
-| **Cache inteligente** | HTML sempre fresco; assets com hash em cache imutável de 1 ano |
-| **Proteção** | Bloqueia `.git`, `node_modules`, `src`, `.env`, listagem de diretórios |
+**App (PWA):** instalável · offline · ícone e splash próprios · banner "sem conexão" ·
+detecção de modo standalone.
+
+**App (LGPD):** consentimento com data/hora do aceite · dados 100% no dispositivo ·
+direitos do titular (exportar, revogar consentimento, **eliminar tudo**) ·
+auditoria de quem consulta cada ficha · arquivamento reversível (nada é excluído por engano).
 
 ---
 
-## 5. Conformidade LGPD — o que o app já faz
+## Observações
 
-O Vitalis foi desenhado com **privacidade por arquitetura** (LGPD, art. 46):
-
-- **Dados 100% locais**: fichas, retratos, biometria e prontuários ficam no navegador do
-  titular (`localStorage`). **Nenhum servidor recebe dados pessoais** — nem os seus.
-- **Consentimento explícito**: na primeira visita, um aviso LGPD exige o aceite do titular
-  antes do uso, com os direitos do art. 18 em linguagem simples.
-- **Direitos do titular** (tela *Dados & privacidade*):
-  - *Acesso & portabilidade* → exportação completa em JSON;
-  - *Correção* → edição de fichas e registros;
-  - *Eliminação* → apagamento definitivo da base local;
-  - *Revogação* → retirada do consentimento.
-- **Minimização**: biometria é armazenada como *template/assinatura* (64 bits), nunca como
-  imagem bruta do rosto ou do dedo.
-- **HTTPS**: criptografia em trânsito garantida pelo `.htaccess` + SSL da Hostinger.
-
-> **Importante — limite do MVP:** como os dados vivem no navegador de cada usuário, o
-> controlador (você) não centraliza dados pessoais em servidor. Se no futuro houver
-> sincronização em nuvem ou multiusuário real, será preciso: política de privacidade
-> publicada, registro das operações de tratamento (art. 37), e eventual encarregado (DPO).
-
----
-
-## 6. Checklist de verificação pós-publicação
-
-- [ ] `https://seudominio.com` abre o Vitalis (cadeado de SSL no navegador)
-- [ ] `http://seudominio.com` redireciona sozinho para `https://`
-- [ ] O aviso de consentimento LGPD aparece na primeira visita
-- [ ] Em [securityheaders.com](https://securityheaders.com), seu domínio tira nota **A ou A+**
-- [ ] Em [pagespeed.web.dev](https://pagespeed.web.dev), o desempenho mobile fica verde
-- [ ] Carregar dados de exemplo → identificar → exportar backup funciona
-
----
-
-## 7. Atualizar o site no futuro
-
-Sempre que mudar o código:
-
-```bash
-npm run build
-```
-
-e repita o **passo 3** (substitua o conteúdo de `public_html` pelo novo `dist/`).
-Como os assets têm hash no nome e o HTML não tem cache, os usuários recebem a versão nova
-imediatamente, sem precisar limpar nada.
+- **Subpasta** (`dominio.com/vitalis`): ajuste `base: '/vitalis/'` no `vite.config.js` e
+  `start_url`/`scope` no `manifest.webmanifest`. Em domínio próprio (recomendado) não precisa.
+- **Ícone PNG opcional**: o manifest usa SVG (Chrome aceita). Para o ícone nativo do
+  Android/iOS, gere um PNG 512×512 e salve em `public/icons/icon-512.png` (e 192 em
+  `icon-192.png`) — o manifest já os referencia e o upgrade é automático.
+- **Atualizações**: `npm run build` → reenvie o conteúdo de `dist/`. Os nomes com hash
+  invalidam o cache automaticamente.
+- **Multiusuário com servidor (fase 2)**: login central, banco de dados e sincronização
+  entre dispositivos exigem backend (ex.: Supabase/PostgreSQL) e análise LGPD adicional
+  (RIPD/DPO), pois os dados de saúde passariam a residir no servidor. O MVP evita isso
+  por arquitetura — é uma decisão de privacidade, não uma limitação técnica.

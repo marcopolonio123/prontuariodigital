@@ -4,8 +4,8 @@ import { accessiblePatients, emptyState, loadState, saveState, seedDemoState } f
 import { ageFromBirth } from './lib/biometrics';
 import { Avatar, Btn, Ecg, Modal, ToastProvider, useToast } from './components/ui';
 import {
-  IconBrain, IconChart, IconChevronRight, IconFace, IconFileText, IconGear, IconLogout,
-  IconMapPin, IconMegaphone, IconUsers, LogoMark,
+  IconBrain, IconChart, IconCheck, IconChevronRight, IconDownload, IconFace, IconFileText,
+  IconGear, IconLogout, IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
 import { LgpdConsent } from './components/LgpdConsent';
@@ -152,6 +152,11 @@ const NAV: Array<{ key: 'patients' | 'consultor' | 'settings' | 'missing'; label
   { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
 ];
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+};
+
 function Shell() {
   const toast = useToast();
   const [state, setState] = useState<AppState>(() => loadState());
@@ -160,6 +165,72 @@ function Shell() {
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [recordMenuOpen, setRecordMenuOpen] = useState(false);
+
+  /* ------------------------- PWA: instalar & offline ------------------------ */
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [installEvt, setInstallEvt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [appInstalled, setAppInstalled] = useState(
+    () => window.matchMedia('(display-mode: standalone)').matches,
+  );
+  const [installHelp, setInstallHelp] = useState(false);
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvt(e as BeforeInstallPromptEvent);
+    };
+    const onInstalled = () => {
+      setAppInstalled(true);
+      setInstallEvt(null);
+      toast('success', 'Vitalis instalado! Agora ele abre como app, pelo ícone na tela inicial.');
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, [toast]);
+
+  const doInstall = async () => {
+    if (installEvt) {
+      await installEvt.prompt();
+      const choice = await installEvt.userChoice;
+      if (choice.outcome === 'accepted') setInstallEvt(null);
+    } else {
+      setInstallHelp(true);
+    }
+  };
+
+  const installButton = (compact: boolean) => {
+    if (appInstalled) {
+      return compact ? null : (
+        <p className="flex items-center gap-2 rounded-lg border border-pine-700 bg-pine-850 px-3.5 py-2.5 text-xs font-semibold text-pine-200">
+          <IconCheck size={14} className="text-moss-300" /> App instalado neste dispositivo
+        </p>
+      );
+    }
+    return (
+      <button
+        onClick={() => void doInstall()}
+        className={`flex items-center justify-center gap-2 rounded-lg border border-moss-500/35 bg-moss-500/10 font-semibold text-moss-300 transition-all hover:border-moss-400 hover:bg-moss-500/20 hover:text-moss-200 active:scale-[0.98] ${
+          compact ? 'px-2.5 py-1.5 text-[11px]' : 'w-full px-3.5 py-2.5 text-sm'
+        }`}
+      >
+        <IconDownload size={compact ? 13 : 16} />
+        {compact ? 'Instalar' : 'Instalar app'}
+        {!compact && (
+          <span className="ml-auto font-mono text-[10px] uppercase tracking-widest opacity-70">PWA</span>
+        )}
+      </button>
+    );
+  };
 
   useEffect(() => {
     if (!saveState(state)) {
@@ -375,6 +446,8 @@ function Shell() {
           </button>
         </div>
 
+        <div className="px-3 pb-4">{installButton(false)}</div>
+
         <div className="border-t border-pine-800 px-4 pb-4 pt-4">
           <div className="mb-3 flex items-center gap-2.5">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pine-800 font-display text-sm font-bold text-moss-300">
@@ -396,6 +469,12 @@ function Shell() {
       </aside>
 
       <div className="min-w-0 flex-1">
+        {!online && (
+          <div className="flex items-center gap-2.5 border-b border-warn-500/40 bg-warn-500 px-4 py-2 text-[13px] font-semibold text-white">
+            <span className="blink-dot h-2 w-2 rounded-full bg-white" />
+            Sem conexão — o Vitalis continua funcionando offline com os dados deste dispositivo.
+          </div>
+        )}
         <header className="sticky top-0 z-40 border-b border-pine-800 bg-pine-900 lg:hidden">
           <div className="flex items-center gap-2.5 px-4 pt-3">
             <span className="text-moss-300"><LogoMark size={26} /></span>
@@ -406,6 +485,15 @@ function Shell() {
             >
               <IconFileText size={13} /> Testar
             </button>
+            {!appInstalled && (
+              <button
+                onClick={() => void doInstall()}
+                className="flex items-center gap-1.5 rounded-lg border border-moss-500/35 bg-moss-500/10 px-2.5 py-1.5 text-[11px] font-bold text-moss-300 transition-all hover:bg-moss-500/20 active:scale-95"
+              >
+                <IconDownload size={13} />
+                Instalar
+              </button>
+            )}
             <button onClick={logout} className="rounded-md p-1.5 text-pine-200 hover:text-white" aria-label="Sair">
               <IconLogout size={16} />
             </button>
@@ -500,6 +588,41 @@ function Shell() {
 
       <DemoGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
       {consentBanner}
+
+      <Modal
+        open={installHelp}
+        onClose={() => setInstallHelp(false)}
+        title="Instalar o Vitalis"
+        subtitle="O app abre em tela cheia, com ícone próprio e funciona offline."
+      >
+        <ul className="space-y-3 text-sm leading-relaxed text-mute">
+          <li className="flex gap-2.5">
+            <span className="mt-0.5 shrink-0 rounded-md bg-moss-100 p-1.5 font-mono text-xs font-bold text-moss-700">Android</span>
+            <span>
+              No <strong className="text-ink">Chrome</strong>: menu <strong className="text-ink">⋮</strong> →
+              “Instalar app” (ou “Adicionar à tela inicial”).
+            </span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="mt-0.5 shrink-0 rounded-md bg-moss-100 p-1.5 font-mono text-xs font-bold text-moss-700">iPhone</span>
+            <span>
+              No <strong className="text-ink">Safari</strong>: botão <strong className="text-ink">Compartilhar</strong> →
+              “Adicionar à Tela de Início”.
+            </span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="mt-0.5 shrink-0 rounded-md bg-moss-100 p-1.5 font-mono text-xs font-bold text-moss-700">Desktop</span>
+            <span>
+              No <strong className="text-ink">Chrome/Edge</strong>: ícone de instalação na barra de endereço
+              (lado direito) ou menu → “Instalar Vitalis”.
+            </span>
+          </li>
+        </ul>
+        <p className="mt-4 rounded-lg bg-paper px-3 py-2.5 text-xs leading-relaxed text-mute">
+          A instalação exige <strong className="text-ink">HTTPS</strong> — já garantido pelo SSL da Hostinger.
+          Depois de instalado, o Vitalis abre sem a barra do navegador e continua funcionando sem internet.
+        </p>
+      </Modal>
     </div>
   );
 }
