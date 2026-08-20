@@ -107,7 +107,7 @@ export function LoginScreen({
           <div className="flex items-center gap-3">
             <span className="text-moss-300"><LogoMark size={34} /></span>
             <div>
-              <p className="font-display text-2xl font-bold leading-none text-white">Vitalis</p>
+              <p className="font-display text-2xl font-bold leading-none text-white">Minha Vida</p>
               <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-pine-200/70">prontuário vitalício</p>
             </div>
           </div>
@@ -140,14 +140,14 @@ export function LoginScreen({
           <div className="mb-6 flex items-center gap-3 lg:hidden">
             <span className="text-moss-600"><LogoMark size={30} /></span>
             <div>
-              <p className="font-display text-xl font-bold leading-none text-ink">Vitalis</p>
+              <p className="font-display text-xl font-bold leading-none text-ink">Minha Vida</p>
               <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-mute">prontuário vitalício</p>
             </div>
           </div>
 
           {!hasAccounts ? (
             <div className="rise rounded-xl border border-line bg-card p-6 shadow-lift">
-              <h2 className="font-display text-2xl font-bold text-ink">Bem-vinda(o) ao Vitalis</h2>
+              <h2 className="font-display text-2xl font-bold text-ink">Bem-vinda(o) ao Minha Vida</h2>
               <p className="mt-2 text-sm leading-relaxed text-mute">
                 Para começar, carregue os dados de demonstração (3 pessoas, contas e uma rede de avisos) ou crie a sua
                 primeira conta.

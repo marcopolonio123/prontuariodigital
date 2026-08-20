@@ -121,10 +121,10 @@ export function CloudScreen({
     <div>
       <header className="rise mb-6">
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">servidor & sincronização</p>
-        <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Nuvem Vitalis</h1>
+        <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Nuvem Minha Vida</h1>
         <p className="mt-1.5 max-w-2xl text-sm text-mute">
           Conecte o app ao servidor web com banco de dados para acessar seus prontuários em qualquer dispositivo,
-          com contas individuais e auditoria central. Sem conexão, o Vitalis segue funcionando 100% local.
+          com contas individuais e auditoria central. Sem conexão, o Minha Vida segue funcionando 100% local.
         </p>
       </header>
 
@@ -161,7 +161,7 @@ export function CloudScreen({
             <div className="flex items-center gap-2.5">
               <span className="rounded-lg bg-pine-900 p-2 text-moss-300"><IconServer size={18} /></span>
               <div>
-                <h2 className="font-display text-lg font-bold text-ink">Servidor Vitalis oficial</h2>
+                <h2 className="font-display text-lg font-bold text-ink">Servidor Minha Vida oficial</h2>
                 <p className="text-xs text-mute">API Node + banco de dados · veja o guia HOSTINGER.md</p>
               </div>
             </div>

@@ -2,7 +2,7 @@ import type { Patient } from './types';
 import { ageFromBirth } from './biometrics';
 
 export const DISCLAIMER =
-  'O Consultor Vitalis é um apoio informativo que cruza seus sintomas com o prontuário e com referências públicas. Ele NÃO substitui avaliação profissional: sempre procure um médico ou especialista antes de se medicar. Em sinais de gravidade, procure uma emergência imediatamente.';
+  'O Consultor Minha Vida é um apoio informativo que cruza seus sintomas com o prontuário e com referências públicas. Ele NÃO substitui avaliação profissional: sempre procure um médico ou especialista antes de se medicar. Em sinais de gravidade, procure uma emergência imediatamente.';
 
 export interface MedOption {
   name: string;

@@ -1,6 +1,6 @@
 {
-  "appId": "com.vitalis.app",
-  "appName": "Vitalis",
+  "appId": "br.med.minhavida",
+  "appName": "Minha Vida",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

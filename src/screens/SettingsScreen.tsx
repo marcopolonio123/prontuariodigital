@@ -73,7 +73,7 @@ export function SettingsScreen({
             <IconDownload size={18} className="text-moss-600" /> Backup & portabilidade
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Leve todo o Vitalis para outro dispositivo ou entregue o histórico a um médico em um único arquivo JSON.
+            Leve todo o Minha Vida para outro dispositivo ou entregue o histórico a um médico em um único arquivo JSON.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Btn onClick={doExport}>
@@ -140,7 +140,7 @@ export function SettingsScreen({
             <IconArchive size={18} className="text-moss-600" /> Retenção de dados — nada é excluído
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Por decisão de produto, o Vitalis <strong className="text-ink">não permite excluir dados de saúde</strong>:
+            Por decisão de produto, o Minha Vida <strong className="text-ink">não permite excluir dados de saúde</strong>:
             pessoas e registros são apenas <strong className="text-ink">arquivados</strong> (saem das listas e da
             identificação, mas permanecem íntegros e podem ser restaurados). Para levar os dados a um médico, use a
             exportação JSON ou o compartilhamento por especialidade, disponíveis em cada prontuário.
@@ -175,7 +175,7 @@ export function SettingsScreen({
           </div>
 
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">
-            O Vitalis trata <strong className="text-ink">dados pessoais sensíveis de saúde</strong> (LGPD, art. 5º, II)
+            O Minha Vida trata <strong className="text-ink">dados pessoais sensíveis de saúde</strong> (LGPD, art. 5º, II)
             exclusivamente <strong className="text-ink">neste dispositivo</strong>. Você mantém o controle total — os
             direitos abaixo podem ser exercidos a qualquer momento, sem burocracia:
           </p>
@@ -267,7 +267,7 @@ export function SettingsScreen({
       </section>
 
       <p className="rise mt-6 px-1 pb-4 font-mono text-[11px] text-mute" style={{ animationDelay: '180ms' }}>
-        Vitalis v0.2.0 — contas & acesso delegado · consultor IA · especialidades · retenção sem exclusão
+        Minha Vida v0.2.0 (minhavida.med.br) — contas & acesso delegado · consultor IA · especialidades · retenção sem exclusão
       </p>
     </div>
   );

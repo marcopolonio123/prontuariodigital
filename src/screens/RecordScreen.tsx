@@ -713,7 +713,7 @@ export function RecordScreen({
       <aside className="rise mt-8 flex items-start gap-3 rounded-xl border border-info-500/25 bg-info-100/50 px-4 py-3.5 text-[13px] leading-relaxed text-info-600" style={{ animationDelay: '160ms' }}>
         <IconInfo size={17} className="mt-0.5 shrink-0" />
         <p>
-          Esta linha do tempo é o <strong>embrião do prontuário vitalício</strong> — o objetivo principal do Vitalis.
+          Esta linha do tempo é o <strong>embrião do prontuário vitalício</strong> — o objetivo principal do Minha Vida.
           Cada registro pode levar <strong>prescrição médica</strong> (descritiva ou receita anexada) e{' '}
           <strong>exames solicitados</strong> (descritivo ou pedidos anexados). Arquivar nunca apaga dados; use
           Compartilhar/Exportar para levar o histórico a um médico, filtrando por especialidade.

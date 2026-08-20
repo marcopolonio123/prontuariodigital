@@ -49,7 +49,7 @@ function AssistantCard({ msg, firstName }: { msg: ChatMsg; firstName: string }) 
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pine-900 text-moss-300">
           <IconBrain size={17} />
         </span>
-        <p className="font-display text-sm font-bold text-ink">Consultor Vitalis</p>
+        <p className="font-display text-sm font-bold text-ink">Consultor Minha Vida</p>
         <span className="ml-auto rounded-md bg-warn-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warn-600">
           apoio informativo
         </span>
@@ -218,7 +218,7 @@ export function ConsultantScreen({
       <div>
         <header className="rise mb-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-moss-700">consultor ia</p>
-          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Consultor Vitalis</h1>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">Consultor Minha Vida</h1>
           <p className="mt-1.5 max-w-2xl text-sm text-mute">
             Disponível para qualquer pessoa com acesso. Escolha o prontuário que será analisado —{' '}
             <strong className="text-ink">o seu ou um delegado</strong> (filho, pai, curador…). Cada resposta cruza o
@@ -297,7 +297,7 @@ export function ConsultantScreen({
           <IconBrain size={22} />
         </span>
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">Consultor Vitalis</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">Consultor Minha Vida</h1>
           <p className="text-[13px] text-mute">
             Analisando o prontuário de{' '}
             <strong className="text-ink">
