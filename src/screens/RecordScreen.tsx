@@ -356,7 +356,7 @@ export function RecordScreen({
     const list = sorted.filter((e) => !e.archived && (specFilter === 'all' || e.specialty === specFilter));
     const atts = list.reduce((s, e) => s + (e.prescription?.attachments.length ?? 0) + (e.exams?.attachments.length ?? 0), 0);
     const payload = {
-      app: 'vitalis',
+      app: 'mydoctor',
       patient: { record: patient.record, name: patient.name, primarySpecialty: patient.primarySpecialty },
       specialtyFilter: specFilter === 'all' ? 'todas' : specFilter,
       exportedAt: new Date().toISOString(),
@@ -366,7 +366,7 @@ export function RecordScreen({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `vitalis-${patient.record}-${specFilter === 'all' ? 'completo' : specFilter.toLowerCase().replace(/\s+/g, '-')}.json`;
+    a.download = `mydoctor-${patient.record}-${specFilter === 'all' ? 'completo' : specFilter.toLowerCase().replace(/\s+/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast('success', `${list.length} registro(s) exportado(s)${atts > 0 ? `, com ${atts} anexo(s)` : ''}.`);
@@ -713,7 +713,7 @@ export function RecordScreen({
       <aside className="rise mt-8 flex items-start gap-3 rounded-xl border border-info-500/25 bg-info-100/50 px-4 py-3.5 text-[13px] leading-relaxed text-info-600" style={{ animationDelay: '160ms' }}>
         <IconInfo size={17} className="mt-0.5 shrink-0" />
         <p>
-          Esta linha do tempo é o <strong>embrião do prontuário vitalício</strong> — o objetivo principal do Minha Vida.
+          Esta linha do tempo é o <strong>embrião do prontuário vitalício</strong> — o objetivo principal do My Doctor.
           Cada registro pode levar <strong>prescrição médica</strong> (descritiva ou receita anexada) e{' '}
           <strong>exames solicitados</strong> (descritivo ou pedidos anexados). Arquivar nunca apaga dados; use
           Compartilhar/Exportar para levar o histórico a um médico, filtrando por especialidade.

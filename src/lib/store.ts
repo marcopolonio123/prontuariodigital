@@ -346,7 +346,7 @@ function seedPatients(): Patient[] {
         since: iso(1).slice(0, 10),
         situation: 'internacao',
         location: 'Hospital São Lucas — Emergência, leito 12',
-        notes: 'Admitido após acidente de trânsito. Sedado, sem condições de se identificar. Reconhecido pelo app Minha Vida; equipe acionou a rede de avisos.',
+        notes: 'Admitido após acidente de trânsito. Sedado, sem condições de se identificar. Reconhecido pelo app My Doctor; equipe acionou a rede de avisos.',
         history: [
           { id: uid(), at: daysAgo(1), kind: 'emergency', text: 'Emergência registrada pelo serviço social do hospital.' },
           { id: uid(), at: daysAgo(1) + 3_600_000, kind: 'notified', text: 'Avisos enviados via app para: Rafael Menezes.' },
@@ -513,7 +513,7 @@ export function grantFor(state: AppState, accountId: string, patientId: string):
 }
 
 export function exportJSON(state: AppState): string {
-  return JSON.stringify({ app: 'vitalis', exportedAt: new Date().toISOString(), state }, null, 2);
+  return JSON.stringify({ app: 'mydoctor', exportedAt: new Date().toISOString(), state }, null, 2);
 }
 
 export function parseImport(text: string): AppState | null {

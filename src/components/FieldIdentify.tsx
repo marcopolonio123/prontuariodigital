@@ -323,7 +323,7 @@ export function FieldIdentifyModal({
         <div className="rise mt-4 rounded-xl border border-line bg-paper/70 p-5 text-center">
           <p className="font-display text-base font-bold text-ink">Ninguém na base corresponde</p>
           <p className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-mute">
-            Esta pessoa ainda não está no cadastro do Minha Vida. Você pode cadastrá-la agora (com o retrato capturado)
+            Esta pessoa ainda não está no cadastro do My Doctor. Você pode cadastrá-la agora (com o retrato capturado)
             para que a rede de avisos exista na próxima vez.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">

@@ -137,7 +137,7 @@ const DEMO_SCENARIOS = [
 
 function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Modal open={open} onClose={onClose} title="Roteiro de demonstração" subtitle={`${DEMO_SCENARIOS.length} cenários para testar o Minha Vida de ponta a ponta.`} width="max-w-2xl">
+    <Modal open={open} onClose={onClose} title="Roteiro de demonstração" subtitle={`${DEMO_SCENARIOS.length} cenários para testar o My Doctor de ponta a ponta.`} width="max-w-2xl">
       <ol className="space-y-4">
         {DEMO_SCENARIOS.map((s, i) => (
           <li key={s.title} className="rounded-xl border border-line bg-paper/60 p-4">
@@ -209,7 +209,7 @@ function Shell() {
     const onInstalled = () => {
       setAppInstalled(true);
       setInstallEvt(null);
-      toast('success', 'Minha Vida instalado! Agora ele abre como app, pelo ícone na tela inicial.');
+      toast('success', 'My Doctor instalado! Agora ele abre como app, pelo ícone na tela inicial.');
     };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -320,7 +320,7 @@ function Shell() {
   /* --------------------------- LGPD (consentimento) --------------------------- */
   const acceptConsent = () => {
     setState((s) => ({ ...s, lgpdConsentedAt: Date.now() }));
-    toast('success', 'Consentimento de privacidade registrado. Bem-vindo(a) ao Minha Vida!');
+    toast('success', 'Consentimento de privacidade registrado. Bem-vindo(a) ao My Doctor!');
   };
   const revokeConsent = () => {
     setState((s) => ({ ...s, lgpdConsentedAt: null }));
@@ -453,7 +453,7 @@ function Shell() {
         <div className="flex items-center gap-3 px-5 pb-6 pt-7">
           <span className="text-moss-300"><LogoMark size={34} /></span>
           <div>
-            <p className="font-display text-[22px] font-bold leading-none tracking-tight text-white">Minha Vida</p>
+            <p className="font-display text-[22px] font-bold leading-none tracking-tight text-white">My Doctor</p>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-pine-200/70">prontuário vitalício</p>
           </div>
         </div>
@@ -514,13 +514,13 @@ function Shell() {
         {!online && (
           <div className="flex items-center gap-2.5 border-b border-warn-500/40 bg-warn-500 px-4 py-2 text-[13px] font-semibold text-white">
             <span className="blink-dot h-2 w-2 rounded-full bg-white" />
-            Sem conexão — o Minha Vida continua funcionando offline com os dados deste dispositivo.
+            Sem conexão — o My Doctor continua funcionando offline com os dados deste dispositivo.
           </div>
         )}
         <header className="sticky top-0 z-40 border-b border-pine-800 bg-pine-900 lg:hidden">
           <div className="flex items-center gap-2.5 px-4 pt-3">
             <span className="text-moss-300"><LogoMark size={26} /></span>
-            <p className="font-display text-lg font-bold leading-none text-white">Minha Vida</p>
+            <p className="font-display text-lg font-bold leading-none text-white">My Doctor</p>
             <button
               onClick={() => setGuideOpen(true)}
               className="ml-auto flex items-center gap-1.5 rounded-lg border border-moss-500/35 bg-moss-500/10 px-2.5 py-1.5 text-[11px] font-bold text-moss-300 transition-all hover:bg-moss-500/20 active:scale-95"
@@ -654,7 +654,7 @@ function Shell() {
       <Modal
         open={installHelp}
         onClose={() => setInstallHelp(false)}
-        title="Instalar o Minha Vida"
+        title="Instalar o My Doctor"
         subtitle="O app abre em tela cheia, com ícone próprio e funciona offline."
       >
         <ul className="space-y-3 text-sm leading-relaxed text-mute">
@@ -676,13 +676,13 @@ function Shell() {
             <span className="mt-0.5 shrink-0 rounded-md bg-moss-100 p-1.5 font-mono text-xs font-bold text-moss-700">Desktop</span>
             <span>
               No <strong className="text-ink">Chrome/Edge</strong>: ícone de instalação na barra de endereço
-              (lado direito) ou menu → “Instalar Minha Vida”.
+              (lado direito) ou menu → “Instalar My Doctor”.
             </span>
           </li>
         </ul>
         <p className="mt-4 rounded-lg bg-paper px-3 py-2.5 text-xs leading-relaxed text-mute">
           A instalação exige <strong className="text-ink">HTTPS</strong> — já garantido pelo SSL da Hostinger.
-          Depois de instalado, o Minha Vida abre sem a barra do navegador e continua funcionando sem internet.
+          Depois de instalado, o My Doctor abre sem a barra do navegador e continua funcionando sem internet.
         </p>
       </Modal>
     </div>
@@ -697,7 +697,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[MinhaVida] erro de runtime:', error, info.componentStack);
+    console.error('[MyDoctor] erro de runtime:', error, info.componentStack);
   }
 
   render() {
@@ -705,7 +705,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
       return (
         <div className="flex min-h-screen items-center justify-center bg-paper p-6">
           <div className="w-full max-w-lg rounded-xl border border-danger-500/40 bg-card p-6 shadow-float">
-            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-danger-600">vitalis · falha na interface</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-danger-600">my doctor · falha na interface</p>
             <h1 className="mt-2 font-display text-2xl font-bold text-ink">Algo impediu a execução</h1>
             <p className="mt-2 text-sm leading-relaxed text-mute">
               O app encontrou um erro ao iniciar. O detalhe técnico abaixo ajuda no diagnóstico — seus dados locais
@@ -721,7 +721,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
               }}
               className="mt-4 inline-flex items-center gap-2 rounded-lg bg-moss-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-moss-700 active:scale-[0.97]"
             >
-              Recarregar o Minha Vida
+              Recarregar o My Doctor
             </button>
           </div>
         </div>

@@ -1,5 +1,5 @@
-/* Minha Vida — service worker: app shell offline + cache de assets */
-const CACHE = 'minhavida-v1';
+/* My Doctor — service worker: app shell offline + cache de assets */
+const CACHE = 'mydoctor-v1';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon.svg'];
 
 self.addEventListener('install', (event) => {

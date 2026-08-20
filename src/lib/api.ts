@@ -2,7 +2,7 @@ import type { CloudState, CloudUser, IdEvent, Patient } from './types';
 import { newRecordNumber } from './store';
 
 /* ------------------------------------------------------------------ */
-/* Contrato da API Vitalis — implementado pelo servidor real           */
+/* Contrato da API My Doctor — implementado pelo servidor real         */
 /* (server/src/index.ts) e pelo servidor de demonstração embutido.     */
 /* ------------------------------------------------------------------ */
 

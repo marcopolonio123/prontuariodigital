@@ -457,7 +457,7 @@ export function PublicUtilityScreen({
             Central de proteção à vida: <strong className="text-ink">pessoas desaparecidas</strong> e{' '}
             <strong className="text-ink">pessoas em situação de emergência/vulnerabilidade</strong> (acidentes, internações
             sem contato, encontradas desorientadas, vulnerabilidade social ou vítimas de violência). Ao identificar alguém
-            na base, o Minha Vida dispara o alerta e a rede de avisos.
+            na base, o My Doctor dispara o alerta e a rede de avisos.
           </p>
         </div>
         <Btn variant="dark" size="lg" onClick={() => setFieldOpen(true)} title={hasPeople ? undefined : 'Cadastre pessoas primeiro'}>
@@ -640,7 +640,7 @@ export function PublicUtilityScreen({
                             <a
                               href={waLink(
                                 primary.phone,
-                                `Olá ${primary.name.split(' ')[0]}! Alerta do app Minha Vida: ${p.name} está sendo procurada (desaparecida desde ${formatDateBR(p.missing.since)}). Qualquer informação, responda por aqui.`,
+                                `Olá ${primary.name.split(' ')[0]}! Alerta do app My Doctor: ${p.name} está sendo procurada (desaparecida desde ${formatDateBR(p.missing.since)}). Qualquer informação, responda por aqui.`,
                               )}
                               target="_blank"
                               rel="noreferrer"

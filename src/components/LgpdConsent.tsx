@@ -4,7 +4,7 @@ import { IconChevronRight, IconShield } from './icons';
 
 /**
  * Aviso de privacidade (LGPD — Lei 13.709/2018).
- * Como o Minha Vida trata dados pessoais sensíveis de saúde (art. 5º, II),
+ * Como o My Doctor trata dados pessoais sensíveis de saúde (art. 5º, II),
  * o titular deve ciência inequívoca antes de começar a usar o app.
  */
 export function LgpdConsent({ onAccept }: { onAccept: () => void }) {
@@ -25,7 +25,7 @@ export function LgpdConsent({ onAccept }: { onAccept: () => void }) {
 
         <div className="px-4 py-3.5 sm:px-5">
           <p className="text-[13px] leading-relaxed text-pine-100">
-            O Minha Vida processa <strong className="text-white">dados pessoais sensíveis de saúde</strong> (alergias,
+            O My Doctor processa <strong className="text-white">dados pessoais sensíveis de saúde</strong> (alergias,
             medicações, diagnóstico, biometria). Tudo fica <strong className="text-white">somente no seu dispositivo</strong>{' '}
             — nada é enviado a servidores — e a comunicação com o site é protegida por{' '}
             <strong className="text-white">criptografia HTTPS</strong>.

@@ -1,5 +1,5 @@
 /**
- * Minha Vida — API do portal
+ * My Doctor — API do portal
  * Node + Express + Prisma. Implementa EXATAMENTE o contrato de src/lib/api.ts no app.
  */
 import cors from 'cors';
@@ -43,7 +43,7 @@ const fail = (res: Response, status: number, error: string) => res.status(status
 /* ------------------------------- saúde ---------------------------------- */
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, version: '1.0.0', engine: 'minhavida-server (Node + Prisma)' });
+  res.json({ ok: true, version: '1.0.0', engine: 'mydoctor-server (Node + Prisma)' });
 });
 
 /* ---------------------------- autenticação ------------------------------ */
@@ -224,5 +224,5 @@ app.post('/api/log', auth, async (req: AuthedRequest, res: Response) => {
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`Minha Vida API ouvindo na porta ${PORT} — saúde em /api/health`);
+  console.log(`My Doctor API ouvindo na porta ${PORT} — saúde em /api/health`);
 });

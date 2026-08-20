@@ -3,7 +3,7 @@
 A tela **Sinais vitais** monitora FC, pressão (PAS/PAD), SpO₂, temperatura, glicemia,
 frequência respiratória e peso, e grava o histórico **no prontuário da pessoa logada ou
 delegada** (filho cuidando do pai com Alzheimer, pai/mãe cuidando da criança, curador etc.) —
-exatamente o mesmo modelo de autorização do restante do Vitalis.
+exatamente o mesmo modelo de autorização do restante do My Doctor.
 
 ## Fontes de leitura (provedores)
 

@@ -1,6 +1,6 @@
 {
-  "appId": "br.med.minhavida",
-  "appName": "Minha Vida",
+  "appId": "br.med.mydoctor",
+  "appName": "My Doctor",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

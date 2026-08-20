@@ -240,7 +240,7 @@ export function emergencyAlertText(
   location: string,
 ): string {
   const lines = [
-    `URGENTE — Alerta do app Minha Vida: ${personName}${age !== null ? ` (${age} anos)` : ''} está em situação de emergência/vulnerabilidade (${situationLabel})${location ? ` — ${location}` : ''}.`,
+    `URGENTE — Alerta do app My Doctor: ${personName}${age !== null ? ` (${age} anos)` : ''} está em situação de emergência/vulnerabilidade (${situationLabel})${location ? ` — ${location}` : ''}.`,
     'Por favor, entre em contato com urgência ou responda para confirmar o recebimento.',
   ];
   return lines.join('\n');
@@ -248,7 +248,7 @@ export function emergencyAlertText(
 
 export function foundPersonAlertText(personName: string, age: number | null, location: string): string {
   const lines = [
-    `Olá! Alerta do app Minha Vida: ${personName}${age !== null ? ` (${age} anos)` : ''} acabou de ser ENCONTRADA e identificada pelo app${location ? ` — ${location}` : ''}.`,
+    `Olá! Alerta do app My Doctor: ${personName}${age !== null ? ` (${age} anos)` : ''} acabou de ser ENCONTRADA e identificada pelo app${location ? ` — ${location}` : ''}.`,
     'Por favor, responda com urgência para confirmar o recebimento e combinar os próximos passos.',
   ];
   return lines.join('\n');
@@ -256,7 +256,7 @@ export function foundPersonAlertText(personName: string, age: number | null, loc
 
 export function missingAlertText(personName: string, age: number | null, lastPlace: string): string {
   const lines = [
-    `Olá! Alerta do app Minha Vida: ${personName}${age !== null ? ` (${age} anos)` : ''} foi localizada agora há pouco, identificada pelo app.`,
+    `Olá! Alerta do app My Doctor: ${personName}${age !== null ? ` (${age} anos)` : ''} foi localizada agora há pouco, identificada pelo app.`,
     lastPlace ? `Último local conhecido antes do desaparecimento: ${lastPlace}.` : '',
     'Por favor, responda para confirmar o recebimento deste aviso.',
   ];

@@ -1,4 +1,4 @@
-# Vitalis Server — API + banco de dados
+# My Doctor Server — API + banco de dados
 
 API Node/Express + Prisma que implementa o contrato de `src/lib/api.ts` do app.
 O app (web ou APK) aponta para esta API na tela **Nuvem & servidor**.
@@ -34,24 +34,24 @@ No app: Nuvem & servidor → Servidor real → `http://localhost:8787` (localhos
 3. **PostgreSQL**:
    ```bash
    sudo apt update && sudo apt install -y postgresql
-   sudo -u postgres psql -c "CREATE USER vitalis WITH PASSWORD 'senha-forte';"
-   sudo -u postgres psql -c "CREATE DATABASE vitalis OWNER vitalis;"
+   sudo -u postgres psql -c "CREATE USER mydoctor WITH PASSWORD 'senha-forte';"
+   sudo -u postgres psql -c "CREATE DATABASE mydoctor OWNER mydoctor;"
    ```
 4. **Suba a pasta `server/`** (via Git ou SFTP) e:
    ```bash
    cd server
-   cp .env.example .env   # DATABASE_URL=postgresql://vitalis:senha-forte@localhost:5432/vitalis
+   cp .env.example .env   # DATABASE_URL=postgresql://mydoctor:senha-forte@localhost:5432/mydoctor
    npm install && npm run build
    npx prisma migrate deploy
-   npm install -g pm2 && pm2 start dist/index.js --name vitalis-api && pm2 save && pm2 startup
+   npm install -g pm2 && pm2 start dist/index.js --name mydoctor-api && pm2 save && pm2 startup
    ```
 5. **HTTPS + proxy reverso** (Nginx + Let's Encrypt):
    ```bash
    sudo apt install -y nginx certbot python3-certbot-nginx
-   # /etc/nginx/sites-available/vitalis-api:
+   # /etc/nginx/sites-available/mydoctor-api:
    #   server { server_name api.seudominio.com;
    #     location / { proxy_pass http://127.0.0.1:8787; proxy_set_header Host $host; } }
-   sudo ln -s /etc/nginx/sites-available/vitalis-api /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/mydoctor-api /etc/nginx/sites-enabled/
    sudo certbot --nginx -d api.seudominio.com
    ```
 6. **No app**: Nuvem & servidor → Servidor real → `https://api.seudominio.com` → criar conta → sincronizar.

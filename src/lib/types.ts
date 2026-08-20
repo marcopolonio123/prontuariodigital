@@ -314,7 +314,7 @@ export interface AppState {
   session: Session | null;
   /** Momento em que o titular aceitou o aviso de privacidade (LGPD). null = ainda não aceitou. */
   lgpdConsentedAt: number | null;
-  /** Conexão com o servidor Vitalis (nuvem). Modo 'off' = app 100% local. */
+  /** Conexão com o servidor My Doctor (nuvem). Modo 'off' = app 100% local. */
   cloud: CloudState;
 }
 

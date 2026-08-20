@@ -1,4 +1,4 @@
-# Publicar o Vitalis — ordem recomendada (site → banco → servidor → app → APK)
+# Publicar o My Doctor (mydoctor.med.br) — ordem recomendada (site → banco → servidor → app → APK)
 
 Este guia responde "o que subir primeiro". Resumo executivo:
 
@@ -53,7 +53,7 @@ O `.htaccess` já redireciona http→https e www→domínio (301) e ativa HSTS p
 
 ## FASE 2 — Banco de dados
 
-O Vitalis usa **PostgreSQL** (padrão) ou **MySQL**. Três caminhos, do mais simples ao mais integrado:
+O My Doctor usa **PostgreSQL** (padrão) ou **MySQL**. Três caminhos, do mais simples ao mais integrado:
 
 ### Opção A — Neon ou Supabase (PostgreSQL gerenciado, camada grátis) ⭐ mais rápida
 
@@ -67,10 +67,10 @@ O Vitalis usa **PostgreSQL** (padrão) ou **MySQL**. Três caminhos, do mais sim
 2. Via SSH:
    ```bash
    sudo apt update && sudo apt install -y postgresql
-   sudo -u postgres psql -c "CREATE USER vitalis WITH PASSWORD 'senha-forte-aqui';"
-   sudo -u postgres psql -c "CREATE DATABASE vitalis OWNER vitalis;"
+   sudo -u postgres psql -c "CREATE USER mydoctor WITH PASSWORD 'senha-forte-aqui';"
+   sudo -u postgres psql -c "CREATE DATABASE mydoctor OWNER mydoctor;"
    ```
-3. Sua `DATABASE_URL` será `postgresql://vitalis:senha-forte-aqui@localhost:5432/vitalis`
+3. Sua `DATABASE_URL` será `postgresql://mydoctor:senha-forte-aqui@localhost:5432/mydoctor`
 
 ### Opção C — MySQL da Hostinger
 
@@ -101,7 +101,7 @@ npm run build                    # compila TypeScript → dist/
 
 # manter no ar
 npm install -g pm2
-pm2 start dist/index.js --name vitalis-api
+pm2 start dist/index.js --name mydoctor-api
 pm2 save && pm2 startup          # segue rodando após reboot
 ```
 
@@ -111,7 +111,7 @@ pm2 save && pm2 startup          # segue rodando após reboot
 sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Crie `/etc/nginx/sites-available/vitalis-api`:
+Crie `/etc/nginx/sites-available/mydoctor-api`:
 
 ```nginx
 server {
@@ -126,7 +126,7 @@ server {
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/vitalis-api /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/mydoctor-api /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d api.seudominio.com
 ```
@@ -142,7 +142,7 @@ start: `node dist/index.js`; variáveis: `DATABASE_URL` (Neon) e `JWT_SECRET`.
 
 ```bash
 curl https://api.seudominio.com/api/health
-# → {"ok":true,"version":"1.0.0","engine":"vitalis-server (Node + Prisma)"}
+# → {"ok":true,"version":"1.0.0","engine":"mydoctor-server (Node + Prisma)"}
 ```
 
 ---
@@ -194,5 +194,5 @@ npx cap open android        # Android Studio → Build → Generate Signed App B
 
 - **Portal**: `npm run build` → reenvie o conteúdo de `dist/` (cache invalida sozinho)
 - **Servidor**: `git pull` no VPS → `npm install` → `npx prisma migrate deploy` →
-  `npm run build` → `pm2 restart vitalis-api`
+  `npm run build` → `pm2 restart mydoctor-api`
 - **APK**: `npm run build && npx cap sync` → nova versão assinada nas lojas

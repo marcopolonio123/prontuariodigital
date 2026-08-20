@@ -1,4 +1,4 @@
-# Vitalis nas lojas — APK (Google Play) e iOS (App Store)
+# My Doctor nas lojas — APK (Google Play) e iOS (App Store)
 
 O app web vira app nativo com **Capacitor**: o mesmo código (este repositório) é
 empacotado para Android e iOS, apontando para o mesmo servidor da pasta `server/`.
@@ -54,7 +54,7 @@ npm run build && npx cap sync    # depois gere nova versão assinada nas lojas
 
 ```
  ┌──────────────┐   HTTPS    ┌───────────────────────┐   SQL    ┌──────────────┐
- │ App (APK/iOS)│◄──────────►│ Vitalis Server (Node) │◄────────►│  PostgreSQL  │
+ │ App (APK/iOS)│◄──────────►│ My Doctor Server (Node) │◄───────►│  PostgreSQL  │
  └──────────────┘            └───────────────────────┘          └──────────────┘
  ┌──────────────┐   HTTPS              ▲
  │ Portal (web) │◄─────────────────────┘   ← mesmo servidor, mesma base
