@@ -227,6 +227,11 @@ function getSpeechCtor(): (new () => SpeechRecognitionLike) | null {
     null;
 }
 
+const SPEECH_FAIL_HINT =
+  'Ditado indisponível aqui: o reconhecimento de voz do navegador precisa de HTTPS, permissão de microfone e acesso ao serviço de voz — algo que este ambiente de preview bloqueia. Abra o app fora do preview (npm run dev ou domínio próprio) no Chrome/Edge que funciona.';
+
+type BubbleTone = 'live' | 'error' | 'ok';
+
 /** Botão de microfone: dita o texto falado e o anexa ao campo via onAppend. */
 export function MicButton({
   onAppend,
@@ -240,11 +245,22 @@ export function MicButton({
   const toast = useToast();
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState('');
+  const [bubble, setBubble] = useState<{ text: string; tone: BubbleTone } | null>(null);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const intentRef = useRef(false); // usuário quer continuar ditando
   const restartsRef = useRef(0);
+  const gotResultRef = useRef(false); // já captou algum áudio?
+  const bubbleTimerRef = useRef<number | null>(null);
   const appendRef = useRef(onAppend);
   appendRef.current = onAppend;
+
+  const showBubble = useCallback((text: string, tone: BubbleTone) => {
+    setBubble({ text, tone });
+    if (bubbleTimerRef.current) window.clearTimeout(bubbleTimerRef.current);
+    if (tone !== 'live') {
+      bubbleTimerRef.current = window.setTimeout(() => setBubble(null), 8000);
+    }
+  }, []);
 
   const teardown = useCallback(() => {
     intentRef.current = false;
@@ -261,6 +277,7 @@ export function MicButton({
   useEffect(() => {
     return () => {
       intentRef.current = false;
+      if (bubbleTimerRef.current) window.clearTimeout(bubbleTimerRef.current);
       try {
         recRef.current?.abort();
       } catch {
@@ -276,7 +293,17 @@ export function MicButton({
     rec.lang = 'pt-BR';
     rec.continuous = true;
     rec.interimResults = true; // transcrição ao vivo = feedback imediato
+
+    const fail = (msg: string) => {
+      intentRef.current = false;
+      setListening(false);
+      setInterim('');
+      showBubble(msg, 'error');
+      toast('error', msg);
+    };
+
     rec.onresult = (e) => {
+      gotResultRef.current = true; // áudio está chegando de verdade
       let finalText = '';
       let interimText = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -293,29 +320,34 @@ export function MicButton({
     rec.onerror = (e) => {
       const code = e?.error ?? '';
       if (code === 'not-allowed' || code === 'service-not-allowed') {
-        intentRef.current = false;
-        toast('error', 'Permissão de microfone negada — libere o acesso na barra de endereço do navegador.');
+        fail('Permissão de microfone negada — libere o acesso na barra de endereço do navegador.');
       } else if (code === 'network') {
-        intentRef.current = false;
-        toast('error', 'Falha de rede no serviço de voz — o reconhecimento usa os servidores do Google; verifique a conexão.');
+        fail('Falha de rede no serviço de voz do navegador (ele usa os servidores do Google). Verifique a conexão ou o bloqueio do ambiente.');
       } else if (code === 'audio-capture') {
-        intentRef.current = false;
-        toast('error', 'Nenhum microfone detectado no dispositivo.');
+        fail('Nenhum microfone detectado no dispositivo.');
       }
-      // 'no-speech' e 'aborted': o onend retoma automaticamente
+      // 'no-speech' e 'aborted': o onend decide se retoma ou explica
     };
     rec.onend = () => {
       recRef.current = null;
-      // O Chrome encerra a sessão após silêncio — retomamos enquanto o usuário quiser ditar
-      if (intentRef.current && restartsRef.current < 15) {
+      if (!intentRef.current) return; // encerrado pelo usuário
+      // O navegador encerra a sessão após silêncio/erro — retomamos algumas vezes
+      if (restartsRef.current < 3) {
         restartsRef.current += 1;
         window.setTimeout(() => {
           if (intentRef.current) startSession();
         }, 250);
+        return;
+      }
+      // Tentativas esgotadas: explicar em vez de sumir em silêncio
+      intentRef.current = false;
+      setListening(false);
+      setInterim('');
+      if (!gotResultRef.current) {
+        showBubble(SPEECH_FAIL_HINT, 'error');
+        toast('error', 'O ditado foi bloqueado pelo ambiente — veja o aviso no botão.');
       } else {
-        intentRef.current = false;
-        setInterim('');
-        setListening(false);
+        showBubble('Sessão de ditado encerrada. Clique em “ditar” para continuar.', 'ok');
       }
     };
     try {
@@ -326,7 +358,7 @@ export function MicButton({
       recRef.current = null;
       return false;
     }
-  }, [toast]);
+  }, [toast, showBubble]);
 
   const toggle = () => {
     if (listening) {
@@ -334,30 +366,50 @@ export function MicButton({
       return;
     }
     if (!getSpeechCtor()) {
-      toast('error', 'Reconhecimento de voz não é suportado neste navegador — use Chrome ou Edge (desktop ou Android).');
+      showBubble(SPEECH_FAIL_HINT, 'error');
+      toast('error', 'Reconhecimento de voz não é suportado neste navegador — use Chrome ou Edge.');
       return;
     }
     restartsRef.current = 0;
+    gotResultRef.current = false;
     intentRef.current = true;
     setListening(true);
+    showBubble('Conectando ao microfone…', 'live');
     if (!startSession()) {
       intentRef.current = false;
       setListening(false);
-      toast('error', 'Não foi possível iniciar o ditado — a página precisa estar em HTTPS (ou localhost) e fora de ambientes bloqueados.');
+      showBubble(SPEECH_FAIL_HINT, 'error');
+      toast('error', 'Não foi possível iniciar o ditado neste ambiente.');
     }
   };
 
+  const bubbleText = listening
+    ? interim
+      ? `${interim}…`
+      : 'escutando… fale agora — o texto entra no campo ao terminar a frase'
+    : bubble?.text ?? '';
+  const bubbleTone: BubbleTone = listening ? 'live' : bubble?.tone ?? 'live';
+  const showIt = listening || bubble !== null;
+
   return (
     <span className={`relative inline-flex ${className}`}>
-      {listening && (
-        <span className="toast-in absolute bottom-full right-0 z-30 mb-1.5 flex w-60 max-w-[72vw] items-start gap-2 rounded-lg border border-pine-700 bg-pine-900 px-3 py-2 shadow-float">
-          <span className="blink-dot mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-moss-400" />
-          <span className="min-w-0 text-[11px] leading-snug text-pine-100">
-            {interim ? (
-              <span className="line-clamp-2 italic">{interim}…</span>
-            ) : (
-              'escutando… fale agora — o texto entra no campo ao terminar a frase'
-            )}
+      {showIt && (
+        <span
+          className={`toast-in absolute bottom-full right-0 z-30 mb-1.5 flex w-64 max-w-[76vw] items-start gap-2 rounded-lg border px-3 py-2 shadow-float ${
+            bubbleTone === 'error'
+              ? 'border-danger-500/60 bg-danger-600'
+              : bubbleTone === 'ok'
+                ? 'border-moss-500/50 bg-moss-700'
+                : 'border-pine-700 bg-pine-900'
+          }`}
+        >
+          <span
+            className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+              bubbleTone === 'live' ? 'blink-dot bg-moss-400' : 'bg-white/80'
+            }`}
+          />
+          <span className={`min-w-0 text-[11px] leading-snug ${bubbleTone === 'live' ? 'text-pine-100' : 'text-white'}`}>
+            {bubbleTone === 'live' && interim ? <span className="italic">{bubbleText}</span> : bubbleText}
           </span>
         </span>
       )}
