@@ -314,14 +314,26 @@ function seedPatients(): Patient[] {
       vitals: [
         V('glucose', 96, 7, 'manual', 'jejum'),
         V('glucose', 152, 5, 'manual', 'pós-almoço'),
-        V('glucose', 118, 1, 'monitor'),
+        V('glucose', 118, 1, 'manual', 'antes do jantar'),
         V('weight', 68.4, 7, 'manual'),
-        V('heart', 78, 2, 'monitor'),
-        V('heart', 84, 1, 'monitor'),
-        V('systolic', 134, 1, 'monitor'),
-        V('diastolic', 86, 1, 'monitor'),
-        V('spo2', 96, 1, 'monitor'),
-        V('temp', 36.6, 1, 'monitor'),
+        // 5 capturas simultâneas (mesmo instante) — como uma sessão real de monitoramento;
+        // alimentam o gráfico de variação e a relação entre sinais
+        ...[
+          { h: 2.0, heart: 72, sys: 118, dia: 74, spo2: 97, temp: 36.3 },
+          { h: 1.5, heart: 76, sys: 122, dia: 76, spo2: 96, temp: 36.4 },
+          { h: 1.0, heart: 80, sys: 128, dia: 80, spo2: 96, temp: 36.5 },
+          { h: 0.5, heart: 84, sys: 132, dia: 82, spo2: 95, temp: 36.6 },
+          { h: 0.1, heart: 88, sys: 136, dia: 86, spo2: 95, temp: 36.7 },
+        ].flatMap((b) => {
+          const at = now - b.h * 3_600_000;
+          return [
+            { id: uid(), metric: 'heart' as const, value: b.heart, at, source: 'monitor' as const },
+            { id: uid(), metric: 'systolic' as const, value: b.sys, at, source: 'monitor' as const },
+            { id: uid(), metric: 'diastolic' as const, value: b.dia, at, source: 'monitor' as const },
+            { id: uid(), metric: 'spo2' as const, value: b.spo2, at, source: 'monitor' as const },
+            { id: uid(), metric: 'temp' as const, value: b.temp, at, source: 'monitor' as const },
+          ];
+        }),
       ],
       entries: [
         E({

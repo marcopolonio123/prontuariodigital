@@ -112,15 +112,16 @@ const DEMO_SCENARIOS = [
     expect: 'Leitura com qualidade calculada pela imobilidade do dedo.',
   },
   {
-    title: 'Sinais vitais (monitorar & gravar)',
+    title: 'Sinais vitais (monitorar, gráficos & relação)',
     badge: 'novo',
     steps: [
       'Abra “Sinais vitais” — o prontuário ativo é o da pessoa logada ou delegada (ex.: Marina monitorando a mãe).',
-      'Clique em “Iniciar” para uma sessão ao vivo (FC, pressão, SpO₂, temperatura) e deixe “gravar no histórico” ativo.',
-      'Pare a sessão; registre também uma medição manual (ex.: glicemia) e veja os cartões com sparkline e status (normal/atenção/crítico).',
-      'No APK, a mesma tela lê do Health Connect (Android) / HealthKit (iOS) — serviços gratuitos do sistema.',
+      'Clique em “Iniciar” para uma sessão ao vivo (FC, pressão, SpO₂, temperatura) e deixe “gravar no histórico” ativo; pare quando quiser.',
+      'Em “Variações por sinal”, clique num sinal (ou na aba dele) e veja o gráfico com faixa de normalidade, estatísticas e filtro 24h/7d/30d/tudo.',
+      'Em “Relação entre sinais”, compare dois sinais medidos na mesma captura (ex.: FC × Pressão) e veja o coeficiente de correlação.',
+      'O histórico abaixo mostra só o sinal escolhido — as últimas medições de todos os sinais continuam nos cartões ao lado.',
     ],
-    expect: 'Histórico de sinais vitais salvo no prontuário da pessoa autorizada, com alertas visuais de valores fora da faixa.',
+    expect: 'Monitoramento com data/hora, gráficos de variação por sinal, relação entre sinais e histórico otimizado — tudo no prontuário autorizado.',
   },
   {
     title: 'Nuvem & servidor (multiusuário)',

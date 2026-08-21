@@ -8,8 +8,9 @@ import {
 import { formatDateTime, timeAgo } from '../lib/biometrics';
 import { Avatar, Btn, EmptyState, Field, inputCls, Tag, useToast } from '../components/ui';
 import {
-  IconActivity, IconAlert, IconCheck, IconClock, IconHeartPulse, IconInfo, IconPlus, IconX,
+  IconActivity, IconAlert, IconCheck, IconChart, IconClock, IconHeartPulse, IconInfo, IconPlus, IconX,
 } from '../components/icons';
+import { VitalLineChart, ScatterCorrelation, pearson, interpretCorrelation } from '../components/charts';
 
 /* ------------------------------ sparkline ------------------------------ */
 
@@ -60,7 +61,10 @@ export function VitalsScreen({
   const [recording, setRecording] = useState(true);
   const [live, setLive] = useState<VitalSample[]>([]);
   const [pendingSave, setPendingSave] = useState<VitalSample[] | null>(null);
-  const [filter, setFilter] = useState<'all' | VitalMetric>('all');
+  const [selMetric, setSelMetric] = useState<VitalMetric | null>(null);
+  const [range, setRange] = useState<'24h' | '7d' | '30d' | 'all'>('7d');
+  const [corrA, setCorrA] = useState<VitalMetric>('heart');
+  const [corrB, setCorrB] = useState<VitalMetric>('systolic');
   const [mMetric, setMMetric] = useState<VitalMetric>('glucose');
   const [mValue, setMValue] = useState('');
   const [mNote, setMNote] = useState('');
@@ -138,7 +142,59 @@ export function VitalsScreen({
   const samples = patient?.vitals ?? [];
   const latest = useMemo(() => latestByMetric(samples), [samples]);
   const sorted = useMemo(() => [...samples].sort((a, b) => b.at - a.at), [samples]);
-  const visible = filter === 'all' ? sorted : sorted.filter((s) => s.metric === filter);
+
+  // sinais com dados — o usuário escolhe qual quer analisar
+  const metricsWithData = useMemo(
+    () => VITAL_METRICS.filter((m) => samples.some((s) => s.metric === m.key)),
+    [samples],
+  );
+  const activeMetric: VitalMetric | null =
+    selMetric ?? (metricsWithData.length > 0 ? sorted[0]?.metric ?? null : null);
+
+  const RANGE_MS: Record<'24h' | '7d' | '30d' | 'all', number> = {
+    '24h': 24 * 3_600_000,
+    '7d': 7 * 86_400_000,
+    '30d': 30 * 86_400_000,
+    all: Infinity,
+  };
+  const chartSamples = useMemo(() => {
+    if (!activeMetric) return [];
+    const cutoff = Date.now() - RANGE_MS[range];
+    return samples.filter((s) => s.metric === activeMetric && (range === 'all' || s.at >= cutoff));
+  }, [samples, activeMetric, range]);
+
+  const stats = useMemo(() => {
+    if (chartSamples.length === 0) return null;
+    const vals = chartSamples.map((s) => s.value);
+    return {
+      min: Math.min(...vals),
+      max: Math.max(...vals),
+      avg: vals.reduce((a, b) => a + b, 0) / vals.length,
+      count: vals.length,
+    };
+  }, [chartSamples]);
+
+  // histórico otimizado: mostra apenas o sinal escolhido
+  const visible = activeMetric ? sorted.filter((s) => s.metric === activeMetric) : [];
+
+  // pares de medições simultâneas (mesma captura) para correlação
+  const corrPoints = useMemo(() => {
+    const byAt = new Map<number, Partial<Record<VitalMetric, number>>>();
+    for (const s of samples) {
+      const bucket = byAt.get(s.at) ?? {};
+      bucket[s.metric] = s.value;
+      byAt.set(s.at, bucket);
+    }
+    const pts: Array<{ a: number; b: number; at: number }> = [];
+    for (const [at, bucket] of byAt) {
+      const va = bucket[corrA];
+      const vb = bucket[corrB];
+      if (va !== undefined && vb !== undefined && corrA !== corrB) pts.push({ a: va, b: vb, at });
+    }
+    return pts.sort((x, y) => x.at - y.at);
+  }, [samples, corrA, corrB]);
+  const corrR = useMemo(() => pearson(corrPoints), [corrPoints]);
+
   const abnormalCount = useMemo(
     () => [...latest.values()].filter((s) => assess(s.metric, s.value) === 'critical' || assess(s.metric, s.value) === 'caution').length,
     [latest],
@@ -406,16 +462,28 @@ export function VitalsScreen({
             </div>
           </div>
 
-          {/* cartões por métrica */}
+          {/* cartões por métrica — clique para escolher o sinal dos gráficos */}
           <div className="rise space-y-2" style={{ animationDelay: '120ms' }}>
-            <h3 className="font-display text-sm font-bold uppercase tracking-[0.14em] text-mute">Últimas por sinal</h3>
+            <h3 className="font-display text-sm font-bold uppercase tracking-[0.14em] text-mute">
+              Últimas medições <span className="normal-case tracking-normal text-mute/70">· clique para analisar</span>
+            </h3>
             {VITAL_METRICS.filter((m) => latest.has(m.key)).map((m) => {
               const s = latest.get(m.key)!;
               const status = assess(m.key, s.value);
               const st = STATUS_META[status];
               const series = sorted.filter((x) => x.metric === m.key).slice(0, 14).reverse().map((x) => x.value);
+              const active = activeMetric === m.key;
               return (
-                <div key={m.key} className="flex items-center gap-3 rounded-xl border border-line bg-card p-3 shadow-lift transition-all hover:border-pine-200">
+                <button
+                  key={m.key}
+                  onClick={() => setSelMetric(m.key)}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left shadow-lift transition-all active:scale-[0.98] ${
+                    active
+                      ? 'border-moss-500 bg-moss-50 ring-2 ring-moss-500/25'
+                      : 'border-line bg-card hover:-translate-y-0.5 hover:border-pine-200'
+                  }`}
+                  aria-pressed={active}
+                >
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${st.dot}`} title={st.label} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-bold text-ink">{m.label}</p>
@@ -426,7 +494,7 @@ export function VitalsScreen({
                     <span className="font-mono text-lg font-semibold text-ink">{fmtVital(m.key, s.value)}</span>
                     <span className="block text-[10px] text-mute">{m.unit}</span>
                   </p>
-                </div>
+                </button>
               );
             })}
             {latest.size === 0 && (
@@ -438,35 +506,197 @@ export function VitalsScreen({
         </aside>
       </div>
 
-      {/* ------------------------------ histórico ---------------------------- */}
+      {/* --------------------- gráficos de variação ------------------------- */}
       <section className="rise mt-7" style={{ animationDelay: '140ms' }}>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="mr-2 font-display text-lg font-bold text-ink">Histórico de {firstName}</h2>
-          <button
-            onClick={() => setFilter('all')}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all ${
-              filter === 'all' ? 'border-pine-900 bg-pine-900 text-white' : 'border-line bg-card text-mute hover:border-pine-200 hover:text-ink'
-            }`}
-          >
-            Todos · {sorted.length}
-          </button>
-          {VITAL_METRICS.filter((m) => samples.some((s) => s.metric === m.key)).map((m) => (
-            <button
-              key={m.key}
-              onClick={() => setFilter(filter === m.key ? 'all' : m.key)}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all ${
-                filter === m.key ? 'border-pine-900 bg-pine-900 text-white' : 'border-line bg-card text-mute hover:border-pine-200 hover:text-ink'
-              }`}
-            >
-              {m.short}
-            </button>
-          ))}
+          <h2 className="mr-1 flex items-center gap-2 font-display text-lg font-bold text-ink">
+            <IconChart size={18} className="text-moss-600" /> Variações por sinal
+          </h2>
+          <span className="hidden text-[11px] text-mute sm:inline">escolha um sinal para ver o gráfico e o histórico dele</span>
+          <div className="ml-auto flex items-center gap-1 rounded-lg border border-line bg-card p-0.5">
+            {(
+              [
+                { key: '24h', label: '24h' },
+                { key: '7d', label: '7 dias' },
+                { key: '30d', label: '30 dias' },
+                { key: 'all', label: 'tudo' },
+              ] as const
+            ).map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition-all ${
+                  range === r.key ? 'bg-pine-900 text-white' : 'text-mute hover:text-ink'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* abas de sinais */}
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {metricsWithData.map((m) => {
+            const active = activeMetric === m.key;
+            const last = latest.get(m.key);
+            const status = last ? assess(m.key, last.value) : 'neutral';
+            return (
+              <button
+                key={m.key}
+                onClick={() => setSelMetric(m.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                  active
+                    ? 'border-pine-900 bg-pine-900 text-white shadow-sm'
+                    : 'border-line bg-card text-mute hover:border-pine-200 hover:text-ink'
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dot}`} />
+                {m.label}
+              </button>
+            );
+          })}
+          {metricsWithData.length === 0 && (
+            <p className="rounded-lg border border-dashed border-line bg-card/60 px-3 py-2 text-xs text-mute">
+              Sem medições gravadas ainda — inicie uma sessão acima ou registre manualmente.
+            </p>
+          )}
+        </div>
+
+        {activeMetric && (
+          <div className="overflow-hidden rounded-xl border border-line bg-card shadow-lift">
+            {/* resumo do sinal escolhido */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line bg-paper/50 px-5 py-4">
+              {(() => {
+                const meta = metricMeta(activeMetric);
+                const last = latest.get(activeMetric);
+                const status = last ? assess(activeMetric, last.value) : 'neutral';
+                const st = STATUS_META[status];
+                return (
+                  <div className="flex items-baseline gap-2">
+                    <span className={`h-3 w-3 translate-y-[-1px] rounded-full ${st.dot}`} />
+                    <p className="font-mono text-4xl font-semibold tracking-tight text-ink">
+                      {last ? fmtVital(activeMetric, last.value) : '—'}
+                    </p>
+                    <span className="text-sm text-mute">{meta.unit}</span>
+                    <span className={`ml-1 rounded-md border px-2 py-0.5 text-[11px] font-bold ${st.chip}`}>
+                      última: {st.label}{last ? ` · ${formatDateTime(last.at)}` : ''}
+                    </span>
+                  </div>
+                );
+              })()}
+              {stats && (
+                <div className="ml-auto flex items-center gap-4 font-mono text-[12px] text-mute">
+                  <span>mín <strong className="text-ink">{fmtVital(activeMetric, stats.min)}</strong></span>
+                  <span>méd <strong className="text-ink">{fmtVital(activeMetric, stats.avg)}</strong></span>
+                  <span>máx <strong className="text-ink">{fmtVital(activeMetric, stats.max)}</strong></span>
+                  <span className="rounded-md bg-pine-900/6 px-2 py-0.5 font-bold text-ink">{stats.count} medições</span>
+                </div>
+              )}
+            </div>
+
+            {chartSamples.length === 0 ? (
+              <p className="px-5 py-10 text-center text-sm text-mute">
+                Nenhuma medição de <strong>{metricMeta(activeMetric).label}</strong> no período escolhido — amplie o
+                filtro (ex.: “tudo”) ou registre novas medições.
+              </p>
+            ) : chartSamples.length === 1 ? (
+              <p className="px-5 py-10 text-center text-sm text-mute">
+                Só há <strong>1 medição</strong> neste período — o gráfico de variação aparece a partir de 2 medições.
+                A última: <strong className="font-mono">{fmtVital(activeMetric, chartSamples[0].value)} {metricMeta(activeMetric).unit}</strong>{' '}
+                em {formatDateTime(chartSamples[0].at)}.
+              </p>
+            ) : (
+              <div className="p-4 sm:p-5">
+                <VitalLineChart samples={chartSamples} metric={activeMetric} />
+                <p className="mt-2 text-center text-[11px] text-mute">
+                  faixa verde = intervalo de normalidade · passe o mouse sobre os pontos para ver data, hora e valor
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* --------------------- relação entre sinais ------------------------- */}
+      <section className="rise mt-7" style={{ animationDelay: '170ms' }}>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="mr-2 font-display text-lg font-bold text-ink">Relação entre sinais</h2>
+          <span className="text-[11px] text-mute">compara medições feitas na mesma captura (sessões de monitoramento)</span>
+        </div>
+
+        <div className="rounded-xl border border-line bg-card p-4 shadow-lift sm:p-5">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <select className={inputCls} style={{ width: 190 }} value={corrA} onChange={(e) => setCorrA(e.target.value as VitalMetric)} aria-label="Sinal A">
+                {VITAL_METRICS.filter((m) => samples.some((s) => s.metric === m.key)).map((m) => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </select>
+              <span className="font-display text-sm font-bold text-mute">×</span>
+              <select className={inputCls} style={{ width: 190 }} value={corrB} onChange={(e) => setCorrB(e.target.value as VitalMetric)} aria-label="Sinal B">
+                {VITAL_METRICS.filter((m) => samples.some((s) => s.metric === m.key)).map((m) => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            {corrR !== null && (
+              <span
+                className={`ml-auto rounded-lg border px-3 py-1.5 font-mono text-sm font-bold ${
+                  interpretCorrelation(corrR).tone === 'moss'
+                    ? 'border-moss-500/30 bg-moss-100 text-moss-700'
+                    : interpretCorrelation(corrR).tone === 'warn'
+                      ? 'border-warn-500/30 bg-warn-100 text-warn-600'
+                      : 'border-line bg-paper text-mute'
+                }`}
+              >
+                r = {corrR.toFixed(2)} · {interpretCorrelation(corrR).label}
+              </span>
+            )}
+          </div>
+
+          {corrA === corrB ? (
+            <p className="rounded-lg border border-dashed border-line bg-paper/60 px-4 py-8 text-center text-sm text-mute">
+              Escolha dois sinais <strong>diferentes</strong> para ver a relação entre eles.
+            </p>
+          ) : corrPoints.length < 3 ? (
+            <p className="rounded-lg border border-dashed border-line bg-paper/60 px-4 py-8 text-center text-sm text-mute">
+              São necessárias pelo menos <strong>3 capturas simultâneas</strong> dos dois sinais. Rode uma sessão de
+              monitoramento (que lê todos os sinais juntos) e volte aqui.
+            </p>
+          ) : (
+            <>
+              <ScatterCorrelation points={corrPoints} metricA={corrA} metricB={corrB} />
+              <p className="mt-2 flex items-start gap-1.5 text-center text-[11px] leading-relaxed text-mute">
+                <IconInfo size={13} className="mt-0.5 shrink-0" />
+                <span>
+                  Cada ponto é uma captura em que os dois sinais foram medidos juntos; a linha tracejada é a tendência.
+                  <strong> Correlação não significa causa</strong> — leve o gráfico para interpretar com um profissional.
+                </span>
+              </p>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* ------------------- histórico do sinal escolhido -------------------- */}
+      <section className="rise mt-7" style={{ animationDelay: '200ms' }}>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="mr-2 font-display text-lg font-bold text-ink">
+            Histórico {activeMetric ? `· ${metricMeta(activeMetric).label}` : ''}
+          </h2>
+          <span className="rounded-full border border-line bg-card px-3 py-1 font-mono text-xs font-bold text-mute">
+            {visible.length} registro{visible.length === 1 ? '' : 's'}
+          </span>
+          {activeMetric && (
+            <span className="text-[11px] text-mute">exibindo somente o sinal escolhido — troque nas abas acima</span>
+          )}
         </div>
 
         {visible.length === 0 ? (
           <EmptyState
             icon={<IconClock size={22} />}
-            title="Histórico vazio"
+            title="Nada a exibir"
             desc="As medições gravadas — da sessão de monitoramento, manuais ou do Health Connect/HealthKit — aparecem aqui, sempre no prontuário da pessoa autorizada."
           />
         ) : (
