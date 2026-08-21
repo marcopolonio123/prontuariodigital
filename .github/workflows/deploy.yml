@@ -13,6 +13,7 @@ name: Deploy → Hostinger
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -24,12 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Baixar o projeto
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Preparar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Instalar dependências
@@ -39,6 +40,8 @@ jobs:
         run: npm run build
 
       - name: Enviar para a Hostinger (FTP)
+        # Nota: se aparecer um aviso amarelo de "Node.js 20 deprecated" para esta
+        # ação, é apenas informativo — ela roda normalmente no Node 24.
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
