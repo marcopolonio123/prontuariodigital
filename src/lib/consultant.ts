@@ -310,6 +310,8 @@ export interface Consultation {
   assessments: OptionAssessment[];
   recordAlerts: string[];
   sources: string[];
+  /** Resposta humanizada, em linguagem natural, já cruzada com o prontuário. */
+  narrative: string;
 }
 
 const TAG_LABEL: Record<string, string> = {
@@ -331,6 +333,67 @@ const TAG_LABEL: Record<string, string> = {
 
 const norm = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const medName = (n: string) => n.split(' (')[0].trim();
+
+/**
+ * Gera a resposta humanizada do Consultor, em português e em segunda pessoa,
+ * cruzando SEMPRE o sintoma com o prontuário: mesmo ao recomendar uma opção,
+ * os alertas de alergia, intolerância e medicação em uso são entrelaçados no texto.
+ */
+export function buildNarrative(
+  entry: KbEntry,
+  firstName: string,
+  assessments: OptionAssessment[],
+  recordAlerts: string[],
+): string {
+  const paras: string[] = [];
+
+  const contra = assessments.filter((a) => a.status === 'contra');
+  const caution = assessments.filter((a) => a.status === 'caution');
+  const ok = assessments.filter((a) => a.status === 'ok');
+
+  // 1 · Acolhimento + hipótese
+  paras.push(
+    `Entendo sua preocupação, ${firstName}. Pelo que você descreveu, esse quadro se parece com **${entry.label}** — ` +
+      `as causas mais comuns costumam ser ${entry.causes.join('; ').toLowerCase()}.`,
+  );
+
+  // 2 · O que o prontuário diz sobre as opções (o coração do cruzamento)
+  if (contra.length > 0) {
+    const meds = contra.map((a) => `**${medName(a.option.name)}**`).join(' e ');
+    const motivos = [...new Set(contra.flatMap((a) => a.reasons))].join('; ');
+    paras.push(
+      `🚫 **Um alerta importante do seu prontuário:** ${motivos}. Por isso, ${meds} deve(m) ser **evitado(s)** neste caso, mesmo que sejam opções comuns para esse sintoma.`,
+    );
+  }
+  if (caution.length > 0) {
+    const itens = caution.map((a) => `**${medName(a.option.name)}** — ${a.reasons[0]}`).join('; ');
+    paras.push(`⚠️ Use com cautela: ${itens}. Se puder, prefira uma alternativa ou confirme a dose com um profissional.`);
+  }
+  if (ok.length > 0) {
+    const safe = ok.map((a) => `**${medName(a.option.name)}**`).join(', ');
+    paras.push(
+      `✅ Dentro do que está registrado no seu prontuário, as opções mais seguras seriam: ${safe}. ${ok[0].option.note}`,
+    );
+  }
+
+  // 3 · Lembrete geral de alergias/intolerâncias (mesmo quando a recomendação é segura)
+  const allergyReminder = recordAlerts.filter((a) => /alergia|intolerância/i.test(a));
+  if (allergyReminder.length > 0) {
+    paras.push(`📋 E nunca esqueça do que está na sua ficha: ${allergyReminder.join(' ')}`);
+  }
+
+  // 4 · Sinais de emergência
+  paras.push(`🔴 **Procure uma emergência (SAMU 192) se notar:** ${entry.redFlags.join('; ')}.`);
+
+  // 5 · Fechamento acolhedor + reforço do limite
+  paras.push(
+    `Lembre-se, ${firstName}: eu organizo as informações do seu prontuário para te orientar com segurança, mas **quem confirma o diagnóstico e o tratamento é sempre um médico ou especialista**. Se os sintomas persistirem ou piorarem, não deixe de procurar atendimento.`,
+  );
+
+  return paras.join('\n\n');
+}
 
 export function analyze(question: string, p: Patient): Consultation {
   const q = norm(question);
@@ -402,7 +465,10 @@ export function analyze(question: string, p: Patient): Consultation {
     'MedlinePlus (NIH)',
   ];
 
-  return { entry, question, assessments, recordAlerts, sources };
+  const firstName = p.name.split(' ')[0];
+  const narrative = entry ? buildNarrative(entry, firstName, assessments, recordAlerts) : '';
+
+  return { entry, question, assessments, recordAlerts, sources, narrative };
 }
 
 export const ANALYSIS_STEPS = [

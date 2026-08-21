@@ -48,6 +48,12 @@ function StatusBadge({ status }: { status: 'ok' | 'caution' | 'contra' }) {
   );
 }
 
+/** Converte **negrito** em <strong> dentro de um parágrafo. */
+function renderRich(text: string) {
+  const parts = text.split('**');
+  return parts.map((part, i) => (i % 2 === 1 ? <strong key={i} className="font-semibold text-ink">{part}</strong> : <span key={i}>{part}</span>));
+}
+
 function AssistantCard({ msg, firstName }: { msg: ChatMsg; firstName: string }) {
   const c = msg.consult;
   return (
@@ -101,15 +107,11 @@ function AssistantCard({ msg, firstName }: { msg: ChatMsg; firstName: string }) 
         </div>
       ) : (
         <div className="mt-3 space-y-4">
-          <div>
-            <p className="text-sm font-semibold text-ink">
-              Quadro compatível: <span className="text-moss-700">{c.entry.label}</span>
-            </p>
-            <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[13px] text-mute">
-              {c.entry.causes.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
+          {/* Resposta humanizada — já cruzada com o prontuário */}
+          <div className="space-y-3 border-l-[3px] border-moss-500/50 pl-3.5 text-sm leading-relaxed text-mute">
+            {c.narrative.split('\n\n').map((para, i) => (
+              <p key={i}>{renderRich(para)}</p>
+            ))}
           </div>
 
           <div>
@@ -207,8 +209,21 @@ export function ConsultantScreen({
   const [aiModal, setAiModal] = useState(false);
   const [aiDraft, setAiDraft] = useState<AiConfig>({ ...DEFAULT_AI_CONFIG });
   const [aiTest, setAiTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const toast = useToast();
 
   const storageKey = patient ? `vitalis.consultor.${patient.id}` : null;
+
+  const testAi = async () => {
+    setAiTest('testing');
+    try {
+      const res = await fetch(`${aiDraft.baseUrl.replace(/\/$/, '')}/models`, {
+        headers: { Authorization: `Bearer ${aiDraft.apiKey.trim()}` },
+      });
+      setAiTest(res.ok ? 'ok' : 'fail');
+    } catch {
+      setAiTest('fail');
+    }
+  };
 
   useEffect(() => {
     if (!storageKey) return;
