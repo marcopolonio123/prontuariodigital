@@ -104,8 +104,9 @@ export function MissingScreen({
       notes: rNotes.trim(),
       history: [
         ...person.missing.history,
-        { id: uid(), at: Date.now(), kind: 'missing', text: 'Desaparecimento registrado no Vitalis.' },
+        { id: uid(), at: Date.now(), kind: 'missing', text: 'Desaparecimento registrado no My Doctor.' },
       ],
+      attachments: person.missing.attachments ?? [],
     };
     onUpdate({ ...person, missing: status });
     setReportOpen(false);

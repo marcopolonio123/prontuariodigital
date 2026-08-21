@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Attachment, ClinicalEntry, ClinicalSection, EntryType, Patient } from '../lib/types';
+import type { Attachment, ClinicalEntry, ClinicalExam, ClinicalSection, EntryType, Patient } from '../lib/types';
 import { ENTRY_META, ENTRY_TYPES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/types';
 import { ageFromBirth, formatDateBR, formatDateTime } from '../lib/biometrics';
 import { uid } from '../lib/store';
@@ -137,6 +137,140 @@ function SectionEditor({
   );
 }
 
+/* ------------------- editor de múltiplos exames (1 por linha) ------------------- */
+
+function ExamsEditor({
+  icon, label, hint, exams, open, onToggle, onChange, onView, byName, accent,
+}: {
+  icon: ReactNode;
+  label: string;
+  hint: string;
+  exams: ClinicalExam[];
+  open: boolean;
+  onToggle: () => void;
+  onChange: (e: ClinicalExam[]) => void;
+  onView: (a: Attachment) => void;
+  byName: string;
+  accent: string;
+}) {
+  const toast = useToast();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const hasContent = exams.some((e) => e.name.trim() || e.description.trim() || e.attachments.length > 0);
+
+  const update = (id: string, patch: Partial<ClinicalExam>) =>
+    onChange(exams.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  const remove = (id: string) => onChange(exams.filter((e) => e.id !== id));
+  const add = () => onChange([...exams, { id: uid(), name: '', description: '', attachments: [] }]);
+
+  const onFile = async (id: string, file: File | undefined) => {
+    if (!file) return;
+    setBusyId(id);
+    try {
+      const a = await fileToAttachment(file, byName);
+      onChange(exams.map((e) => (e.id === id ? { ...e, attachments: [...e.attachments, a] } : e)));
+      toast('success', `Anexo "${a.name}" adicionado.`);
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Não foi possível anexar o arquivo.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex w-full items-center gap-2.5 rounded-lg border-2 border-dashed border-line bg-card px-3.5 py-2.5 text-left text-sm font-semibold transition-all hover:border-info-300 hover:bg-info-100/40 ${hasContent ? 'border-info-400/60' : ''}`}
+      >
+        <span className={`rounded-md p-1.5 ${accent}`}>{icon}</span>
+        {label}
+        <span className="text-xs font-normal text-mute">— {hint}</span>
+        {hasContent && <Tag tone="info">{exams.length} exame(s)</Tag>}
+        <IconPlus size={15} className="ml-auto shrink-0 text-info-600" />
+      </button>
+    );
+  }
+
+  return (
+    <div className={`rounded-lg border bg-card p-3.5 ${hasContent ? 'border-info-500/40' : 'border-line'}`}>
+      <div className="flex items-center gap-2">
+        <span className={`rounded-md p-1.5 ${accent}`}>{icon}</span>
+        <p className="text-sm font-bold text-ink">{label}</p>
+        <span className="text-xs font-normal text-mute">{hint}</span>
+        <button type="button" onClick={onToggle} className="ml-auto rounded p-1 text-mute transition-colors hover:text-ink" aria-label="Recolher seção">
+          <IconChevronDown size={15} />
+        </button>
+      </div>
+
+      {exams.length === 0 && (
+        <p className="mt-2.5 rounded-lg border border-dashed border-line bg-paper/60 px-3 py-3 text-xs leading-relaxed text-mute">
+          Nenhum exame adicionado ainda. Você pode registrar <strong>vários exames</strong> neste registro — cada um com
+          seu nome, orientações e anexos (foto ou PDF do pedido).
+        </p>
+      )}
+
+      <div className="mt-2.5 space-y-2.5">
+        {exams.map((e, idx) => (
+          <div key={e.id} className="rounded-lg border border-line bg-paper/50 p-3">
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-info-100 px-2 py-0.5 font-mono text-[11px] font-bold text-info-600">exame {idx + 1}</span>
+              <input
+                className={`${inputCls} flex-1`}
+                value={e.name}
+                onChange={(ev) => update(e.id, { name: ev.target.value })}
+                placeholder="Nome do exame — ex.: Hemograma completo"
+              />
+              <button
+                type="button"
+                onClick={() => remove(e.id)}
+                className="rounded-md p-1.5 text-mute transition-colors hover:bg-danger-100 hover:text-danger-600"
+                aria-label={`Remover exame ${idx + 1}`}
+              >
+                <IconTrash size={14} />
+              </button>
+            </div>
+            <div className="relative mt-2">
+              <textarea
+                className={`${inputCls} min-h-16 resize-y`}
+                value={e.description}
+                onChange={(ev) => update(e.id, { description: ev.target.value })}
+                placeholder="Orientações / descritivo — ex.: colher em jejum de 8h"
+              />
+              <MicButton className="absolute bottom-2 right-2" onAppend={(t) => update(e.id, { description: (e.description ? e.description + ' ' : '') + t })} />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-card px-2.5 py-1.5 text-xs font-bold text-ink transition-all hover:border-info-300 hover:bg-info-100/40 active:scale-95">
+                {busyId === e.id ? <IconSpinner size={12} /> : <IconPaperclip size={12} />}
+                {busyId === e.id ? 'Processando…' : 'Anexar pedido'}
+                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(ev) => { void onFile(e.id, ev.target.files?.[0]); ev.target.value = ''; }} />
+              </label>
+              {e.attachments.length > 0 && <span className="text-[11px] text-mute">{e.attachments.length} anexo(s)</span>}
+            </div>
+            {e.attachments.length > 0 && (
+              <div className="mt-2 border-t border-line pt-2">
+                <AttachmentStrip
+                  items={e.attachments}
+                  onView={onView}
+                  onRemove={(id) => update(e.id, { attachments: e.attachments.filter((x) => x.id !== id) })}
+                />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={add}
+        className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-info-400/60 bg-info-100/40 px-3 py-2 text-xs font-bold text-info-600 transition-all hover:bg-info-100 active:scale-95"
+      >
+        <IconPlus size={13} /> Adicionar exame
+      </button>
+    </div>
+  );
+}
+
 /* -------------------------------- formulário ----------------------------- */
 
 const emptySection = (): ClinicalSection => ({ text: '', attachments: [] });
@@ -159,7 +293,7 @@ function NewEntryForm({
   const [notes, setNotes] = useState('');
   const [rx, setRx] = useState<ClinicalSection>(emptySection());
   const [rxOpen, setRxOpen] = useState(false);
-  const [ex, setEx] = useState<ClinicalSection>(emptySection());
+  const [ex, setEx] = useState<ClinicalExam[]>([]);
   const [exOpen, setExOpen] = useState(false);
   const [viewAtt, setViewAtt] = useState<Attachment | null>(null);
   const [errs, setErrs] = useState<{ title?: string; date?: string }>({});
@@ -171,12 +305,12 @@ function NewEntryForm({
     setErrs(e);
     if (Object.keys(e).length > 0) return;
     const rxHas = rx.text.trim() || rx.attachments.length > 0;
-    const exHas = ex.text.trim() || ex.attachments.length > 0;
+    const validExams = ex.filter((x) => x.name.trim() || x.description.trim() || x.attachments.length > 0);
     onAdd({
       id: uid(), type, title: title.trim(), notes: notes.trim(), date, createdAt: Date.now(),
       specialty, archived: false,
       prescription: rxHas ? { text: rx.text.trim(), attachments: rx.attachments } : null,
-      exams: exHas ? { text: ex.text.trim(), attachments: ex.attachments } : null,
+      exams: validExams.length > 0 ? validExams.map((x) => ({ ...x, name: x.name.trim(), description: x.description.trim() })) : null,
     });
   };
 
@@ -233,12 +367,14 @@ function NewEntryForm({
           byName={byName}
           accent="bg-moss-100 text-moss-700"
         />
-        <SectionEditor
+      </div>
+
+      <div className="mt-3">
+        <ExamsEditor
           icon={<IconFlask size={15} />}
           label="Exames solicitados"
-          hint="descreva e/ou anexe os pedidos"
-          placeholder={'Exames pedidos e orientações\nex.: Hemograma + HbA1c — jejum 8h'}
-          section={ex}
+          hint="adicione um ou vários exames"
+          exams={ex}
           open={exOpen}
           onToggle={() => setExOpen((v) => !v)}
           onChange={setEx}
@@ -354,7 +490,7 @@ export function RecordScreen({
   const exportBySpecialty = () => {
     if (!patient) return;
     const list = sorted.filter((e) => !e.archived && (specFilter === 'all' || e.specialty === specFilter));
-    const atts = list.reduce((s, e) => s + (e.prescription?.attachments.length ?? 0) + (e.exams?.attachments.length ?? 0), 0);
+    const atts = list.reduce((s, e) => s + (e.prescription?.attachments.length ?? 0) + (e.exams?.reduce((x, ex) => x + ex.attachments.length, 0) ?? 0), 0);
     const payload = {
       app: 'mydoctor',
       patient: { record: patient.record, name: patient.name, primarySpecialty: patient.primarySpecialty },
@@ -382,8 +518,8 @@ export function RecordScreen({
       ...list.slice(0, 8).flatMap((e) => {
         const parts = [`${formatDateBR(e.date)} · ${ENTRY_META[e.type].label}: ${e.title}`];
         if (e.prescription?.text) parts.push(`  Prescrição: ${e.prescription.text.replace(/\n+/g, ' | ')}`);
-        if (e.exams?.text) parts.push(`  Exames solicitados: ${e.exams.text.replace(/\n+/g, ' | ')}`);
-        const atts = (e.prescription?.attachments.length ?? 0) + (e.exams?.attachments.length ?? 0);
+        if (e.exams?.length) parts.push(`  Exames: ${e.exams.map((x) => x.name + (x.description ? ` (${x.description})` : '')).join('; ')}`);
+        const atts = (e.prescription?.attachments.length ?? 0) + (e.exams?.reduce((x, ex) => x + ex.attachments.length, 0) ?? 0);
         if (atts > 0) parts.push(`  ${atts} anexo(s) digitalizado(s) no app`);
         return parts;
       }),
@@ -617,8 +753,8 @@ export function RecordScreen({
           <ol className="relative ml-3 space-y-3 border-l-2 border-line pl-6">
             {visible.map((e, i) => {
               const v = ENTRY_VISUAL[e.type];
-              const hasSections = Boolean(e.prescription || e.exams);
-              const attCount = (e.prescription?.attachments.length ?? 0) + (e.exams?.attachments.length ?? 0);
+              const hasSections = Boolean(e.prescription || (e.exams && e.exams.length > 0));
+              const attCount = (e.prescription?.attachments.length ?? 0) + (e.exams?.reduce((x, ex) => x + ex.attachments.length, 0) ?? 0);
               const expanded = expandedId === e.id;
               return (
                 <li key={e.id} className={`rise relative ${e.archived ? 'opacity-60' : ''}`} style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
@@ -639,10 +775,10 @@ export function RecordScreen({
                           {e.prescription.attachments.length > 0 && ` · ${e.prescription.attachments.length} anexo`}
                         </Tag>
                       )}
-                      {e.exams && (
+                      {e.exams && e.exams.length > 0 && (
                         <Tag tone="info">
-                          <IconFlask size={11} className="mr-1" /> exames
-                          {e.exams.attachments.length > 0 && ` · ${e.exams.attachments.length} anexo`}
+                          <IconFlask size={11} className="mr-1" /> {e.exams.length} exame{e.exams.length > 1 ? 's' : ''}
+                          {e.exams.reduce((x, ex) => x + ex.attachments.length, 0) > 0 && ` · ${e.exams.reduce((x, ex) => x + ex.attachments.length, 0)} anexo`}
                         </Tag>
                       )}
                       <h3 className="font-display text-[15px] font-bold text-ink">{e.title}</h3>

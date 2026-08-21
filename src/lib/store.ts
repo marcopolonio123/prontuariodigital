@@ -1,4 +1,4 @@
-import type { AccessGrant, Account, AppState, ClinicalEntry, IdEvent, Patient, VitalSample } from './types';
+import type { AccessGrant, Account, AppState, Attachment, ClinicalEntry, IdEvent, Patient, VitalSample } from './types';
 import { EMPTY_EMERGENCY, EMPTY_MISSING } from './types';
 import { makeFingerprintTemplate } from './biometrics';
 
@@ -67,8 +67,32 @@ function normalizeEntry(raw: Record<string, unknown>): ClinicalEntry {
     specialty: String(raw.specialty ?? ''),
     archived: Boolean(raw.archived),
     prescription: normalizeSection(raw.prescription),
-    exams: normalizeSection(raw.exams),
+    exams: normalizeExams(raw.exams),
   };
+}
+
+/** Migra exames do formato antigo (ClinicalSection) para a lista de exames. */
+function normalizeExams(raw: unknown): ClinicalEntry['exams'] {
+  if (raw == null) return null;
+  // formato novo: array de exames
+  if (Array.isArray(raw)) {
+    const list = raw.map((e) => {
+      const r = (e ?? {}) as Record<string, unknown>;
+      return {
+        id: String(r.id ?? uid()),
+        name: String(r.name ?? ''),
+        description: String(r.description ?? ''),
+        attachments: asArray<Attachment>(r.attachments),
+      };
+    });
+    return list.length > 0 ? list : null;
+  }
+  // formato antigo: { text, attachments } → converte em um único exame
+  const r = raw as Record<string, unknown>;
+  const text = String(r.text ?? '');
+  const attachments = asArray<Attachment>(r.attachments);
+  if (!text && attachments.length === 0) return null;
+  return [{ id: uid(), name: 'Exames solicitados', description: text, attachments }];
 }
 
 function normalizeAccount(raw: Record<string, unknown>): Account {
@@ -145,6 +169,8 @@ export function normalizePatient(raw: Record<string, unknown>): Patient {
       validUntil: String(r.validUntil ?? ''),
       image: (r.image as string | null) ?? null,
       notes: String(r.notes ?? ''),
+      holder: (r.holder === 'dependente' ? 'dependente' : 'titular') as Patient['insurances'][number]['holder'],
+      coverage: (r.coverage === 'empresarial' || r.coverage === 'familiar' ? r.coverage : 'particular') as Patient['insurances'][number]['coverage'],
       addedAt: Number(r.addedAt ?? Date.now()),
     })),
     specialCare: asArray<Patient['specialCare'][number]>(raw.specialCare),
@@ -252,7 +278,7 @@ function seedPatients(): Patient[] {
         { id: 'm-ana-3', name: 'Losartana', dose: '50 mg', frequency: '1x ao dia', reason: 'Hipertensão arterial' },
       ],
       insurances: [
-        { id: 'ins-ana-1', operator: 'Unimed BH', plan: 'Unipart Enfermaria', cardNumber: '0834 5521 7790 02', validUntil: ahead(320), image: null, notes: 'Titular da carteirinha: a própria Ana.', addedAt: daysAgo(210) },
+        { id: 'ins-ana-1', operator: 'Unimed BH', plan: 'Unipart Enfermaria', cardNumber: '0834 5521 7790 02', validUntil: ahead(320), image: null, notes: 'Titular da carteirinha: a própria Ana.', holder: 'titular', coverage: 'particular', addedAt: daysAgo(210) },
       ],
       specialCare: ['alzheimer', 'diabetes'],
       emergencyNotes: 'Pode não reconhecer familiares e repetir perguntas. Fale com calma, use frases curtas e não a deixe sozinha. Usa pulseira de identificação.',
@@ -305,10 +331,11 @@ function seedPatients(): Patient[] {
             text: 'Donepezila 10 mg — 1 comprimido à noite\nMetformina 850 mg — 1 comprimido 2x/dia (café e jantar)\nLosartana 50 mg — 1 comprimido pela manhã\nRetorno em 90 dias com a cuidadora.',
             attachments: [],
           },
-          exams: {
-            text: 'Hemograma completo, HbA1c, creatinina e TSH — colher em jejum de 8h.',
-            attachments: [],
-          },
+          exams: [
+            { id: uid(), name: 'Hemograma completo', description: 'Colher em jejum de 8h.', attachments: [] },
+            { id: uid(), name: 'HbA1c (hemoglobina glicada)', description: 'Controle do diabetes — jejum de 8h.', attachments: [] },
+            { id: uid(), name: 'Creatinina e TSH', description: 'Função renal e tireoide — jejum de 8h.', attachments: [] },
+          ],
         }),
         E({
           agoDays: 61, type: 'exame', title: 'Ressonância magnética do crânio',
@@ -332,7 +359,7 @@ function seedPatients(): Patient[] {
         { id: 'm-car-2', name: 'Rosuvastatina', dose: '20 mg', frequency: 'à noite', reason: 'Colesterol' },
       ],
       insurances: [
-        { id: 'ins-car-1', operator: 'Bradesco Saúde', plan: 'Nacional Flex', cardNumber: '77120 4455 9023 8', validUntil: ahead(140), image: null, notes: 'Dependente: Tereza Menezes (esposa).', addedAt: daysAgo(300) },
+        { id: 'ins-car-1', operator: 'Bradesco Saúde', plan: 'Nacional Flex', cardNumber: '77120 4455 9023 8', validUntil: ahead(140), image: null, notes: 'Plano empresarial do antigo empregador.', holder: 'titular', coverage: 'empresarial', addedAt: daysAgo(300) },
       ],
       specialCare: ['cardiaco'],
       emergencyNotes: 'Portador de marca-passo (lado esquerdo do tórax). Em desmaio ou dor no peito, acionar SAMU 192 imediatamente.',
@@ -389,7 +416,10 @@ function seedPatients(): Patient[] {
           agoDays: 45, type: 'consulta', title: 'Retorno cardiológico',
           notes: 'Holter 24h sem novas arritmias significativas.',
           date: iso(45).slice(0, 10), specialty: 'Cardiologia',
-          exams: { text: 'Ecocardiograma transtorácico + Holter 24h para o próximo retorno.', attachments: [] },
+          exams: [
+            { id: uid(), name: 'Ecocardiograma transtorácico', description: 'Para o próximo retorno.', attachments: [] },
+            { id: uid(), name: 'Holter 24h', description: 'Monitorização do ritmo — para o próximo retorno.', attachments: [] },
+          ],
         }),
       ],
       createdAt: daysAgo(380), primarySpecialty: 'Cardiologia', archived: false, ownerAccountId: 'acc-carlos', findable: true,
@@ -403,7 +433,7 @@ function seedPatients(): Patient[] {
         { id: 'm-sof-1', name: 'Desloratadina xarope', dose: '2,5 ml', frequency: '1x ao dia, se crises de rinite', reason: 'Rinite alérgica' },
       ],
       insurances: [
-        { id: 'ins-sof-1', operator: 'SulAmérica', plan: 'Clássico 100', cardNumber: '90233 1187 4402 5', validUntil: ahead(410), image: null, notes: 'Dependente no plano da mãe (Juliana Almeida).', addedAt: daysAgo(180) },
+        { id: 'ins-sof-1', operator: 'SulAmérica', plan: 'Clássico 100', cardNumber: '90233 1187 4402 5', validUntil: ahead(410), image: null, notes: 'Dependente no plano da mãe (Juliana Almeida).', holder: 'dependente', coverage: 'familiar', addedAt: daysAgo(180) },
       ],
       specialCare: [],
       emergencyNotes: 'ALERTA: alergia grave a amendoim. Em reação (inchaço, falta de ar) usar caneta de epinefrina na mochila e chamar SAMU 192.',
@@ -433,7 +463,10 @@ function seedPatients(): Patient[] {
             text: 'Caneta de epinefrina 0,15 mg (EpiPen Jr) — portar sempre na mochila da escola.\nDesloratadina xarope 2,5 ml — 1x/dia, por 10 dias, se crises de rinite.',
             attachments: [],
           },
-          exams: { text: 'IgE específica para amendoim e leite (rast) — repetir em 6 meses.', attachments: [] },
+          exams: [
+            { id: uid(), name: 'IgE específica para amendoim (rast)', description: 'Repetir em 6 meses.', attachments: [] },
+            { id: uid(), name: 'IgE específica para leite (rast)', description: 'Repetir em 6 meses.', attachments: [] },
+          ],
         }),
       ],
       createdAt: daysAgo(200), primarySpecialty: 'Pediatria', archived: false, ownerAccountId: 'acc-juliana', findable: false,

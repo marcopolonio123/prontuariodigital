@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BloodType, Contact, ContinuousMed, Insurance, Patient, Relationship, SpecialCare } from '../lib/types';
-import { BLOOD_TYPES, RELATIONSHIPS, RELATIONSHIP_META, SPECIAL_CARES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/types';
+import type { BloodType, Contact, ContinuousMed, Insurance, InsuranceCoverage, InsuranceHolder, Patient, Relationship, SpecialCare } from '../lib/types';
+import { BLOOD_TYPES, INSURANCE_COVERAGE_META, INSURANCE_HOLDER_META, RELATIONSHIPS, RELATIONSHIP_META, SPECIAL_CARES, SPECIAL_CARE_META, SPECIALTIES } from '../lib/types';
 import { newRecordNumber, uid } from '../lib/store';
 import { ageFromBirth, daysSince, dHash, fileToDataURL, formatDateBR, makeThumb, maskCPF, timeAgo } from '../lib/biometrics';
 import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
@@ -104,7 +104,10 @@ function MedicationsEditor({ value, onChange }: { value: ContinuousMed[]; onChan
 
 /* ----------------------- convênios / seguro saúde ---------------------- */
 
-const emptyInsForm = { operator: '', plan: '', cardNumber: '', validUntil: '', notes: '', image: null as string | null };
+const emptyInsForm = {
+  operator: '', plan: '', cardNumber: '', validUntil: '', notes: '', image: null as string | null,
+  holder: 'titular' as InsuranceHolder, coverage: 'particular' as InsuranceCoverage,
+};
 
 function InsuranceEditor({ value, onChange }: { value: Insurance[]; onChange: (v: Insurance[]) => void }) {
   const toast = useToast();
@@ -120,7 +123,7 @@ function InsuranceEditor({ value, onChange }: { value: Insurance[]; onChange: (v
     }
     onChange([
       ...value,
-      { id: uid(), operator: form.operator.trim(), plan: form.plan.trim(), cardNumber: form.cardNumber.trim(), validUntil: form.validUntil, image: form.image, notes: form.notes.trim(), addedAt: Date.now() },
+      { id: uid(), operator: form.operator.trim(), plan: form.plan.trim(), cardNumber: form.cardNumber.trim(), validUntil: form.validUntil, image: form.image, notes: form.notes.trim(), holder: form.holder, coverage: form.coverage, addedAt: Date.now() },
     ]);
     setForm({ ...emptyInsForm });
     setErr('');
@@ -158,12 +161,14 @@ function InsuranceEditor({ value, onChange }: { value: Insurance[]; onChange: (v
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-ink">{ins.operator}{ins.plan ? ` · ${ins.plan}` : ''}</p>
                   <p className="font-mono text-[11px] text-mute">{ins.cardNumber || 'nº não informado'}</p>
-                  <div className="mt-1 flex items-center gap-1.5">
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {ins.validUntil ? (
                       <Tag tone={expired ? 'danger' : 'moss'}>{expired ? 'vencido' : `vál. ${formatDateBR(ins.validUntil)}`}</Tag>
                     ) : (
                       <Tag tone="mute">validade n/d</Tag>
                     )}
+                    <Tag tone="info">{INSURANCE_HOLDER_META[ins.holder]}</Tag>
+                    <Tag tone="mute">{INSURANCE_COVERAGE_META[ins.coverage]}</Tag>
                   </div>
                 </div>
                 <button
@@ -203,6 +208,20 @@ function InsuranceEditor({ value, onChange }: { value: Insurance[]; onChange: (v
           </Field>
           <Field label="Validade">
             <input type="date" className={inputCls} value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
+          </Field>
+          <Field label="A pessoa é…">
+            <select className={inputCls} value={form.holder} onChange={(e) => setForm({ ...form, holder: e.target.value as InsuranceHolder })}>
+              {(Object.keys(INSURANCE_HOLDER_META) as InsuranceHolder[]).map((h) => (
+                <option key={h} value={h}>{INSURANCE_HOLDER_META[h]}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Tipo de plano">
+            <select className={inputCls} value={form.coverage} onChange={(e) => setForm({ ...form, coverage: e.target.value as InsuranceCoverage })}>
+              {(Object.keys(INSURANCE_COVERAGE_META) as InsuranceCoverage[]).map((c) => (
+                <option key={c} value={c}>{INSURANCE_COVERAGE_META[c]}</option>
+              ))}
+            </select>
           </Field>
         </div>
 

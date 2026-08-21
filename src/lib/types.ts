@@ -81,8 +81,16 @@ export interface Attachment {
 }
 
 export interface ClinicalSection {
-  text: string; // descritivo (prescrição ou exames solicitados)
-  attachments: Attachment[]; // receita/exame anexado (foto, scan ou PDF)
+  text: string; // descritivo (prescrição)
+  attachments: Attachment[]; // receita anexada (foto, scan ou PDF)
+}
+
+/** Um exame solicitado dentro de um registro — podem existir vários por consulta. */
+export interface ClinicalExam {
+  id: string;
+  name: string; // ex.: Hemograma, Raio-X de tórax
+  description: string; // orientações / descritivo do exame
+  attachments: Attachment[]; // pedido anexado (foto, scan ou PDF)
 }
 
 export interface ContinuousMed {
@@ -93,6 +101,20 @@ export interface ContinuousMed {
   reason: string; // motivo (opcional)
 }
 
+export type InsuranceHolder = 'titular' | 'dependente';
+export type InsuranceCoverage = 'empresarial' | 'particular' | 'familiar';
+
+export const INSURANCE_HOLDER_META: Record<InsuranceHolder, string> = {
+  titular: 'Titular',
+  dependente: 'Dependente',
+};
+
+export const INSURANCE_COVERAGE_META: Record<InsuranceCoverage, string> = {
+  empresarial: 'Empresarial',
+  particular: 'Particular / individual',
+  familiar: 'Familiar',
+};
+
 export interface Insurance {
   id: string;
   operator: string; // operadora (Unimed, Bradesco Saúde…)
@@ -101,6 +123,8 @@ export interface Insurance {
   validUntil: string; // validade (ISO yyyy-mm-dd) ou ''
   image: string | null; // foto da carteirinha (armazenada localmente)
   notes: string;
+  holder: InsuranceHolder; // a pessoa é titular ou dependente?
+  coverage: InsuranceCoverage; // empresarial, particular ou familiar?
   addedAt: number;
 }
 
@@ -114,7 +138,7 @@ export interface ClinicalEntry {
   specialty: string;
   archived: boolean;
   prescription: ClinicalSection | null; // prescrição médica (descritiva e/ou receita anexada)
-  exams: ClinicalSection | null; // exames solicitados (descritivo e/ou pedido anexado)
+  exams: ClinicalExam[] | null; // exames solicitados — um ou mais, cada um com descritivo e/ou anexos
 }
 
 export type MissingEventKind = 'missing' | 'found' | 'sighting' | 'notified';
