@@ -134,6 +134,8 @@ export interface ClinicalEntry {
   title: string;
   notes: string;
   date: string;
+  /** Hora do atendimento (HH:mm). Opcional — registros antigos podem não ter. */
+  time?: string;
   createdAt: number;
   specialty: string;
   archived: boolean;

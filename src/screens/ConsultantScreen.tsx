@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AccessGrant, Account, Patient } from '../lib/types';
 import { ageFromBirth } from '../lib/biometrics';
-import { analyze, ANALYSIS_STEPS, DISCLAIMER, greetingResponse, type Consultation } from '../lib/consultant';
-import { Avatar, Btn, EmptyState, MicButton, Tag } from '../components/ui';
-import { IconAlert, IconBrain, IconCheck, IconSend, IconSparkles, IconX } from '../components/icons';
+import {
+  analyze, ANALYSIS_STEPS, analyzeWithRemoteAI, buildRecordContext, DEFAULT_AI_CONFIG, DISCLAIMER,
+  greetingResponse, loadAiConfig, saveAiConfig, type AiConfig, type Consultation,
+} from '../lib/consultant';
+import { Avatar, Btn, EmptyState, inputCls, MicButton, Modal, Tag, useToast } from '../components/ui';
+import { IconAlert, IconBrain, IconCheck, IconGear, IconSend, IconSparkles, IconX } from '../components/icons';
 
 interface ChatMsg {
   id: number;
   role: 'user' | 'assistant';
-  text?: string;
-  consult?: Consultation;
+  text?: string; // texto livre (saudações e respostas da IA externa)
+  consult?: Consultation; // resposta estruturada do motor local
+  engine?: 'local' | 'ia';
 }
 
 const SUGGESTIONS = [
@@ -56,9 +60,16 @@ function AssistantCard({ msg, firstName }: { msg: ChatMsg; firstName: string }) 
         <span className="ml-auto rounded-md bg-warn-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warn-600">
           apoio informativo
         </span>
+        {msg.engine === 'ia' && (
+          <span className="rounded-md bg-info-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-info-600">
+            IA externa
+          </span>
+        )}
       </div>
 
-      {!c ? (
+      {msg.engine === 'ia' && msg.text ? (
+        <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-ink">{msg.text}</p>
+      ) : !c ? (
         <p className="mt-3 text-sm leading-relaxed text-mute">{msg.text}</p>
       ) : !c.entry ? (
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
@@ -191,6 +202,12 @@ export function ConsultantScreen({
   const idRef = useRef(1);
   const timersRef = useRef<number[]>([]);
 
+  // IA externa (opcional) — chave própria do usuário, guardada só neste dispositivo
+  const [aiCfg, setAiCfg] = useState<AiConfig>(() => loadAiConfig());
+  const [aiModal, setAiModal] = useState(false);
+  const [aiDraft, setAiDraft] = useState<AiConfig>({ ...DEFAULT_AI_CONFIG });
+  const [aiTest, setAiTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+
   const storageKey = patient ? `vitalis.consultor.${patient.id}` : null;
 
   useEffect(() => {
@@ -295,11 +312,37 @@ export function ConsultantScreen({
     if (greet) {
       timersRef.current = [
         window.setTimeout(() => {
-          setMessages((m) => [...m, { id: idRef.current++, role: 'assistant', text: greet }]);
+          setMessages((m) => [...m, { id: idRef.current++, role: 'assistant', text: greet, engine: 'local' }]);
           setThinking(false);
           setStepIdx(0);
         }, 700),
       ];
+      return;
+    }
+
+    // IA externa (se o usuário configurou uma chave)
+    const useRemote = aiCfg.provider === 'openai' && aiCfg.apiKey.trim().length > 0;
+    if (useRemote) {
+      setStepIdx(2);
+      void analyzeWithRemoteAI(text, patient, aiCfg)
+        .then((answer) => {
+          setMessages((m) => [...m, { id: idRef.current++, role: 'assistant', text: answer, engine: 'ia' }]);
+        })
+        .catch((err) => {
+          setMessages((m) => [
+            ...m,
+            {
+              id: idRef.current++,
+              role: 'assistant',
+              engine: 'ia',
+              text: `Não consegui falar com a IA externa (${err instanceof Error ? err.message : 'erro de conexão'}). Vou responder com o motor local.\n\n` + greetingFreeLocal(text, patient),
+            },
+          ]);
+        })
+        .finally(() => {
+          setThinking(false);
+          setStepIdx(0);
+        });
       return;
     }
 
@@ -308,11 +351,19 @@ export function ConsultantScreen({
       window.setTimeout(() => setStepIdx(2), 900),
       window.setTimeout(() => setStepIdx(3), 1800),
       window.setTimeout(() => {
-        setMessages((m) => [...m, { id: idRef.current++, role: 'assistant', consult }]);
+        setMessages((m) => [...m, { id: idRef.current++, role: 'assistant', consult, engine: 'local' }]);
         setThinking(false);
         setStepIdx(0);
       }, 2700),
     ];
+  };
+
+  // Resposta local em texto livre (fallback quando a IA externa falha)
+  const greetingFreeLocal = (text: string, p: Patient) => {
+    const c = analyze(text, p);
+    if (!c.entry) return 'Descreva o sintoma com palavras simples (ex.: febre, dor de cabeça, azia) para eu analisar com o prontuário.';
+    const opts = c.assessments.map((a) => `${a.option.name} — ${a.status === 'contra' ? 'EVITAR' : a.status === 'caution' ? 'cautela' : 'compatível'}`).join('\n');
+    return `Quadro compatível: ${c.entry.label}.\n${opts}\n\nLembre-se de procurar um médico antes de se medicar.`;
   };
 
   return (
@@ -349,6 +400,19 @@ export function ConsultantScreen({
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+          <Btn
+            variant={aiCfg.provider === 'openai' && aiCfg.apiKey ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => {
+              setAiDraft({ ...aiCfg });
+              setAiTest('idle');
+              setAiModal(true);
+            }}
+            title="Configurar IA externa"
+          >
+            <IconGear size={14} />
+            {aiCfg.provider === 'openai' && aiCfg.apiKey ? `IA: ${aiCfg.model}` : 'Usar IA externa'}
+          </Btn>
           <Btn variant="outline" size="sm" onClick={() => setMessages([])}>
             Nova conversa
           </Btn>
@@ -454,6 +518,81 @@ export function ConsultantScreen({
           Toque no microfone para <strong>falar</strong> em vez de digitar — a transcrição aparece no campo (requer permissão de microfone).
         </p>
       </div>
+
+      {/* ------------------------- configuração da IA ------------------------- */}
+      <Modal
+        open={aiModal}
+        onClose={() => setAiModal(false)}
+        title="IA externa no Consultor"
+        subtitle="Conecte um modelo de IA (compatível com a API da OpenAI) para respostas mais completas, sempre analisando o prontuário."
+        width="max-w-xl"
+      >
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            {(
+              [
+                { key: 'local', label: 'Motor local (padrão, sem chave)' },
+                { key: 'openai', label: 'IA externa (chave própria)' },
+              ] as const
+            ).map((o) => (
+              <button
+                key={o.key}
+                onClick={() => setAiDraft({ ...aiDraft, provider: o.key })}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+                  aiDraft.provider === o.key
+                    ? 'border-pine-900 bg-pine-900 text-white'
+                    : 'border-line bg-card text-mute hover:border-pine-200 hover:text-ink'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {aiDraft.provider === 'openai' && (
+            <>
+              <label className="block">
+                <span className="mb-1 block text-[13px] font-semibold text-ink">URL da API (compatível OpenAI)</span>
+                <input className={inputCls} value={aiDraft.baseUrl} onChange={(e) => setAiDraft({ ...aiDraft, baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[13px] font-semibold text-ink">Chave de API (sk-…)</span>
+                <input className={inputCls} type="password" value={aiDraft.apiKey} onChange={(e) => setAiDraft({ ...aiDraft, apiKey: e.target.value })} placeholder="sk-…" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[13px] font-semibold text-ink">Modelo</span>
+                <input className={inputCls} value={aiDraft.model} onChange={(e) => setAiDraft({ ...aiDraft, model: e.target.value })} placeholder="gpt-4o-mini" />
+              </label>
+              <p className="rounded-lg bg-paper px-3 py-2 text-[11px] leading-relaxed text-mute">
+                A chave fica armazenada <strong>somente neste dispositivo</strong> (não vai para o servidor do app). O
+                prontuário de {firstName} é enviado como contexto a cada pergunta.
+              </p>
+            </>
+          )}
+
+          <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+            {aiDraft.provider === 'openai' && (
+              <Btn variant="outline" size="sm" onClick={() => void testAi()} disabled={aiTest === 'testing' || !aiDraft.apiKey.trim()}>
+                {aiTest === 'testing' ? 'Testando…' : aiTest === 'ok' ? 'Conectado ✓' : aiTest === 'fail' ? 'Falhou — tentar de novo' : 'Testar conexão'}
+              </Btn>
+            )}
+            <div className="ml-auto flex gap-2">
+              <Btn variant="ghost" size="sm" onClick={() => setAiModal(false)}>Cancelar</Btn>
+              <Btn
+                size="sm"
+                onClick={() => {
+                  saveAiConfig(aiDraft);
+                  setAiCfg(aiDraft);
+                  setAiModal(false);
+                  toast('success', aiDraft.provider === 'openai' && aiDraft.apiKey ? `IA externa ativada (${aiDraft.model}).` : 'Usando o motor local.');
+                }}
+              >
+                <IconCheck size={14} /> Salvar
+              </Btn>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

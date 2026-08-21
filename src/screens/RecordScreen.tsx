@@ -6,6 +6,7 @@ import { uid } from '../lib/store';
 import { downloadAttachment, fileToAttachment, formatSizeKb } from '../lib/attachments';
 import { AttachmentModal, AttachmentStrip } from '../components/attachments';
 import { Avatar, BloodBadge, Btn, ConfirmDialog, EmptyState, Field, inputCls, MicButton, Modal, Tag, useToast } from '../components/ui';
+import { PatientForm } from './PatientsScreen';
 import {
   IconActivity, IconAlert, IconArchive, IconCalendar, IconChart, IconChevronDown, IconChevronLeft,
   IconDownload, IconEye, IconFace, IconFileText, IconFingerprint, IconFlask, IconInfo, IconPaperclip,
@@ -289,6 +290,10 @@ function NewEntryForm({
   const [type, setType] = useState<EntryType>('consulta');
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
   const [specialty, setSpecialty] = useState(defaultSpecialty);
   const [notes, setNotes] = useState('');
   const [rx, setRx] = useState<ClinicalSection>(emptySection());
@@ -307,7 +312,7 @@ function NewEntryForm({
     const rxHas = rx.text.trim() || rx.attachments.length > 0;
     const validExams = ex.filter((x) => x.name.trim() || x.description.trim() || x.attachments.length > 0);
     onAdd({
-      id: uid(), type, title: title.trim(), notes: notes.trim(), date, createdAt: Date.now(),
+      id: uid(), type, title: title.trim(), notes: notes.trim(), date, time: time || undefined, createdAt: Date.now(),
       specialty, archived: false,
       prescription: rxHas ? { text: rx.text.trim(), attachments: rx.attachments } : null,
       exams: validExams.length > 0 ? validExams.map((x) => ({ ...x, name: x.name.trim(), description: x.description.trim() })) : null,
@@ -331,10 +336,15 @@ function NewEntryForm({
           <input className={`${inputCls} ${errs.title ? 'border-danger-500' : ''}`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex.: Consulta de retorno — cardiologia" />
           {errs.title && <p className="mt-1 text-xs font-medium text-danger-600">{errs.title}</p>}
         </Field>
-        <Field label="Data" required>
-          <input type="date" className={`${inputCls} ${errs.date ? 'border-danger-500' : ''}`} value={date} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} />
-          {errs.date && <p className="mt-1 text-xs font-medium text-danger-600">{errs.date}</p>}
-        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Data" required>
+            <input type="date" className={`${inputCls} ${errs.date ? 'border-danger-500' : ''}`} value={date} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} />
+            {errs.date && <p className="mt-1 text-xs font-medium text-danger-600">{errs.date}</p>}
+          </Field>
+          <Field label="Hora" hint="opcional">
+            <input type="time" className={inputCls} value={time} onChange={(e) => setTime(e.target.value)} />
+          </Field>
+        </div>
         <Field label="Especialidade">
           <select className={inputCls} value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
             <option value="">Geral</option>
@@ -474,23 +484,26 @@ function ExamsBlock({
 
 export function RecordScreen({
   patient,
+  patients,
   byName,
   onBack,
-  onEditPatient,
+  onUpdate,
   onAddEntry,
   onArchiveEntry,
   onRestoreEntry,
 }: {
   patient: Patient | undefined;
+  patients: Patient[];
   byName: string;
   onBack: () => void;
-  onEditPatient: (id: string) => void;
+  onUpdate: (p: Patient) => void;
   onAddEntry: (pid: string, e: ClinicalEntry) => void;
   onArchiveEntry: (pid: string, eid: string) => void;
   onRestoreEntry: (pid: string, eid: string) => void;
 }) {
   const toast = useToast();
   const [formOpen, setFormOpen] = useState(false);
+  const [tab, setTab] = useState<'prontuario' | 'cadastro'>('prontuario');
   const [typeFilter, setTypeFilter] = useState<'all' | EntryType>('all');
   const [specFilter, setSpecFilter] = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
@@ -654,9 +667,6 @@ export function RecordScreen({
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <Btn variant="outline" size="sm" onClick={() => onEditPatient(patient.id)}>
-              <IconPencil size={14} /> Editar cadastro
-            </Btn>
             <div className="rounded-lg border border-line bg-paper/70 px-3 py-2 text-right">
               <p className="font-mono text-xl font-semibold leading-none text-ink">{sorted.filter((e) => !e.archived).length}</p>
               <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-mute">registros</p>
@@ -694,6 +704,45 @@ export function RecordScreen({
         </div>
       </header>
 
+      {/* --------------- abas: prontuário clínico × meu cadastro --------------- */}
+      <div className="rise mt-5 inline-flex rounded-xl border border-line bg-card p-1 shadow-lift" style={{ animationDelay: '70ms' }}>
+        {(
+          [
+            { key: 'prontuario', label: 'Prontuário clínico', icon: <IconChart size={15} /> },
+            { key: 'cadastro', label: 'Meu cadastro', icon: <IconPencil size={15} /> },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-bold transition-all ${
+              tab === t.key ? 'bg-pine-900 text-white shadow-sm' : 'text-mute hover:text-ink'
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'cadastro' && (
+        <div className="rise mt-4 rounded-xl border border-line bg-card p-5 shadow-lift" style={{ animationDelay: '90ms' }}>
+          <PatientForm
+            initial={patient}
+            patients={patients}
+            defaultOwnerId={patient.ownerAccountId}
+            onCancel={() => setTab('prontuario')}
+            onSave={(p) => {
+              onUpdate(p);
+              toast('success', 'Cadastro atualizado.');
+              setTab('prontuario');
+            }}
+          />
+        </div>
+      )}
+
+      {tab === 'prontuario' && (
+      <>
       <section className="mt-6">
         <div className="rise mb-3 flex flex-wrap items-center gap-2" style={{ animationDelay: '100ms' }}>
           <h2 className="mr-2 font-display text-lg font-bold text-ink">Linha do tempo clínica</h2>
@@ -823,7 +872,9 @@ export function RecordScreen({
                         </Tag>
                       )}
                       <h3 className="font-display text-[15px] font-bold text-ink">{e.title}</h3>
-                      <span className="ml-auto font-mono text-xs text-mute">{formatDateBR(e.date)}</span>
+                      <span className="ml-auto font-mono text-xs text-mute">
+                        {formatDateBR(e.date)}{e.time ? ` · ${e.time}` : ''}
+                      </span>
                       {hasSections && (
                         <button
                           onClick={() => setExpandedId(expanded ? null : e.id)}
@@ -896,6 +947,8 @@ export function RecordScreen({
           Compartilhar/Exportar para levar o histórico a um médico, filtrando por especialidade.
         </p>
       </aside>
+      </>
+      )}
 
       <AttachmentModal att={viewAtt} onClose={() => setViewAtt(null)} />
 

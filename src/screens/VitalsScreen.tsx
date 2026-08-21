@@ -64,9 +64,17 @@ export function VitalsScreen({
   const [mMetric, setMMetric] = useState<VitalMetric>('glucose');
   const [mValue, setMValue] = useState('');
   const [mNote, setMNote] = useState('');
+  const [mWhen, setMWhen] = useState(() => toLocalInput(Date.now()));
   const [mErr, setMErr] = useState('');
   const sessionRef = useRef<{ stop: () => void } | null>(null);
   const liveRef = useRef<VitalSample[]>([]);
+
+  // "agora" em formato aceito pelo input datetime-local (YYYY-MM-DDTHH:mm)
+  function toLocalInput(ts: number): string {
+    const d = new Date(ts);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 
   // encerra a sessão ao desmontar / trocar de prontuário
   useEffect(
@@ -115,11 +123,13 @@ export function VitalsScreen({
       return;
     }
     setMErr('');
+    const when = mWhen ? new Date(mWhen).getTime() : Date.now();
     commitSamples([
-      { id: uid(), metric: mMetric, value, at: Date.now(), source: 'manual', note: mNote.trim() || undefined },
+      { id: uid(), metric: mMetric, value, at: Number.isNaN(when) ? Date.now() : when, source: 'manual', note: mNote.trim() || undefined },
     ]);
     setMValue('');
     setMNote('');
+    setMWhen(toLocalInput(Date.now()));
     toast('success', `${metricMeta(mMetric).label} registrada no histórico.`);
   };
 
@@ -328,7 +338,7 @@ export function VitalsScreen({
             <h3 className="flex items-center gap-2 font-display text-sm font-bold uppercase tracking-[0.14em] text-mute">
               <IconPlus size={15} className="text-moss-600" /> Registrar manualmente
             </h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-[1.2fr_130px_1fr_auto]">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.2fr_120px_1fr_200px_auto]">
               <Field label="Sinal">
                 <select className={inputCls} value={mMetric} onChange={(e) => setMMetric(e.target.value as VitalMetric)}>
                   {VITAL_METRICS.map((m) => (
@@ -349,7 +359,26 @@ export function VitalsScreen({
               <Field label="Observação" hint="opcional">
                 <input className={inputCls} value={mNote} onChange={(e) => setMNote(e.target.value)} placeholder="ex.: em jejum, pós-esforço…" />
               </Field>
-              <div className="flex items-end">
+              <Field label="Data e hora" hint="sugerido: agora">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="datetime-local"
+                    className={inputCls}
+                    value={mWhen}
+                    max={toLocalInput(Date.now())}
+                    onChange={(e) => setMWhen(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMWhen(toLocalInput(Date.now()))}
+                    title="Usar data e hora atuais"
+                    className="shrink-0 rounded-lg border border-line bg-paper p-2 text-mute transition-all hover:border-moss-300 hover:text-moss-700 active:scale-95"
+                  >
+                    <IconClock size={15} />
+                  </button>
+                </div>
+              </Field>
+              <div className="flex items-end sm:col-span-2 lg:col-span-1">
                 <Btn onClick={saveManual} className="w-full sm:w-auto">
                   <IconCheck size={15} /> Registrar
                 </Btn>
@@ -368,8 +397,8 @@ export function VitalsScreen({
               <p className="text-[10px] font-bold uppercase tracking-wider text-mute">medições</p>
             </div>
             <div className="px-2 py-3.5">
-              <p className="font-mono text-xl font-semibold text-ink">{sorted[0] ? timeAgo(sorted[0].at) : '—'}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-mute">última</p>
+              <p className="font-mono text-sm font-semibold text-ink">{sorted[0] ? formatDateTime(sorted[0].at) : '—'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-mute">última medição</p>
             </div>
             <div className="px-2 py-3.5">
               <p className={`font-mono text-xl font-semibold ${abnormalCount > 0 ? 'text-warn-600' : 'text-moss-700'}`}>{abnormalCount}</p>

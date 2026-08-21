@@ -293,7 +293,7 @@ type FormState = ReturnType<typeof emptyForm> & {
   fingerprint: Patient['fingerprint'];
 };
 
-function PatientForm({
+export function PatientForm({
   initial,
   patients,
   onSave,

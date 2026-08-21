@@ -578,12 +578,10 @@ function Shell() {
               {route.name === 'record' && (
                 <RecordScreen
                   patient={currentPatient}
+                  patients={state.patients}
                   byName={account?.name ?? 'conta local'}
                   onBack={() => setRoute({ name: 'patients' })}
-                  onEditPatient={(id) => {
-                    setPendingEditId(id);
-                    setRoute({ name: 'patients' });
-                  }}
+                  onUpdate={updatePatient}
                   onAddEntry={addEntry}
                   onArchiveEntry={(pid, eid) => setEntryArchived(pid, eid, true)}
                   onRestoreEntry={(pid, eid) => setEntryArchived(pid, eid, false)}

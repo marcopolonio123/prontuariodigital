@@ -201,6 +201,103 @@ export function greetingResponse(question: string, patientName: string): string 
   );
 }
 
+/* ------------------------- IA externa (opcional) ------------------------ */
+
+export interface AiConfig {
+  provider: 'local' | 'openai';
+  baseUrl: string; // compatível com OpenAI — ex.: https://api.openai.com/v1
+  apiKey: string;
+  model: string; // ex.: gpt-4o-mini
+}
+
+export const DEFAULT_AI_CONFIG: AiConfig = {
+  provider: 'local',
+  baseUrl: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: 'gpt-4o-mini',
+};
+
+const AI_KEY = 'mydoctor.ai.config';
+
+export function loadAiConfig(): AiConfig {
+  try {
+    const raw = localStorage.getItem(AI_KEY);
+    if (raw) return { ...DEFAULT_AI_CONFIG, ...(JSON.parse(raw) as Partial<AiConfig>) };
+  } catch {
+    /* ignora */
+  }
+  return { ...DEFAULT_AI_CONFIG };
+}
+
+export function saveAiConfig(cfg: AiConfig) {
+  localStorage.setItem(AI_KEY, JSON.stringify(cfg));
+}
+
+/** Resumo textual do prontuário para contextualizar a IA externa. */
+export function buildRecordContext(p: Patient): string {
+  const meds = p.medications.map((m) => `${m.name} ${m.dose} (${m.frequency})${m.reason ? ` — ${m.reason}` : ''}`).join('; ');
+  const vitals = p.vitals.slice(-5).map((v) => `${v.metric}=${v.value}`).join('; ');
+  return [
+    `Paciente: ${p.name}, ${ageFromBirth(p.birthDate) ?? '?'} anos, sexo ${p.sex}.`,
+    p.bloodType ? `Tipo sanguíneo: ${p.bloodType}.` : '',
+    p.allergies.length ? `ALERGIAS: ${p.allergies.join(', ')}.` : 'Sem alergias registradas.',
+    p.intolerances.length ? `Intolerâncias: ${p.intolerances.join(', ')}.` : '',
+    p.conditions.length ? `Condições crônicas: ${p.conditions.join(', ')}.` : '',
+    meds ? `Medicações em uso contínuo: ${meds}.` : '',
+    p.specialCare.length ? `Cuidados especiais: ${p.specialCare.join(', ')}.` : '',
+    p.emergencyNotes ? `Orientações de emergência: ${p.emergencyNotes}` : '',
+    vitals ? `Últimos sinais vitais: ${vitals}.` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * Chama um modelo de IA compatível com a API da OpenAI, enviando o prontuário
+ * como contexto. Retorna a resposta em texto. Requer chave própria do usuário.
+ */
+export async function analyzeWithRemoteAI(
+  question: string,
+  p: Patient,
+  cfg: AiConfig,
+): Promise<string> {
+  const system =
+    'Você é um assistente de orientação em saúde do aplicativo My Doctor. ' +
+    'Responda em português, de forma clara e acolhedora. ' +
+    'Analise a pergunta SEMPRE à luz do prontuário fornecido (alergias, medicações, condições). ' +
+    'Nunca prescreva: apresente opções gerais, alerte sobre interações com o prontuário e reforce que o usuário ' +
+    'deve procurar um médico ou especialista antes de se medicar. Em sinais de gravidade, oriente buscar emergência (SAMU 192). ' +
+    'Seja conciso (máx. ~200 palavras).';
+  const user = `PRONTUÁRIO:\n${buildRecordContext(p)}\n\nPERGUNTA DO USUÁRIO: ${question}`;
+
+  const base = cfg.baseUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 0.4,
+      max_tokens: 500,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`A IA retornou erro ${res.status}. ${body.slice(0, 160)}`);
+  }
+  const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const text = data.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error('A IA não devolveu resposta.');
+  return text;
+}
+
 export interface OptionAssessment {
   option: MedOption;
   status: 'ok' | 'caution' | 'contra';

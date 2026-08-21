@@ -63,6 +63,7 @@ function normalizeEntry(raw: Record<string, unknown>): ClinicalEntry {
     title: String(raw.title ?? 'Registro'),
     notes: String(raw.notes ?? ''),
     date: String(raw.date ?? ''),
+    time: raw.time !== undefined ? String(raw.time) : undefined,
     createdAt: Number(raw.createdAt ?? Date.now()),
     specialty: String(raw.specialty ?? ''),
     archived: Boolean(raw.archived),
