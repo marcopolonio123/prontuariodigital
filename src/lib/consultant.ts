@@ -107,7 +107,99 @@ export const KB: KbEntry[] = [
     redFlags: ['Sangue nas fezes', 'Sinais de desidratação (boca seca, tontura, pouca urina)', 'Mais de 3 dias ou febre alta — crianças e idosos: médico logo'],
     sources: ['Caderno de Atenção Básica — Diarreia (MS)', 'OMS — reidratação oral', 'Bula — probióticos (ANVISA)'],
   },
+  {
+    id: 'abdominal', keys: ['dor de barriga', 'dor abdominal', 'colica', 'barriga doendo', 'gas', 'mal estar estomaco'], label: 'Dor abdominal / cólica',
+    causes: ['Gases e má digestão', 'Cólica intestinal', 'Constipação'],
+    options: [
+      { name: 'Simeticona (gotas/comprimido)', contra: [], caution: [], note: 'Ajuda a eliminar gases. Dose conforme bula.' },
+      { name: 'Escopolamina (Buscopan)', contra: [], caution: ['idoso', 'cardiopatia'], note: 'Antiespasmódico para cólica. Evitar uso contínuo.' },
+      { name: 'Calor local + hidratação', contra: [], caution: [], note: 'Bolsa morna na região alivia cólicas leves.' },
+    ],
+    redFlags: ['Dor intensa e súbita que piora', 'Febre + dor abdominal', 'Vômito persistente ou sangue — emergência'],
+    sources: ['Caderno de Atenção Básica — Dor abdominal (MS)', 'Bula — Simeticona/Escopolamina (ANVISA)'],
+  },
+  {
+    id: 'vomito', keys: ['vomito', 'vomitando', 'enjoo forte', 'nausea forte'], label: 'Náusea / vômito',
+    causes: ['Virose gastrointestinal', 'Intoxicação alimentar', 'Cinetose (enjoo de movimento)'],
+    options: [
+      { name: 'Ondansetrona 4 mg', contra: [], caution: ['cardiopatia'], note: 'Antiemético eficaz. Dose conforme orientação.' },
+      { name: 'Metoclopramida 10 mg', contra: [], caution: ['idoso', 'crianca'], note: 'Usar por curto período; evitar em idosos.' },
+      { name: 'Hidratação em pequenos goles', contra: [], caution: [], note: 'Soro ou água aos poucos para não desidratar.' },
+    ],
+    redFlags: ['Vômito com sangue ou aspecto de borra de café', 'Incapacidade de reter líquidos por horas', 'Febre alta ou dor abdominal intensa'],
+    sources: ['Caderno de Atenção Básica — Náusea (MS)', 'Bula — Ondansetrona (ANVISA)'],
+  },
+  {
+    id: 'ouvido', keys: ['dor de ouvido', 'ouvido doendo', 'otite'], label: 'Dor de ouvido',
+    causes: ['Otite externa (após piscina/banho)', 'Otite média (pós-resfriado)', 'Acúmulo de cera'],
+    options: [
+      { name: 'Paracetamol 750 mg (dor)', contra: ['alergia-paracetamol', 'hepatopatia'], caution: ['hepatico'], note: 'Alívio da dor enquanto aguarda avaliação.' },
+      { name: 'Compressa morna', contra: [], caution: [], note: 'Alívio local; não introduzir objetos no ouvido.' },
+    ],
+    redFlags: ['Secreção com pus ou sangue', 'Febre + dor intensa', 'Perda de audição súbita — avaliação médica'],
+    sources: ['Caderno de Atenção Básica — Otite (MS)', 'Bula — Paracetamol (ANVISA)'],
+  },
+  {
+    id: 'olho', keys: ['olho vermelho', 'conjuntivite', 'olho coçando', 'olho ardendo'], label: 'Irritação ocular / conjuntivite',
+    causes: ['Conjuntivite viral ou alérgica', 'Irritação por poeira/fumaça', 'Olho seco'],
+    options: [
+      { name: 'Lágrima artificial (colírio lubrificante)', contra: [], caution: [], note: 'Alivia ardência e secura; uso livre.' },
+      { name: 'Compressa fria + higiene', contra: [], caution: [], note: 'Limpar com soro fisiológico; não coçar.' },
+    ],
+    redFlags: ['Dor ocular intensa ou perda de visão', 'Secreção amarelada abundante', 'Trauma ou produto químico no olho — emergência'],
+    sources: ['Caderno de Atenção Básica — Conjuntivite (MS)', 'CBO — orientações oculares'],
+  },
+  {
+    id: 'dente', keys: ['dor de dente', 'dente doendo', 'gengiva inflamada'], label: 'Dor de dente / gengiva',
+    causes: ['Cárie profunda', 'Gengivite', 'Sensibilidade dentária'],
+    options: [
+      { name: 'Paracetamol 750 mg', contra: ['alergia-paracetamol', 'hepatopatia'], caution: ['hepatico'], note: 'Alívio temporário da dor.' },
+      { name: 'Ibuprofeno 400 mg', contra: ['nsaid', 'ulcera', 'anticoagulante', 'renal'], caution: ['cardiopatia', 'hipertensao', 'idoso'], note: 'Ajuda se houver inflamação, por poucos dias.' },
+    ],
+    redFlags: ['Inchaço no rosto ou febre', 'Dor que impede de dormir por dias — procure um dentista', 'Sangramento gengival persistente'],
+    sources: ['Bula — Paracetamol/Ibuprofeno (ANVISA)', 'CFO — saúde bucal'],
+  },
+  {
+    id: 'pressao', keys: ['pressao alta', 'hipertensao', 'pressao subiu'], label: 'Pressão arterial elevada',
+    causes: ['Hipertensão em acompanhamento', 'Pico tensional (estresse/dor)', 'Uso incorreto de anti-hipertensivo'],
+    options: [
+      { name: 'Repouso e reavaliação em 15 min', contra: [], caution: [], note: 'Medir em repouso, sentado, sem café/cigarro antes.' },
+      { name: 'Manter medicação habitual', contra: [], caution: [], note: 'Não dobrar dose por conta própria; seguir o prescrito.' },
+    ],
+    redFlags: ['Pressão ≥ 180/120 mmHg', 'Dor no peito, falta de ar ou visão turva — emergência (SAMU 192)', 'Fraqueza em um lado do corpo ou fala enrolada'],
+    sources: ['Diretriz Brasileira de Hipertensão (SBC)', 'Caderno de Atenção Básica — HAS (MS)'],
+  },
+  {
+    id: 'respiratorio', keys: ['falta de ar', 'chiado', 'asma', 'respiracao dificil'], label: 'Falta de ar / chiado',
+    causes: ['Crise de asma', 'Bronquite', 'Ansiedade (respiração ofegante)'],
+    options: [
+      { name: 'Broncodilatador de resgate (se já prescrito)', contra: [], caution: ['cardiopatia'], note: 'Usar conforme plano de ação do médico.' },
+      { name: 'Posição sentada + respiração lenta', contra: [], caution: [], note: 'Acalmar e respirar devagar ajuda se for ansiedade.' },
+    ],
+    redFlags: ['Lábios arroxeados ou cansaço extremo — SAMU 192', 'Falta de ar em repouso que não melhora', 'Primeira crise ou sem medicação de resgate'],
+    sources: ['Diretriz de Asma (SBPT)', 'Caderno de Atenção Básica — Asma (MS)'],
+  },
 ];
+
+/* --------------------- saudações / conversa livre ------------------------ */
+
+export const GREETING_KEYS = [
+  'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'tudo bem', 'obrigad', 'valeu', 'como funciona', 'me ajuda', 'help',
+];
+
+/** Retorna uma resposta de texto livre (saudação) ou null se for um sintoma a analisar. */
+export function greetingResponse(question: string, patientName: string): string | null {
+  const q = norm(question);
+  const isGreet = GREETING_KEYS.some((k) => q.includes(norm(k))) && q.length < 40;
+  if (!isGreet) return null;
+  return (
+    `Olá! Eu sou o Consultor do My Doctor e estou analisando o prontuário de ${patientName}.\n\n` +
+    'Descreva o sintoma — por exemplo “febre”, “dor de cabeça”, “azia”, “dor de garganta”, “dor de ouvido”, ' +
+    '“dor de barriga”, “pressão alta”, “falta de ar”, “dor de dente” ou “não consigo dormir”. ' +
+    'Vou cruzar com as alergias, medicações e condições registradas e indicar opções compatíveis.\n\n' +
+    'Lembre-se: eu organizo informações, mas quem confirma o tratamento é sempre um médico ou especialista.'
+  );
+}
 
 export interface OptionAssessment {
   option: MedOption;

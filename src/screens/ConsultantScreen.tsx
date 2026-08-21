@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AccessGrant, Account, Patient } from '../lib/types';
 import { ageFromBirth } from '../lib/biometrics';
-import { analyze, ANALYSIS_STEPS, DISCLAIMER, type Consultation } from '../lib/consultant';
-import { Avatar, Btn, EmptyState, Tag } from '../components/ui';
+import { analyze, ANALYSIS_STEPS, DISCLAIMER, greetingResponse, type Consultation } from '../lib/consultant';
+import { Avatar, Btn, EmptyState, MicButton, Tag } from '../components/ui';
 import { IconAlert, IconBrain, IconCheck, IconSend, IconSparkles, IconX } from '../components/icons';
 
 interface ChatMsg {
@@ -15,10 +15,13 @@ interface ChatMsg {
 const SUGGESTIONS = [
   'Estou com febre e dor no corpo',
   'Dor de cabeça forte desde ontem',
+  'Dor de garganta e tosse',
   'Azia depois de comer',
-  'Manchas vermelhas coçando na pele',
+  'Dor de barriga e gases',
+  'Dor de ouvido',
+  'Pressão alta hoje',
+  'Falta de ar e chiado',
   'Não consigo dormir direito',
-  'Diarreia desde ontem',
 ];
 
 function StatusBadge({ status }: { status: 'ok' | 'caution' | 'contra' }) {
@@ -60,11 +63,19 @@ function AssistantCard({ msg, firstName }: { msg: ChatMsg; firstName: string }) 
       ) : !c.entry ? (
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
           <p>
-            Não reconheci esse sintoma com clareza. Tente descrever com palavras simples, como{' '}
+            Ainda não tenho informação confiável sobre esse sintoma específico — e, por segurança, prefiro não palpitar.
+            Consigo ajudar com:{' '}
             <strong className="text-ink">febre</strong>, <strong className="text-ink">dor de cabeça</strong>,{' '}
-            <strong className="text-ink">azia</strong>, <strong className="text-ink">coceira na pele</strong>,{' '}
-            <strong className="text-ink">gripe</strong>, <strong className="text-ink">dor muscular</strong>,{' '}
+            <strong className="text-ink">dor de garganta/gripe</strong>, <strong className="text-ink">azia/estômago</strong>,{' '}
+            <strong className="text-ink">dor de barriga</strong>, <strong className="text-ink">vômito</strong>,{' '}
+            <strong className="text-ink">dor de ouvido</strong>, <strong className="text-ink">dor de dente</strong>,{' '}
+            <strong className="text-ink">coceira na pele</strong>, <strong className="text-ink">dor muscular</strong>,{' '}
+            <strong className="text-ink">pressão alta</strong>, <strong className="text-ink">falta de ar</strong>,{' '}
             <strong className="text-ink">insônia</strong> ou <strong className="text-ink">diarreia</strong>.
+          </p>
+          <p className="text-[13px]">
+            Se for algo fora dessa lista, ou se houver <strong className="text-danger-600">dor no peito, dificuldade para respirar,
+            sangramento ou confusão mental</strong>, procure atendimento médico imediatamente (SAMU 192 em emergências).
           </p>
           {c.recordAlerts.length > 0 && (
             <div className="rounded-lg border border-info-500/25 bg-info-100/60 p-3">
@@ -278,6 +289,20 @@ export function ConsultantScreen({
     setMessages((m) => [...m, { id: idRef.current++, role: 'user', text }]);
     setThinking(true);
     setStepIdx(1);
+
+    // Saudações / conversa livre recebem resposta direta, sem análise clínica
+    const greet = greetingResponse(text, patient.name);
+    if (greet) {
+      timersRef.current = [
+        window.setTimeout(() => {
+          setMessages((m) => [...m, { id: idRef.current++, role: 'assistant', text: greet }]);
+          setThinking(false);
+          setStepIdx(0);
+        }, 700),
+      ];
+      return;
+    }
+
     const consult = analyze(text, patient);
     timersRef.current = [
       window.setTimeout(() => setStepIdx(2), 900),
@@ -402,23 +427,32 @@ export function ConsultantScreen({
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && send(input)}
-            placeholder={`Descreva o sintoma de ${firstName}… (ex.: febre de 38,5 desde ontem)`}
-            className="flex-1 rounded-xl border border-line bg-white/90 px-4 py-3 text-sm shadow-lift transition-colors focus:border-moss-400"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && send(input)}
+              placeholder={`Descreva ou dite o sintoma de ${firstName}… (ex.: febre de 38,5 desde ontem)`}
+              className="w-full rounded-xl border border-line bg-white/90 py-3 pl-4 pr-20 text-sm shadow-lift transition-colors focus:border-moss-400"
+            />
+            <MicButton
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+              onAppend={(t) => setInput((v) => (v ? v + ' ' : '') + t)}
+            />
+          </div>
           <button
             onClick={() => send(input)}
             disabled={!input.trim() || thinking}
-            className="flex items-center justify-center rounded-xl bg-moss-600 px-4 text-white shadow-sm transition-all hover:bg-moss-700 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+            className="flex items-center justify-center rounded-xl bg-moss-600 px-4 py-3 text-white shadow-sm transition-all hover:bg-moss-700 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
             aria-label="Enviar pergunta"
           >
             <IconSend size={18} />
           </button>
         </div>
+        <p className="mt-1.5 text-[11px] text-mute">
+          Toque no microfone para <strong>falar</strong> em vez de digitar — a transcrição aparece no campo (requer permissão de microfone).
+        </p>
       </div>
     </div>
   );
