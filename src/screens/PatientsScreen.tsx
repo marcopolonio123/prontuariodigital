@@ -642,9 +642,11 @@ export function PatientForm({
                 <IconCreditCard size={15} className="text-moss-600" /> Convênios & seguro saúde
               </h4>
               <p className="mb-3 text-xs text-mute">
-                Aparecem no cartão de emergência — úteis em internações e atendimentos de urgência.
+                Gerencie seus planos na tela dedicada "Convênios & planos" no menu principal.
               </p>
-              <InsuranceEditor value={f.insurances} onChange={(v) => set('insurances', v)} />
+              <p className="rounded-lg bg-moss-50 px-3 py-2 text-xs text-moss-700">
+                Esta seção foi movida para o menu principal para melhor experiência mobile.
+              </p>
             </div>
           </section>
 

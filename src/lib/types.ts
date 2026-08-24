@@ -131,6 +131,7 @@ export interface Insurance {
 export interface ClinicalEntry {
   id: string;
   type: EntryType;
+  /** Nome/descrição do registro (ex.: "Avaliação geriátrica", "Retorno - Neurologia") */
   title: string;
   notes: string;
   date: string;
@@ -138,6 +139,10 @@ export interface ClinicalEntry {
   time?: string;
   createdAt: number;
   specialty: string;
+  /** Local/instituição onde foi realizado o atendimento (ex.: "Hospital São Paulo", "Clínica Vida") */
+  institution?: string;
+  /** CRM/CREFITO ou outro registro profissional (para consultas, fisioterapia, etc.) */
+  professionalId?: string;
   archived: boolean;
   prescription: ClinicalSection | null; // prescrição médica (descritiva e/ou receita anexada)
   exams: ClinicalExam[] | null; // exames solicitados — um ou mais, cada um com descritivo e/ou anexos

@@ -45,6 +45,31 @@ export const KB: KbEntry[] = [
     sources: ['Protocolo Clínico — Cefaleias (Min. Saúde)', 'Bula — analgésicos (ANVISA)', 'IHS — classificação de cefaleias'],
   },
   {
+    id: 'suplementacao', keys: ['suplemento', 'vitamina', 'mineral', 'omega', 'proteina', 'whey', 'creatina', 'alimentacao', 'dieta', 'nutricao'], label: 'Suplementação / Alimentação',
+    causes: ['Deficiência nutricional identificada', 'Aumento de demanda (exercícios, recuperação)', 'Restrições alimentares'],
+    options: [
+      { name: 'Multivitamínico A-Z', contra: [], caution: ['gestante'], note: 'Pode complementar dieta restritiva. Evitar megadoses.' },
+      { name: 'Vitamina D3 (1000–2000 UI/dia)', contra: [], caution: [], note: 'Comum em baixa exposição solar. Dosagem deve ser validada por exame.' },
+      { name: 'Ômega-3 (óleo de peixe)', contra: ['anticoagulante'], caution: ['cirurgia'], note: 'Anti-inflamatório natural; atenção se usa anticoagulante.' },
+      { name: 'Whey Protein ou proteína vegetal', contra: ['alergia-leite', 'alergia-soja'], caution: ['renal'], note: 'Suporte proteico pós-treino ou para idosos. Hidratar-se bem.' },
+      { name: 'Creatina monohidratada (3–5 g/dia)', contra: ['renal'], caution: [], note: 'Melhora performance e massa magra. Ingerir água adequadamente.' },
+    ],
+    redFlags: ['Uso simultâneo de múltiplos suplementos sem orientação', 'Histórico de doença renal ou hepática', 'Gestantes e crianças exigem acompanhamento profissional'],
+    sources: ['Posicionamentos da Sociedade Brasileira de Medicina do Esporte', 'Guia Alimentar para a População Brasileira (MS)', 'EFSA — orientações nutricionais'],
+  },
+  {
+    id: 'cuidados', keys: ['cuidado', 'prevencao', 'como cuidar', 'o que fazer', 'recomendacao', 'orientacao'], label: 'Cuidados gerais / Prevenção',
+    causes: ['Busca por orientação de saúde preventiva', 'Manejo de condição crônica', 'Promoção de hábitos saudáveis'],
+    options: [
+      { name: 'Hidratação adequada (água)', contra: [], caution: [], note: 'Base para qualquer plano de saúde. Meta: ~35 ml/kg/dia, salvo restrição.' },
+      { name: 'Atividade física regular (150 min/semana)', contra: [], caution: ['cardiopatia'], note: 'Caminhada, fortalecimento e alongamento. Liberação médica se houver condição prévia.' },
+      { name: 'Higiene do sono (rotina, ambiente escuro)', contra: [], caution: [], note: 'Fundamental para recuperação física e mental.' },
+      { name: 'Alimentação balanceada (frutas, verduras, proteínas)', contra: [], caution: [], note: 'Priorize comida de verdade; evite ultraprocessados.' },
+    ],
+    redFlags: ['Sintomas novos ou persistentes — procure avaliação médica', 'Mudanças bruscas de peso ou apetite', 'Histórico familiar de doenças crônicas exige acompanhamento'],
+    sources: ['Guia de Atividade Física (Ministério da Saúde)', 'Organização Mundial da Saúde — Promoção da Saúde', 'Sociedade Brasileira de Cardiologia — Prevenção'],
+  },
+  {
     id: 'estomago', keys: ['estomago', 'azia', 'queimacao', 'gastrite', 'enjoo', 'nausea', 'digestao'], label: 'Desconforto gástrico / azia',
     causes: ['Gastrite ou dispepsia', 'Refluxo gastroesofágico', 'Alimentação inadequada'],
     options: [

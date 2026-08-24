@@ -4,7 +4,7 @@ import { accessiblePatients, emptyState, loadState, saveState, seedDemoState } f
 import { ageFromBirth } from './lib/biometrics';
 import { Avatar, Btn, Ecg, Modal, ToastProvider, useToast } from './components/ui';
 import {
-  IconBrain, IconChart, IconCheck, IconChevronRight, IconDownload, IconFace, IconFileText,
+  IconBrain, IconChart, IconCheck, IconChevronRight, IconCreditCard, IconDownload, IconFace, IconFileText,
   IconCloud, IconGear, IconHeartPulse, IconLogout, IconMapPin, IconMegaphone, IconUsers, LogoMark,
 } from './components/icons';
 import { LoginScreen } from './screens/LoginScreen';
@@ -16,6 +16,7 @@ import { CloudScreen } from './screens/CloudScreen';
 import { ConsultantScreen } from './screens/ConsultantScreen';
 import { VitalsScreen } from './screens/VitalsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { InsuranceScreen } from './screens/InsuranceScreen';
 
 const DEMO_SCENARIOS = [
   {
@@ -170,8 +171,9 @@ function DemoGuide({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-const NAV: Array<{ key: 'patients' | 'consultor' | 'settings' | 'vitals' | 'missing'; label: string; short: string; icon: ReactNode }> = [
+const NAV: Array<{ key: 'patients' | 'insurance' | 'consultor' | 'vitals' | 'missing' | 'settings'; label: string; short: string; icon: ReactNode }> = [
   { key: 'patients', label: 'Pessoas & prontuários', short: 'Pacientes', icon: <IconUsers size={18} /> },
+  { key: 'insurance', label: 'Convênios & planos', short: 'Convênios', icon: <IconCreditCard size={18} /> },
   { key: 'consultor', label: 'Consultor IA', short: 'Consultor', icon: <IconBrain size={18} /> },
   { key: 'vitals', label: 'Sinais vitais', short: 'Sinais vitais', icon: <IconHeartPulse size={18} /> },
   { key: 'missing', label: 'Utilidade pública', short: 'Utilidade pública', icon: <IconMegaphone size={18} /> },
@@ -621,6 +623,15 @@ function Shell() {
                   grants={state.grants}
                   onUpdate={updatePatient}
                   onSelect={(id) => setSession({ accountId: account.id, patientId: id })}
+                />
+              )}
+              {route.name === 'insurance' && (
+                <InsuranceScreen
+                  insurances={activePatient?.insurances ?? []}
+                  onChange={(insurances) => {
+                    if (!activePatient) return;
+                    updatePatient({ ...activePatient, insurances });
+                  }}
                 />
               )}
               {route.name === 'cloud' && (
