@@ -288,6 +288,8 @@ function NewEntryForm({
   onCancel: () => void;
 }) {
   const [type, setType] = useState<EntryType>('consulta');
+  const [institution, setInstitution] = useState('');
+  const [professionalId, setProfessionalId] = useState('');
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState(() => {
@@ -313,7 +315,7 @@ function NewEntryForm({
     const validExams = ex.filter((x) => x.name.trim() || x.description.trim() || x.attachments.length > 0);
     onAdd({
       id: uid(), type, title: title.trim(), notes: notes.trim(), date, time: time || undefined, createdAt: Date.now(),
-      specialty, archived: false,
+      specialty, institution: institution.trim() || undefined, professionalId: professionalId.trim() || undefined, archived: false,
       prescription: rxHas ? { text: rx.text.trim(), attachments: rx.attachments } : null,
       exams: validExams.length > 0 ? validExams.map((x) => ({ ...x, name: x.name.trim(), description: x.description.trim() })) : null,
     });
@@ -324,7 +326,13 @@ function NewEntryForm({
       <p className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-ink">
         <IconPlus size={15} className="text-moss-600" /> Novo registro clínico
       </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[150px_1fr_150px_170px] lg:gap-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr] lg:gap-4">
+        <Field label="Local/Instituição" hint="opcional">
+          <input className={inputCls} value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="ex.: Hospital São Paulo" />
+        </Field>
+        <Field label="CRM/CREFITO" hint="opcional">
+          <input className={inputCls} value={professionalId} onChange={(e) => setProfessionalId(e.target.value)} placeholder="ex.: CRM/SP 123456" />
+        </Field>
         <Field label="Tipo">
           <select className={inputCls} value={type} onChange={(e) => setType(e.target.value as EntryType)}>
             {ENTRY_TYPES.map((t) => (
@@ -332,7 +340,17 @@ function NewEntryForm({
             ))}
           </select>
         </Field>
-        <Field label="Título" required>
+        <Field label="Especialidade">
+          <select className={inputCls} value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
+            <option value="">Geral</option>
+            {SPECIALTIES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_150px_170px] lg:gap-4">
+        <Field label="Nome/Descrição" required>
           <input className={`${inputCls} ${errs.title ? 'border-danger-500' : ''}`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex.: Consulta de retorno — cardiologia" />
           {errs.title && <p className="mt-1 text-xs font-medium text-danger-600">{errs.title}</p>}
         </Field>
@@ -345,14 +363,6 @@ function NewEntryForm({
             <input type="time" className={inputCls} value={time} onChange={(e) => setTime(e.target.value)} />
           </Field>
         </div>
-        <Field label="Especialidade">
-          <select className={inputCls} value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
-            <option value="">Geral</option>
-            {SPECIALTIES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </Field>
       </div>
       <div className="mt-4">
         <Field label="Anotações clínicas" hint="digite ou dite por voz">
@@ -857,6 +867,8 @@ export function RecordScreen({
                           {ENTRY_META[e.type].label}
                         </span>
                       </span>
+                      {e.institution && <Tag tone="pine">{e.institution}</Tag>}
+                      {e.professionalId && <Tag tone="slate"><IconFingerprint size={11} className="mr-1" />{e.professionalId}</Tag>}
                       {e.specialty && <Tag tone="mute">{e.specialty}</Tag>}
                       {e.archived && <Tag tone="warn">arquivado</Tag>}
                       {e.prescription && (
