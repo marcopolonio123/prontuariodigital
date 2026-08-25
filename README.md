@@ -55,5 +55,6 @@ dist/      build de produção (enviado à hospedagem)
 
 ## 📝 Changelog
 
+- **v0.2.1** — teste de sincronização com repositório remoto `marcopolonio123/prontuariodigital`.
 - **v0.2.0** — projeto vinculado ao repositório `mydoctor.med.br` no GitHub.
 # Teste de atualização
