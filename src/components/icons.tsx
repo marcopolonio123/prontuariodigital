@@ -212,6 +212,12 @@ export const IconChevronDown = (p: IconProps) => (
   </I>
 );
 
+export const IconChevronUp = (p: IconProps) => (
+  <I {...p}>
+    <path d="M18 15l-6-6-6 6" />
+  </I>
+);
+
 export const IconPrescription = (p: IconProps) => (
   <I {...p}>
     <path d="M6 3h6a4 4 0 0 1 0 8H6V3z" />

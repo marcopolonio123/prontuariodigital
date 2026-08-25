@@ -3,10 +3,10 @@ import type { Insurance, InsuranceHolder, InsuranceCoverage } from '../lib/types
 import { INSURANCE_HOLDER_META, INSURANCE_COVERAGE_META } from '../lib/types';
 import { uid } from '../lib/store';
 import { formatDateBR, fileToDataURL } from '../lib/biometrics';
-import { Btn, Field, inputCls, Modal, Tag, useToast } from '../components/ui';
+import { Btn, Field, inputCls, Tag, useToast } from '../components/ui';
 import { CameraCapture } from '../components/CameraCapture';
 import {
-  IconCreditCard, IconCamera, IconUpload, IconTrash, IconPlus, IconX,
+  IconCreditCard, IconCamera, IconUpload, IconTrash, IconPlus, IconChevronUp, IconChevronDown,
 } from '../components/icons';
 
 const emptyInsForm = {
@@ -16,7 +16,7 @@ const emptyInsForm = {
 
 export function InsuranceScreen({ insurances, onChange }: { insurances: Insurance[]; onChange: (v: Insurance[]) => void }) {
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [camOpen, setCamOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyInsForm });
   const [err, setErr] = useState('');
@@ -32,7 +32,7 @@ export function InsuranceScreen({ insurances, onChange }: { insurances: Insuranc
     ]);
     setForm({ ...emptyInsForm });
     setErr('');
-    setOpen(false);
+    setShowForm(false);
     toast('success', 'Convênio adicionado com sucesso.');
   };
 
@@ -60,8 +60,8 @@ export function InsuranceScreen({ insurances, onChange }: { insurances: Insuranc
           <h1 className="text-xl font-bold text-ink">Convênios & Planos de Saúde</h1>
           <p className="text-sm text-mute">Gerencie seus planos de saúde e seguros médicos</p>
         </div>
-        <Btn variant="dark" size="sm" onClick={() => setOpen(true)}>
-          <IconPlus size={14} /> Adicionar
+        <Btn variant="dark" size="sm" onClick={() => setShowForm(!showForm)}>
+          {showForm ? <IconChevronUp size={14} /> : <IconPlus size={14} />} {showForm ? 'Cancelar' : 'Adicionar'}
         </Btn>
       </div>
 
@@ -112,82 +112,78 @@ export function InsuranceScreen({ insurances, onChange }: { insurances: Insuranc
         </ul>
       )}
 
-      {/* Modal de adição */}
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="Novo convênio ou seguro saúde"
-        subtitle="A carteirinha fica armazenada somente neste dispositivo."
-        width="max-w-xl"
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Operadora / seguradora" required>
-            <input className={`${inputCls} ${err ? 'border-danger-500' : ''}`} value={form.operator} onChange={(e) => setForm({ ...form, operator: e.target.value })} placeholder="ex.: Unimed, Bradesco Saúde" />
-            {err && <p className="mt-1 text-xs font-medium text-danger-600">{err}</p>}
-          </Field>
-          <Field label="Nome do plano">
-            <input className={inputCls} value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="ex.: Unipart Enfermaria" />
-          </Field>
-          <Field label="Nº da carteirinha / beneficiário">
-            <input className={inputCls} value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} placeholder="ex.: 0834 5521 7790 02" />
-          </Field>
-          <Field label="Validade">
-            <input type="date" className={inputCls} value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
-          </Field>
-          <Field label="A pessoa é…">
-            <select className={inputCls} value={form.holder} onChange={(e) => setForm({ ...form, holder: e.target.value as InsuranceHolder })}>
-              {(Object.keys(INSURANCE_HOLDER_META) as InsuranceHolder[]).map((h) => (
-                <option key={h} value={h}>{INSURANCE_HOLDER_META[h]}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Tipo de plano">
-            <select className={inputCls} value={form.coverage} onChange={(e) => setForm({ ...form, coverage: e.target.value as InsuranceCoverage })}>
-              {(Object.keys(INSURANCE_COVERAGE_META) as InsuranceCoverage[]).map((c) => (
-                <option key={c} value={c}>{INSURANCE_COVERAGE_META[c]}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
+      {showForm && (
+        <div className="mt-4 rounded-xl border border-line bg-white/80 p-4">
+          <p className="mb-3 text-sm font-semibold text-mute">Novo convênio ou seguro saúde — A carteirinha fica armazenada somente neste dispositivo.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Operadora / seguradora" required>
+              <input className={`${inputCls} ${err ? 'border-danger-500' : ''}`} value={form.operator} onChange={(e) => setForm({ ...form, operator: e.target.value })} placeholder="ex.: Unimed, Bradesco Saúde" />
+              {err && <p className="mt-1 text-xs font-medium text-danger-600">{err}</p>}
+            </Field>
+            <Field label="Nome do plano">
+              <input className={inputCls} value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="ex.: Unipart Enfermaria" />
+            </Field>
+            <Field label="Nº da carteirinha / beneficiário">
+              <input className={inputCls} value={form.cardNumber} onChange={(e) => setForm({ ...form, cardNumber: e.target.value })} placeholder="ex.: 0834 5521 7790 02" />
+            </Field>
+            <Field label="Validade">
+              <input type="date" className={inputCls} value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
+            </Field>
+            <Field label="A pessoa é…">
+              <select className={inputCls} value={form.holder} onChange={(e) => setForm({ ...form, holder: e.target.value as InsuranceHolder })}>
+                {(Object.keys(INSURANCE_HOLDER_META) as InsuranceHolder[]).map((h) => (
+                  <option key={h} value={h}>{INSURANCE_HOLDER_META[h]}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Tipo de plano">
+              <select className={inputCls} value={form.coverage} onChange={(e) => setForm({ ...form, coverage: e.target.value as InsuranceCoverage })}>
+                {(Object.keys(INSURANCE_COVERAGE_META) as InsuranceCoverage[]).map((c) => (
+                  <option key={c} value={c}>{INSURANCE_COVERAGE_META[c]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-        <div className="mt-4">
-          <p className="mb-1.5 text-[13px] font-semibold text-ink">Foto da carteirinha</p>
-          <div className="flex items-start gap-3">
-            {form.image ? (
-              <img src={form.image} alt="Carteirinha do plano" className="h-24 rounded-lg border border-line object-cover" />
-            ) : (
-              <div className="flex h-24 w-40 items-center justify-center rounded-lg border-2 border-dashed border-line bg-paper text-mute">
-                <IconCreditCard size={22} />
-              </div>
-            )}
-            <div className="flex flex-col gap-1.5">
-              <Btn variant="outline" size="sm" onClick={() => setCamOpen(true)}>
-                <IconCamera size={13} /> Fotografar
-              </Btn>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-card px-2.5 py-1.5 text-xs font-semibold text-ink transition-all hover:border-moss-300 hover:bg-moss-50 active:scale-[0.97]">
-                <IconUpload size={13} /> Enviar arquivo
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
-              </label>
-              {form.image && (
-                <Btn variant="ghost" size="sm" onClick={() => setForm({ ...form, image: null })}>
-                  <IconTrash size={12} /> Remover
-                </Btn>
+          <div className="mt-4">
+            <p className="mb-1.5 text-[13px] font-semibold text-ink">Foto da carteirinha</p>
+            <div className="flex items-start gap-3">
+              {form.image ? (
+                <img src={form.image} alt="Carteirinha do plano" className="h-24 rounded-lg border border-line object-cover" />
+              ) : (
+                <div className="flex h-24 w-40 items-center justify-center rounded-lg border-2 border-dashed border-line bg-paper text-mute">
+                  <IconCreditCard size={22} />
+                </div>
               )}
+              <div className="flex flex-col gap-1.5">
+                <Btn variant="outline" size="sm" onClick={() => setCamOpen(true)}>
+                  <IconCamera size={13} /> Fotografar
+                </Btn>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-card px-2.5 py-1.5 text-xs font-semibold text-ink transition-all hover:border-moss-300 hover:bg-moss-50 active:scale-[0.97]">
+                  <IconUpload size={13} /> Enviar arquivo
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
+                </label>
+                {form.image && (
+                  <Btn variant="ghost" size="sm" onClick={() => setForm({ ...form, image: null })}>
+                    <IconTrash size={12} /> Remover
+                  </Btn>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4">
-          <Field label="Observações" hint="opcional">
-            <textarea className={`${inputCls} min-h-16 resize-y`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="ex.: dependente no plano do cônjuge, reembolso mediante nota…" />
-          </Field>
-        </div>
+          <div className="mt-4">
+            <Field label="Observações" hint="opcional">
+              <textarea className={`${inputCls} min-h-16 resize-y`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="ex.: dependente no plano do cônjuge, reembolso mediante nota…" />
+            </Field>
+          </div>
 
-        <div className="mt-5 flex justify-end gap-2">
-          <Btn variant="ghost" onClick={() => setOpen(false)}>Cancelar</Btn>
-          <Btn onClick={save}>Salvar convênio</Btn>
+          <div className="mt-5 flex justify-end gap-2">
+            <Btn variant="ghost" onClick={() => setShowForm(false)}>Cancelar</Btn>
+            <Btn onClick={save}>Salvar convênio</Btn>
+          </div>
         </div>
-      </Modal>
+      )}
 
       <CameraCapture open={camOpen} onClose={() => setCamOpen(false)} onCapture={(url) => setForm((f) => ({ ...f, image: url }))} title="Foto da carteirinha" />
     </div>
