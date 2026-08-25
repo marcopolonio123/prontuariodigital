@@ -1,6 +1,6 @@
 {
-  "appId": "br.med.mydoctor",
-  "appName": "My Doctor",
+  "appId": "com.prontuariodigital.app",
+  "appName": "Prontuário Digital",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

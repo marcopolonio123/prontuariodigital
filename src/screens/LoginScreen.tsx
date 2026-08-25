@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { Account, AppState, Patient } from '../lib/types';
 import { accessiblePatients, grantFor, hashPin, newRecordNumber, uid } from '../lib/store';
 import { ageFromBirth } from '../lib/biometrics';
@@ -13,8 +13,9 @@ import {
   IconUsers,
   LogoMark,
 } from '../components/icons';
+import { BiometricService } from '../services/BiometricService';
 
-type Step = 'account' | 'pin' | 'record';
+type Step = 'account' | 'pin' | 'record' | 'biometric';
 
 export function LoginScreen({
   state,
@@ -37,6 +38,43 @@ export function LoginScreen({
   const [nEmail, setNEmail] = useState('');
   const [nRole, setNRole] = useState<'titular' | 'responsavel'>('titular');
   const [creating, setCreating] = useState(false);
+  
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    // Verifica disponibilidade da biometria ao montar o componente
+    BiometricService.isAvailable().then(setBiometricAvailable);
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    if (!selected) return;
+    
+    try {
+      const success = await BiometricService.authenticate({
+        reason: `Autentique-se para entrar como ${selected.name}`,
+        fallbackTitle: 'Usar PIN',
+        cancelTitle: 'Cancelar',
+      });
+      
+      if (success) {
+        // Autenticação biométrica bem-sucedida
+        const accessible = accessiblePatients(state, selected.id);
+        if (accessible.length === 0) {
+          onLogin(selected.id, null);
+        } else {
+          setStep('record');
+        }
+      } else {
+        // Falha na biometria, volta para PIN
+        setStep('pin');
+        toast('error', 'Autenticação biométrica falhou. Use seu PIN.');
+      }
+    } catch (error) {
+      console.error('Erro na biometria:', error);
+      setStep('pin');
+      toast('error', 'Biometria não disponível. Use seu PIN.');
+    }
+  };
 
   const hasAccounts = state.accounts.length > 0;
 
@@ -201,6 +239,17 @@ export function LoginScreen({
               </button>
               <p className="text-sm text-mute">Olá,</p>
               <h2 className="font-display text-xl font-bold text-ink">{selected.name}</h2>
+              
+              {/* Botão de biometria se disponível */}
+              {biometricAvailable && (
+                <div className="mt-4">
+                  <Btn variant="outline" onClick={handleBiometricLogin} className="w-full flex items-center justify-center gap-2 border-moss-300 bg-moss-50 text-moss-700 hover:bg-moss-100">
+                    <IconFingerprint size={20} />
+                    <span>Entrar com Biometria (Face/Digital)</span>
+                  </Btn>
+                  <p className="mt-2 text-xs text-mute">ou use seu PIN abaixo</p>
+                </div>
+              )}
               <p className="mt-3 text-sm text-mute">Digite seu PIN de 4 dígitos</p>
               <div className={`mt-3 flex justify-center gap-2.5 ${pinErr ? 'animate-pulse' : ''}`}>
                 {[0, 1, 2, 3].map((i) => (
