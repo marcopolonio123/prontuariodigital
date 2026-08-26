@@ -1,5 +1,6 @@
-// Vitalis — modelo do banco de dados
-// PostgreSQL (padrão). Para MySQL na Hostinger, troque o provider e rode as migrações.
+// MyDoctor — modelo de dados longitudinal
+// PostgreSQL como fonte transacional da verdade.
+// Documentos binários ficam em Object Storage; aqui ficam metadados, proveniência e extrações.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,31 +12,54 @@ datasource db {
 }
 
 model User {
-  id           String         @id @default(uuid())
-  name         String
-  email        String         @unique
-  passwordHash String
-  role         String         @default("titular") // titular | responsavel
-  createdAt    DateTime       @default(now())
-  patients     Patient[]      @relation("owner")
-  grants       AccessGrant[]  @relation("grantee")
-  logs         IdentificationLog[]
+  id              String                  @id @default(uuid())
+  name            String
+  email           String                  @unique
+  phone           String?                 @unique
+  passwordHash    String
+  role            String                  @default("titular") // titular | responsavel
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  patients        Patient[]               @relation("owner")
+  grants          AccessGrant[]           @relation("grantee")
+  logs            IdentificationLog[]
+  challenges      VerificationChallenge[]
+  subscriptions   Subscription[]
 }
 
-// A ficha completa viaja como JSON (mesmo contrato do app), com colunas
-// indexadas para busca e controle de visibilidade.
+model VerificationChallenge {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose    String    @default("login") // login | verify_email | verify_phone | recovery
+  channel    String                        // email | sms
+  destination String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, purpose, createdAt])
+  @@index([expiresAt])
+}
+
 model Patient {
-  id           String        @id
-  record       String        @default("")
+  id           String              @id
+  record       String              @default("")
   name         String
   ownerUserId  String
-  owner        User          @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  archived     Boolean       @default(false) // regra do produto: nunca excluir
-  data         Json // ficha completa (contatos, medicamentos, anexos, status…)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  owner        User                @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  archived     Boolean             @default(false) // regra do produto: nunca excluir; apenas arquivar
+  data         Json                // compatibilidade temporária com o protótipo; será reduzido gradualmente
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
   grants       AccessGrant[]
   logs         IdentificationLog[]
+  events       HealthEvent[]
+  documents    ClinicalDocument[]
 
   @@index([ownerUserId, archived])
   @@index([name])
@@ -49,9 +73,216 @@ model AccessGrant {
   patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   grantedByName   String   @default("")
   level           String   @default("completo") // completo | leitura
+  validUntil      DateTime?
   createdAt       DateTime @default(now())
+  revokedAt       DateTime?
 
   @@unique([accountId, patientId])
+  @@index([patientId, revokedAt])
+}
+
+// Cadastro mestre de conselhos e demais autoridades de registro profissional.
+model RegistryAuthority {
+  id            String                     @id @default(uuid())
+  code          String                     @unique // CRM, CREFITO, COREN, CRO...
+  name          String
+  country       String                     @default("BR")
+  officialUrl   String?
+  verificationProvider String?
+  createdAt     DateTime                   @default(now())
+  registrations ProfessionalRegistration[]
+}
+
+model Practitioner {
+  id            String                     @id @default(uuid())
+  name          String
+  profession    String
+  specialty     String?
+  documentId    String?                    // identificador interno/externo quando legalmente permitido
+  active        Boolean                    @default(true)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  registrations ProfessionalRegistration[]
+  events        HealthEvent[]
+
+  @@index([name])
+  @@index([profession, specialty])
+}
+
+model ProfessionalRegistration {
+  id              String            @id @default(uuid())
+  practitionerId  String
+  practitioner    Practitioner      @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  authorityId     String
+  authority       RegistryAuthority @relation(fields: [authorityId], references: [id], onDelete: Restrict)
+  registration    String
+  region          String?           // UF ou região equivalente
+  status          String            @default("unknown") // active | inactive | suspended | unknown
+  verifiedAt      DateTime?
+  verificationSource String?
+  verificationPayload Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([authorityId, registration, region])
+  @@index([practitionerId, status])
+}
+
+model Organization {
+  id          String                   @id @default(uuid())
+  name        String
+  legalName   String?
+  type        String                   // hospital | clinic | laboratory | office | sus_unit | other
+  country     String                   @default("BR")
+  active      Boolean                  @default(true)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  identifiers OrganizationIdentifier[]
+  locations   Location[]
+  events      HealthEvent[]
+
+  @@index([name])
+  @@index([type, active])
+}
+
+model OrganizationIdentifier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  system         String       // CNES, CNPJ, internal, partner...
+  value          String
+  verifiedAt     DateTime?
+  source         String?
+
+  @@unique([system, value])
+  @@index([organizationId])
+}
+
+model Location {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  name           String
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  postalCode     String?
+  country        String        @default("BR")
+  latitude       Float?
+  longitude      Float?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  events         HealthEvent[]
+
+  @@index([organizationId])
+  @@index([city, state])
+}
+
+// Origem externa do dado: hospital, clínica, RNDS/SUS, laboratório, dispositivo etc.
+model SourceSystem {
+  id          String             @id @default(uuid())
+  code        String             @unique
+  name        String
+  type        String             // mydoctor | fhir | rnds | hospital | laboratory | device | manual
+  baseUrl     String?
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  events      HealthEvent[]
+  documents   ClinicalDocument[]
+}
+
+// Coração do prontuário: todo fato clínico relevante é um evento na linha do tempo.
+model HealthEvent {
+  id                String         @id @default(uuid())
+  patientId         String
+  patient           Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type              String         // consultation | exam | hospitalization | procedure | therapy | vaccine | prescription | vital | other
+  status            String         @default("final") // draft | preliminary | final | amended | cancelled
+  title             String
+  occurredAt        DateTime
+  endedAt           DateTime?
+  timezone          String         @default("America/Sao_Paulo")
+
+  practitionerId    String?
+  practitioner      Practitioner?  @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  organizationId    String?
+  organization      Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  locationId        String?
+  location          Location?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  sourceSystemId    String?
+  sourceSystem      SourceSystem?  @relation(fields: [sourceSystemId], references: [id], onDelete: SetNull)
+  externalId        String?
+
+  // Snapshots preservam o contexto histórico mesmo se cadastros mestres mudarem depois.
+  practitionerNameSnapshot String?
+  professionSnapshot       String?
+  councilSnapshot          String?
+  registrationSnapshot     String?
+  registrationRegionSnapshot String?
+  organizationNameSnapshot String?
+  locationNameSnapshot     String?
+
+  payload           Json           // conteúdo clínico semiestruturado, evolutivo e compatível com FHIR
+  provenance        Json?          // importador, versão, assinatura, evidências, transformações
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  documents         ClinicalDocument[]
+
+  @@index([patientId, occurredAt])
+  @@index([patientId, type, occurredAt])
+  @@index([practitionerId, occurredAt])
+  @@index([organizationId, occurredAt])
+  @@index([sourceSystemId, externalId])
+}
+
+// Arquivos não ficam no PostgreSQL. objectKey aponta para Object Storage compatível com S3.
+model ClinicalDocument {
+  id               String               @id @default(uuid())
+  patientId        String
+  patient          Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  eventId          String?
+  event            HealthEvent?         @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  sourceSystemId   String?
+  sourceSystem     SourceSystem?        @relation(fields: [sourceSystemId], references: [id], onDelete: SetNull)
+  type             String               // prescription | exam | report | discharge | image | certificate | other
+  originalFilename String
+  mimeType         String
+  objectKey        String               @unique
+  sha256           String
+  sizeBytes        Int
+  capturedAt       DateTime?
+  issuedAt         DateTime?
+  status           String               @default("uploaded") // uploaded | queued | processing | processed | review_required | failed
+  metadata         Json?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  extractions      DocumentExtraction[]
+
+  @@index([patientId, issuedAt])
+  @@index([eventId])
+  @@index([status, createdAt])
+  @@index([sha256])
+}
+
+model DocumentExtraction {
+  id             String           @id @default(uuid())
+  documentId     String
+  document       ClinicalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  engine         String           // OCR/Document AI usado
+  engineVersion  String?
+  status         String           @default("processing") // processing | completed | review_required | failed
+  extractedText  String?
+  structuredData Json?
+  confidence     Float?
+  error          String?
+  reviewedAt     DateTime?
+  reviewedBy     String?
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+
+  @@index([documentId, createdAt])
+  @@index([status, createdAt])
 }
 
 model IdentificationLog {
@@ -71,4 +302,49 @@ model IdentificationLog {
 
   @@index([at])
   @@index([byUserId])
+}
+
+// Monetização por assinatura e capacidades, evitando flags premium espalhadas pelo código.
+model Plan {
+  id            String            @id @default(uuid())
+  code          String            @unique // free | individual | family | professional | enterprise
+  name          String
+  active        Boolean           @default(true)
+  billingPeriod String            @default("year")
+  priceCents    Int?
+  currency      String            @default("BRL")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  entitlements  PlanEntitlement[]
+  subscriptions Subscription[]
+}
+
+model PlanEntitlement {
+  id        String @id @default(uuid())
+  planId    String
+  plan      Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  key       String // documents.max, family.members.max, ocr.enabled, integrations.enabled...
+  value     Json
+
+  @@unique([planId, key])
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status               String    @default("trialing") // trialing | active | past_due | cancelled | expired
+  provider             String?   // app_store | play_store | stripe | enterprise | manual
+  providerSubscriptionId String?
+  trialEndsAt          DateTime?
+  currentPeriodStartsAt DateTime?
+  currentPeriodEndsAt  DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([userId, status])
+  @@index([provider, providerSubscriptionId])
 }
