@@ -1,12 +1,13 @@
 /**
  * My Doctor — API do portal
- * Node + Express + Prisma. Implementa EXATAMENTE o contrato de src/lib/api.ts no app.
+ * Node + Express + Prisma. Implementa o contrato legado e a API V1.
  */
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import v1Router from './v1.js';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -15,8 +16,15 @@ const PORT = Number(process.env.PORT ?? 8787);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'troque-este-segredo-em-producao';
 const JWT_TTL = '7d';
 
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
+  throw new Error('JWT_SECRET deve estar configurado com pelo menos 32 caracteres em produção.');
+}
+
 app.use(cors());
-app.use(express.json({ limit: '15mb' })); // fotos de receitas/carteirinhas anexadas
+app.use(express.json({ limit: '15mb' }));
+
+// Nova API evolutiva. As rotas legadas permanecem durante a migração do frontend.
+app.use('/api/v1', v1Router);
 
 interface AuthedRequest extends Request {
   userId?: string;
@@ -40,14 +48,12 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-/* ------------------------------- saúde ---------------------------------- */
-
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, version: '1.0.0', engine: 'mydoctor-server (Node + Prisma)' });
+  res.json({ ok: true, version: '1.1.0', engine: 'mydoctor-server (Node + Prisma)', apiV1: true });
 });
 
-/* ---------------------------- autenticação ------------------------------ */
-
+/* ----------------------- autenticação legada ------------------------- */
+// Mantida temporariamente até a nova tela usar /api/v1/auth/login/start + verify.
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body ?? {};
   if (!name?.trim() || !email?.trim() || !password || String(password).length < 6) {
@@ -71,12 +77,17 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   res.json({ token: sign(user.id), user: { id: user.id, name: user.name, email: user.email } });
 });
 
-/* ------------------------------ prontuários ----------------------------- */
-
 async function visiblePatientIds(userId: string): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
     prisma.patient.findMany({ where: { ownerUserId: userId }, select: { id: true } }),
-    prisma.accessGrant.findMany({ where: { accountId: userId }, select: { patientId: true } }),
+    prisma.accessGrant.findMany({
+      where: {
+        accountId: userId,
+        revokedAt: null,
+        OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+      },
+      select: { patientId: true },
+    }),
   ]);
   return new Set([...owned, ...grants].map((x) => ('patientId' in x ? x.patientId : x.id)));
 }
@@ -136,7 +147,6 @@ app.put('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => 
   res.json(toClient(saved));
 });
 
-// Regra do produto: NUNCA excluir — apenas arquivar.
 app.delete('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => {
   const { id } = req.params;
   const existing = await prisma.patient.findUnique({ where: { id } });
@@ -146,15 +156,13 @@ app.delete('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) 
   res.json(toClient(saved));
 });
 
-/* ------------------------------ delegações ------------------------------ */
-
 app.post('/api/grants', auth, async (req: AuthedRequest, res: Response) => {
   const { accountId, patientId, level } = req.body ?? {};
   const p = await prisma.patient.findUnique({ where: { id: String(patientId ?? '') } });
   if (!p || p.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode delegar acesso.');
   const grant = await prisma.accessGrant.upsert({
     where: { accountId_patientId: { accountId: String(accountId), patientId: String(patientId) } },
-    update: { level: String(level ?? 'completo') },
+    update: { level: String(level ?? 'completo'), revokedAt: null },
     create: {
       accountId: String(accountId),
       patientId: String(patientId),
@@ -170,11 +178,10 @@ app.delete('/api/grants/:id', auth, async (req: AuthedRequest, res: Response) =>
   if (!grant) return fail(res, 404, 'Delegação não encontrada.');
   const patient = await prisma.patient.findUnique({ where: { id: grant.patientId } });
   if (patient?.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode revogar.');
-  await prisma.accessGrant.delete({ where: { id: grant.id } });
+  // Nunca apaga a evidência de delegação: apenas revoga.
+  await prisma.accessGrant.update({ where: { id: grant.id }, data: { revokedAt: new Date() } });
   res.status(204).end();
 });
-
-/* ------------------------------- auditoria ------------------------------ */
 
 app.get('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);
@@ -220,9 +227,7 @@ app.post('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   res.status(201).json({ ok: true });
 });
 
-/* -------------------------------- subida -------------------------------- */
-
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`My Doctor API ouvindo na porta ${PORT} — saúde em /api/health`);
+  console.log(`My Doctor API ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
 });
