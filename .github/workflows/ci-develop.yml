@@ -29,9 +29,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-      - run: npm ci
+      - run: npm install
       - run: npm run prisma:generate
         env:
           DATABASE_URL: postgresql://mydoctor:mydoctor@localhost:5432/mydoctor
