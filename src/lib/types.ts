@@ -41,349 +41,61 @@ export const SPECIALTIES: string[] = [
   'Fisioterapia', 'Fonoaudiologia', 'Odontologia', 'Emergência',
 ];
 
-export interface Contact {
-  id: string;
-  name: string;
-  relationship: Relationship;
-  phone: string;
-  priority: 1 | 2 | 3;
-  note?: string;
-}
-
-export interface Fingerprint {
-  template: string;
-  quality: number;
-  enrolledAt: number;
-}
-
+export interface Contact { id: string; name: string; relationship: Relationship; phone: string; priority: 1 | 2 | 3; note?: string; }
+export interface Fingerprint { template: string; quality: number; enrolledAt: number; }
 export type EntryType = 'consulta' | 'exame' | 'medicacao' | 'vacina' | 'procedimento' | 'observacao';
-
 export const ENTRY_TYPES: EntryType[] = ['consulta', 'exame', 'medicacao', 'vacina', 'procedimento', 'observacao'];
-
 export const ENTRY_META: Record<EntryType, { label: string; plural: string }> = {
-  consulta: { label: 'Consulta', plural: 'Consultas' },
-  exame: { label: 'Exame', plural: 'Exames' },
-  medicacao: { label: 'Medicação', plural: 'Medicações' },
-  vacina: { label: 'Vacina', plural: 'Vacinas' },
-  procedimento: { label: 'Procedimento', plural: 'Procedimentos' },
-  observacao: { label: 'Observação', plural: 'Observações' },
+  consulta: { label: 'Consulta', plural: 'Consultas' }, exame: { label: 'Exame', plural: 'Exames' },
+  medicacao: { label: 'Medicação', plural: 'Medicações' }, vacina: { label: 'Vacina', plural: 'Vacinas' },
+  procedimento: { label: 'Procedimento', plural: 'Procedimentos' }, observacao: { label: 'Observação', plural: 'Observações' },
 };
-
-export interface Attachment {
-  id: string;
-  name: string;
-  kind: 'image' | 'pdf';
-  mime: string;
-  sizeKb: number;
-  dataUrl: string; // conteúdo local (imagem redimensionada ou PDF)
-  addedAt: number;
-  addedBy: string; // conta que anexou
-}
-
-export interface ClinicalSection {
-  text: string; // descritivo (prescrição)
-  attachments: Attachment[]; // receita anexada (foto, scan ou PDF)
-}
-
-/** Um exame solicitado dentro de um registro — podem existir vários por consulta. */
-export interface ClinicalExam {
-  id: string;
-  name: string; // ex.: Hemograma, Raio-X de tórax
-  description: string; // orientações / descritivo do exame
-  attachments: Attachment[]; // pedido anexado (foto, scan ou PDF)
-}
-
-export interface ContinuousMed {
-  id: string;
-  name: string; // princípio ativo / nome comercial
-  dose: string; // ex.: 50 mg
-  frequency: string; // ex.: 1x ao dia
-  reason: string; // motivo (opcional)
-}
-
+export interface Attachment { id: string; name: string; kind: 'image' | 'pdf'; mime: string; sizeKb: number; dataUrl: string; addedAt: number; addedBy: string; }
+export interface ClinicalSection { text: string; attachments: Attachment[]; }
+export interface ClinicalExam { id: string; name: string; description: string; attachments: Attachment[]; }
+export interface ContinuousMed { id: string; name: string; dose: string; frequency: string; reason: string; }
 export type InsuranceHolder = 'titular' | 'dependente';
 export type InsuranceCoverage = 'empresarial' | 'particular' | 'familiar';
-
-export const INSURANCE_HOLDER_META: Record<InsuranceHolder, string> = {
-  titular: 'Titular',
-  dependente: 'Dependente',
-};
-
-export const INSURANCE_COVERAGE_META: Record<InsuranceCoverage, string> = {
-  empresarial: 'Empresarial',
-  particular: 'Particular / individual',
-  familiar: 'Familiar',
-};
-
-export interface Insurance {
-  id: string;
-  operator: string; // operadora (Unimed, Bradesco Saúde…)
-  plan: string; // nome do plano
-  cardNumber: string; // número da carteirinha / beneficiário
-  validUntil: string; // validade (ISO yyyy-mm-dd) ou ''
-  image: string | null; // foto da carteirinha (armazenada localmente)
-  notes: string;
-  holder: InsuranceHolder; // a pessoa é titular ou dependente?
-  coverage: InsuranceCoverage; // empresarial, particular ou familiar?
-  addedAt: number;
-}
-
-export interface ClinicalEntry {
-  id: string;
-  type: EntryType;
-  /** Nome/descrição do registro (ex.: "Avaliação geriátrica", "Retorno - Neurologia") */
-  title: string;
-  notes: string;
-  date: string;
-  /** Hora do atendimento (HH:mm). Opcional — registros antigos podem não ter. */
-  time?: string;
-  createdAt: number;
-  specialty: string;
-  /** Local/instituição onde foi realizado o atendimento (ex.: "Hospital São Paulo", "Clínica Vida") */
-  institution?: string;
-  /** CRM/CREFITO ou outro registro profissional (para consultas, fisioterapia, etc.) */
-  professionalId?: string;
-  archived: boolean;
-  prescription: ClinicalSection | null; // prescrição médica (descritiva e/ou receita anexada)
-  exams: ClinicalExam[] | null; // exames solicitados — um ou mais, cada um com descritivo e/ou anexos
-}
-
+export const INSURANCE_HOLDER_META: Record<InsuranceHolder, string> = { titular: 'Titular', dependente: 'Dependente' };
+export const INSURANCE_COVERAGE_META: Record<InsuranceCoverage, string> = { empresarial: 'Empresarial', particular: 'Particular / individual', familiar: 'Familiar' };
+export interface Insurance { id: string; operator: string; plan: string; cardNumber: string; validUntil: string; image: string | null; notes: string; holder: InsuranceHolder; coverage: InsuranceCoverage; addedAt: number; }
+export interface ClinicalEntry { id: string; type: EntryType; title: string; notes: string; date: string; time?: string; createdAt: number; specialty: string; institution?: string; professionalId?: string; archived: boolean; prescription: ClinicalSection | null; exams: ClinicalExam[] | null; }
 export type MissingEventKind = 'missing' | 'found' | 'sighting' | 'notified';
-
-export type EmergencySituation =
-  | 'acidente'
-  | 'internacao'
-  | 'desorientada'
-  | 'clinica'
-  | 'desastre'
-  | 'vulneravel'
-  | 'violencia'
-  | 'outro';
-
-export const EMERGENCY_SITUATIONS: EmergencySituation[] = [
-  'acidente',
-  'internacao',
-  'desorientada',
-  'clinica',
-  'desastre',
-  'vulneravel',
-  'violencia',
-  'outro',
-];
-
+export type EmergencySituation = 'acidente' | 'internacao' | 'desorientada' | 'clinica' | 'desastre' | 'vulneravel' | 'violencia' | 'outro';
+export const EMERGENCY_SITUATIONS: EmergencySituation[] = ['acidente','internacao','desorientada','clinica','desastre','vulneravel','violencia','outro'];
 export const EMERGENCY_SITUATION_META: Record<EmergencySituation, { label: string }> = {
-  acidente: { label: 'Acidente' },
-  internacao: { label: 'Internação sem contato com a família' },
-  desorientada: { label: 'Encontrada desorientada' },
-  clinica: { label: 'Emergência clínica' },
-  desastre: { label: 'Desastre / calamidade' },
-  vulneravel: { label: 'Vulnerabilidade social / situação de rua' },
-  violencia: { label: 'Vítima de violência / risco' },
-  outro: { label: 'Outra situação' },
+  acidente:{label:'Acidente'}, internacao:{label:'Internação sem contato com a família'}, desorientada:{label:'Encontrada desorientada'}, clinica:{label:'Emergência clínica'}, desastre:{label:'Desastre / calamidade'}, vulneravel:{label:'Vulnerabilidade social / situação de rua'}, violencia:{label:'Vítima de violência / risco'}, outro:{label:'Outra situação'}
 };
-
 export type EmergencyEventKind = 'emergency' | 'notified' | 'resolved' | 'update';
-
-export interface EmergencyEvent {
-  id: string;
-  at: number;
-  kind: EmergencyEventKind;
-  text: string;
-}
-
-export interface EmergencyStatus {
-  active: boolean;
-  since: string; // ISO yyyy-mm-dd
-  situation: EmergencySituation | '';
-  location: string;
-  notes: string;
-  history: EmergencyEvent[];
-  attachments: Attachment[]; // fotos/arquivos do caso
-}
-
-export interface MissingEvent {
-  id: string;
-  at: number;
-  kind: MissingEventKind;
-  text: string;
-}
-
-export interface MissingStatus {
-  active: boolean;
-  since: string;
-  lastPlace: string;
-  notes: string;
-  history: MissingEvent[];
-  attachments: Attachment[]; // fotos/arquivos do caso
-}
-
-export const EMPTY_MISSING: MissingStatus = { active: false, since: '', lastPlace: '', notes: '', history: [], attachments: [] };
-
-export const EMPTY_EMERGENCY: EmergencyStatus = {
-  active: false,
-  since: '',
-  situation: '',
-  location: '',
-  notes: '',
-  history: [],
-  attachments: [],
-};
-
+export interface EmergencyEvent { id:string; at:number; kind:EmergencyEventKind; text:string; }
+export interface EmergencyStatus { active:boolean; since:string; situation:EmergencySituation|''; location:string; notes:string; history:EmergencyEvent[]; attachments:Attachment[]; }
+export interface MissingEvent { id:string; at:number; kind:MissingEventKind; text:string; }
+export interface MissingStatus { active:boolean; since:string; lastPlace:string; notes:string; history:MissingEvent[]; attachments:Attachment[]; }
+export const EMPTY_MISSING: MissingStatus = { active:false, since:'', lastPlace:'', notes:'', history:[], attachments:[] };
+export const EMPTY_EMERGENCY: EmergencyStatus = { active:false, since:'', situation:'', location:'', notes:'', history:[], attachments:[] };
 export interface Patient {
-  id: string;
-  record: string;
-  name: string;
-  birthDate: string;
-  sex: 'F' | 'M' | 'O';
-  cpf: string;
-  bloodType: BloodType | '';
-  allergies: string[];
-  intolerances: string[];
-  conditions: string[];
-  medications: ContinuousMed[]; // uso contínuo (nome, dose, frequência, motivo)
-  insurances: Insurance[]; // convênios / seguros saúde
-  specialCare: SpecialCare[];
-  emergencyNotes: string;
-  contacts: Contact[];
-  missing: MissingStatus;
-  emergency: EmergencyStatus;
-  photo: string | null;
-  photoHash: string | null;
-  fingerprint: Fingerprint | null;
-  entries: ClinicalEntry[];
-  vitals: VitalSample[];
-  createdAt: number;
-  primarySpecialty: string;
-  archived: boolean;
-  ownerAccountId: string | null;
-  /**
-   * Consentimento de identificação em Utilidade pública.
-   * true (padrão): a pessoa pode ser localizada quando perdida/doente/em emergência.
-   * false: bloqueia correspondência facial/digital — a pessoa optou por não ser identificada.
-   */
-  findable: boolean;
+  id:string; record:string; name:string; birthDate:string; sex:'F'|'M'|'O'; cpf:string; bloodType:BloodType|''; allergies:string[]; intolerances:string[]; conditions:string[]; medications:ContinuousMed[]; insurances:Insurance[]; specialCare:SpecialCare[]; emergencyNotes:string; contacts:Contact[]; missing:MissingStatus; emergency:EmergencyStatus; photo:string|null; photoHash:string|null; fingerprint:Fingerprint|null; entries:ClinicalEntry[]; vitals:VitalSample[]; createdAt:number; primarySpecialty:string; archived:boolean; ownerAccountId:string|null; findable:boolean;
 }
-
-export type IdMethod = 'face' | 'finger';
-export type IdResult = 'match' | 'review' | 'none' | 'notify' | 'found';
-
-export interface GeoStamp {
-  lat: number;
-  lng: number;
-  accuracy: number;
-  label?: string; // bairro/cidade via geocodificação reversa (OpenStreetMap)
-}
-
-export interface IdEvent {
-  id: string;
-  method: IdMethod;
-  patientId: string | null;
-  patientName: string;
-  confidence: number;
-  quality: number | null;
-  result: IdResult;
-  at: number;
-  thumb: string | null;
-  detail?: string;
-  byName: string;
-  /** Local de quem identificou — medida antifraude. null = não capturado. */
-  geo?: GeoStamp | null;
-  geoDenied?: boolean; // usuário negou a localização
-}
-
-export interface Session {
-  accountId: string;
-  patientId: string | null;
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  email: string;
-  role: 'titular' | 'responsavel';
-  pinHash: string | null;
-  createdAt: number;
-}
-
-export interface AccessGrant {
-  id: string;
-  accountId: string;
-  patientId: string;
-  grantedByName: string;
-  level: 'completo' | 'leitura';
-  createdAt: number;
-}
-
-export type VitalMetric =
-  | 'heart'
-  | 'systolic'
-  | 'diastolic'
-  | 'spo2'
-  | 'temp'
-  | 'glucose'
-  | 'respiratory'
-  | 'weight';
-
-export type VitalSource = 'manual' | 'monitor' | 'healthconnect' | 'healthkit';
-
-export interface VitalSample {
-  id: string;
-  metric: VitalMetric;
-  value: number;
-  at: number;
-  source: VitalSource;
-  note?: string;
-}
-
-export interface AppState {
-  rev: number;
-  seeded: boolean;
-  patients: Patient[];
-  log: IdEvent[];
-  accounts: Account[];
-  grants: AccessGrant[];
-  session: Session | null;
-  /** Momento em que o titular aceitou o aviso de privacidade (LGPD). null = ainda não aceitou. */
-  lgpdConsentedAt: number | null;
-  /** Conexão com o servidor My Doctor (nuvem). Modo 'off' = app 100% local. */
-  cloud: CloudState;
-}
-
-export type CloudMode = 'off' | 'demo' | 'server';
-
-export interface CloudState {
-  mode: CloudMode;
-  baseUrl: string;
-  token: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  connectedAt: number;
-  lastSyncAt: number;
-}
-
-export const EMPTY_CLOUD: CloudState = {
-  mode: 'off',
-  baseUrl: '',
-  token: '',
-  userId: '',
-  userName: '',
-  userEmail: '',
-  connectedAt: 0,
-  lastSyncAt: 0,
-};
-
-export interface CloudUser {
-  id: string;
-  name: string;
-  email: string;
-}
-
+export type IdMethod='face'|'finger'; export type IdResult='match'|'review'|'none'|'notify'|'found';
+export interface GeoStamp { lat:number; lng:number; accuracy:number; label?:string; }
+export interface IdEvent { id:string; method:IdMethod; patientId:string|null; patientName:string; confidence:number; quality:number|null; result:IdResult; at:number; thumb:string|null; detail?:string; byName:string; geo?:GeoStamp|null; geoDenied?:boolean; }
+export interface Session { accountId:string; patientId:string|null; }
+export interface Account { id:string; name:string; email:string; role:'titular'|'responsavel'; pinHash:string|null; createdAt:number; }
+export interface AccessGrant { id:string; accountId:string; patientId:string; grantedByName:string; level:'completo'|'leitura'; createdAt:number; }
+export type VitalMetric='heart'|'systolic'|'diastolic'|'spo2'|'temp'|'glucose'|'respiratory'|'weight';
+export type VitalSource='manual'|'monitor'|'healthconnect'|'healthkit';
+export interface VitalSample { id:string; metric:VitalMetric; value:number; at:number; source:VitalSource; note?:string; }
+export interface AppState { rev:number; seeded:boolean; patients:Patient[]; log:IdEvent[]; accounts:Account[]; grants:AccessGrant[]; session:Session|null; lgpdConsentedAt:number|null; cloud:CloudState; }
+export type CloudMode='off'|'demo'|'server';
+export interface CloudState { mode:CloudMode; baseUrl:string; token:string; userId:string; userName:string; userEmail:string; connectedAt:number; lastSyncAt:number; }
+export const EMPTY_CLOUD:CloudState={mode:'off',baseUrl:'',token:'',userId:'',userName:'',userEmail:'',connectedAt:0,lastSyncAt:0};
+export interface CloudUser { id:string; name:string; email:string; }
 export type Route =
-  | { name: 'patients' }
-  | { name: 'record'; id: string }
-  | { name: 'missing' }
-  | { name: 'consultor' }
-  | { name: 'vitals' }
-  | { name: 'cloud' }
-  | { name: 'settings' };
+  | { name:'patients' }
+  | { name:'record'; id:string }
+  | { name:'missing' }
+  | { name:'consultor' }
+  | { name:'vitals' }
+  | { name:'insurance' }
+  | { name:'cloud' }
+  | { name:'settings' };
