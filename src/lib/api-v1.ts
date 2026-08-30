@@ -15,6 +15,10 @@ export interface V1User {
   phone?: string | null;
 }
 
+export interface RegisterResponse extends V1User {
+  requiresMfaLogin: true;
+}
+
 export interface LoginVerifyResponse {
   token: string;
   user: V1User;
@@ -109,6 +113,13 @@ export class MyDoctorV1Api {
 
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
+  }
+
+  register(input: { name: string; email: string; password: string; phone?: string }) {
+    return this.req<RegisterResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   }
 
   startPasswordLogin(input: { email: string; password: string; channel: MfaChannel }) {
