@@ -2,6 +2,8 @@
  * My Doctor — API do portal
  * Node + Express + Prisma. Implementa o contrato legado e a API V1.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
@@ -49,7 +51,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, version: '1.1.0', engine: 'mydoctor-server (Node + Prisma)', apiV1: true });
+  res.json({ ok: true, version: '1.2.0', engine: 'mydoctor-server (Node + Prisma)', apiV1: true });
 });
 
 /* ----------------------- autenticação legada ------------------------- */
@@ -227,7 +229,18 @@ app.post('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   res.status(201).json({ ok: true });
 });
 
+// Em produção, o mesmo processo pode servir o frontend Vite e a API.
+// Isso elimina CORS/configuração extra e permite um único endereço de teste.
+const publicDir = process.env.PUBLIC_DIR ?? path.resolve(process.cwd(), '../public');
+if (fs.existsSync(path.join(publicDir, 'index.html'))) {
+  app.use(express.static(publicDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    return res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`My Doctor API ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
+  console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
 });
