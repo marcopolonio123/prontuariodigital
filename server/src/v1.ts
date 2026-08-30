@@ -1,3 +1,4 @@
+import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -5,7 +6,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET ?? 'troque-este-segredo-em-producao';
+const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
 const JWT_TTL = '7d';
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 10);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
@@ -45,7 +46,7 @@ function maskPhone(phone: string): string {
 }
 
 function randomCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
 async function visiblePatientIds(userId: string): Promise<Set<string>> {
@@ -62,6 +63,61 @@ async function visiblePatientIds(userId: string): Promise<Set<string>> {
   ]);
   return new Set([...owned.map((p) => p.id), ...grants.map((g) => g.patientId)]);
 }
+
+/** Cadastro nativo da API V1. Cria a conta e o prontuário pessoal no mesmo commit transacional. */
+router.post('/auth/register', async (req: Request, res: Response) => {
+  const body = req.body ?? {};
+  const name = String(body.name ?? '').trim();
+  const email = String(body.email ?? '').trim().toLowerCase();
+  const phone = String(body.phone ?? '').trim() || null;
+  const password = String(body.password ?? '');
+
+  if (name.length < 2) return fail(res, 400, 'Informe seu nome.');
+  if (!/^\S+@\S+\.\S+$/.test(email)) return fail(res, 400, 'Informe um e-mail válido.');
+  if (password.length < 8) return fail(res, 400, 'A senha deve ter pelo menos 8 caracteres.');
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return fail(res, 409, 'Já existe uma conta com este e-mail.');
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const patientId = randomUUID();
+
+  try {
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: { name, email, phone, passwordHash },
+      });
+
+      await tx.patient.create({
+        data: {
+          id: patientId,
+          name,
+          ownerUserId: created.id,
+          data: {
+            id: patientId,
+            name,
+            relationshipToOwner: 'self',
+            createdByUserId: created.id,
+          },
+        },
+      });
+
+      return created;
+    });
+
+    return res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      requiresMfaLogin: true,
+    });
+  } catch (error: any) {
+    if (error?.code === 'P2002') return fail(res, 409, 'E-mail ou celular já cadastrado.');
+    console.error('V1 register error', error);
+    return fail(res, 500, 'Não foi possível criar sua conta agora.');
+  }
+});
 
 /**
  * Login V1 — etapa 1.
@@ -86,16 +142,28 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
   const codeHash = await bcrypt.hash(code, 10);
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
 
-  const challenge = await prisma.verificationChallenge.create({
-    data: {
-      userId: user.id,
-      purpose: 'login',
-      channel: selectedChannel,
-      destination,
-      codeHash,
-      expiresAt,
-    },
+  await prisma.$transaction([
+    prisma.verificationChallenge.updateMany({
+      where: { userId: user.id, purpose: 'login', channel: selectedChannel, consumedAt: null },
+      data: { consumedAt: new Date() },
+    }),
+    prisma.verificationChallenge.create({
+      data: {
+        userId: user.id,
+        purpose: 'login',
+        channel: selectedChannel,
+        destination,
+        codeHash,
+        expiresAt,
+      },
+    }),
+  ]);
+
+  const challenge = await prisma.verificationChallenge.findFirst({
+    where: { userId: user.id, purpose: 'login', channel: selectedChannel, consumedAt: null },
+    orderBy: { createdAt: 'desc' },
   });
+  if (!challenge) return fail(res, 500, 'Não foi possível iniciar a verificação.');
 
   // Nesta fase, o envio real fica desacoplado. Em produção, um worker/provedor
   // enviará o código. Em desenvolvimento o código volta na resposta para teste.
@@ -190,7 +258,7 @@ router.post('/profiles', auth, async (req: AuthedRequest, res: Response) => {
   const relationship = String(body.relationship ?? 'dependent');
   if (!name) return fail(res, 400, 'Informe o nome da pessoa.');
 
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const patient = await prisma.patient.create({
     data: {
       id,
