@@ -165,5 +165,8 @@ export class MyDoctorV1Api {
 }
 
 export function defaultV1ApiUrl() {
-  return (import.meta.env.VITE_API_URL as string | undefined)?.trim() || 'http://localhost:8787';
+  const configured = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  if (configured) return configured;
+  if (import.meta.env.DEV) return 'http://localhost:8787';
+  return window.location.origin;
 }
