@@ -31,6 +31,8 @@ export default function V1PreviewApp() {
   const [token, setToken] = useState('');
   const [user, setUser] = useState<V1User | null>(null);
   const [challenge, setChallenge] = useState<LoginStartResponse | null>(null);
+  const [registerName, setRegisterName] = useState('');
+  const [registerPhone, setRegisterPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [channel, setChannel] = useState<MfaChannel>('email');
@@ -81,6 +83,19 @@ export default function V1PreviewApp() {
     const items = await client.listHealthEvents(profile.id);
     setEvents(items);
   };
+
+  const createAccount = () => run(async () => {
+    if (!registerName.trim()) throw new Error('Informe seu nome.');
+    if (!email.trim()) throw new Error('Informe seu e-mail.');
+    if (password.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres.');
+    await api.register({
+      name: registerName.trim(),
+      email: email.trim(),
+      password,
+      phone: registerPhone.trim() || undefined,
+    });
+    setMessage('Conta criada. Agora clique em “Enviar código” para entrar com MFA.');
+  });
 
   const startLogin = () => run(async () => {
     const result = await api.startPasswordLogin({ email, password, channel });
@@ -145,7 +160,7 @@ export default function V1PreviewApp() {
           <div>
             <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor V1 · ambiente de teste</p>
             <h1 className="font-display text-3xl font-bold text-ink">Prontuário longitudinal</h1>
-            <p className="mt-1 text-sm text-mute">Login com MFA → escolha do perfil → linha do tempo → evento clínico.</p>
+            <p className="mt-1 text-sm text-mute">Criar conta → MFA → escolher perfil → linha do tempo → evento clínico.</p>
           </div>
           <a href="/" className="text-sm font-semibold text-moss-700 hover:underline">Voltar para versão atual</a>
         </header>
@@ -153,13 +168,27 @@ export default function V1PreviewApp() {
         {message && <div className="mb-4 rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}
 
         {!user ? (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 xl:grid-cols-3">
             <Card>
-              <h2 className="font-display text-xl font-bold text-ink">1. Login e senha</h2>
-              <p className="mt-1 text-sm text-mute">Somente esta modalidade exige o segundo fator por e-mail ou celular.</p>
+              <h2 className="font-display text-xl font-bold text-ink">1. Criar conta</h2>
+              <p className="mt-1 text-sm text-mute">No primeiro acesso, crie sua conta e seu prontuário pessoal.</p>
               <label className="mt-4 block text-xs font-bold text-mute">URL da API</label>
               <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm" />
+              <label className="mt-3 block text-xs font-bold text-mute">Nome completo</label>
+              <input value={registerName} onChange={(e) => setRegisterName(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2" />
               <label className="mt-3 block text-xs font-bold text-mute">E-mail</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2" type="email" />
+              <label className="mt-3 block text-xs font-bold text-mute">Celular (opcional)</label>
+              <input value={registerPhone} onChange={(e) => setRegisterPhone(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2" inputMode="tel" />
+              <label className="mt-3 block text-xs font-bold text-mute">Senha</label>
+              <input value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2" type="password" />
+              <button disabled={busy} onClick={() => void createAccount()} className="mt-5 w-full rounded-xl bg-pine-900 px-4 py-3 font-bold text-white disabled:opacity-50">Criar minha conta</button>
+            </Card>
+
+            <Card>
+              <h2 className="font-display text-xl font-bold text-ink">2. Login e senha</h2>
+              <p className="mt-1 text-sm text-mute">Depois do cadastro, confirme o acesso com segundo fator.</p>
+              <label className="mt-4 block text-xs font-bold text-mute">E-mail</label>
               <input value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2" type="email" />
               <label className="mt-3 block text-xs font-bold text-mute">Senha</label>
               <input value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2" type="password" />
@@ -171,9 +200,9 @@ export default function V1PreviewApp() {
             </Card>
 
             <Card>
-              <h2 className="font-display text-xl font-bold text-ink">2. Código de verificação</h2>
+              <h2 className="font-display text-xl font-bold text-ink">3. Código de verificação</h2>
               {!challenge ? (
-                <p className="mt-3 text-sm text-mute">Primeiro valide login e senha ao lado.</p>
+                <p className="mt-3 text-sm text-mute">Primeiro valide login e senha.</p>
               ) : (
                 <>
                   <p className="mt-2 text-sm text-mute">Destino: <strong>{challenge.destinationMasked}</strong></p>
