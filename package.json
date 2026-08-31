@@ -2,9 +2,15 @@
   "name": "sandbox-workspace",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:web": "vite build",
+    "build:hostinger": "npm run build:web && npm --prefix server install && npm --prefix server run prisma:generate && npm --prefix server exec prisma db push --skip-generate && npm --prefix server run build",
+    "start": "node server/dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
