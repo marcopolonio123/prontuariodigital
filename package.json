@@ -9,8 +9,10 @@
     "dev": "vite",
     "build": "npm run build:hostinger",
     "build:web": "vite build",
-    "build:hostinger": "npm run build:web && npm --prefix server install && npm --prefix server run prisma:generate && cd server && npx prisma db push --skip-generate && npm run build",
-    "start": "node server/dist/index.js",
+    "prepare:hostinger": "npm run build:web && npm --prefix server install && npm --prefix server run prisma:generate && npm --prefix server run build",
+    "postinstall": "npm run prepare:hostinger",
+    "build:hostinger": "npm run prepare:hostinger && cd server && npx prisma db push --skip-generate",
+    "start": "node index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
