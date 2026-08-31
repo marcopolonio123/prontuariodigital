@@ -180,7 +180,6 @@ app.delete('/api/grants/:id', auth, async (req: AuthedRequest, res: Response) =>
   if (!grant) return fail(res, 404, 'Delegação não encontrada.');
   const patient = await prisma.patient.findUnique({ where: { id: grant.patientId } });
   if (patient?.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode revogar.');
-  // Nunca apaga a evidência de delegação: apenas revoga.
   await prisma.accessGrant.update({ where: { id: grant.id }, data: { revokedAt: new Date() } });
   res.status(204).end();
 });
@@ -229,9 +228,9 @@ app.post('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   res.status(201).json({ ok: true });
 });
 
-// Em produção, o mesmo processo pode servir o frontend Vite e a API.
-// Isso elimina CORS/configuração extra e permite um único endereço de teste.
-const publicDir = process.env.PUBLIC_DIR ?? path.resolve(process.cwd(), '../public');
+// Em produção, o mesmo processo serve o frontend Vite e a API.
+// Na Hostinger o processo parte da raiz do repositório e o Vite gera ./dist.
+const publicDir = process.env.PUBLIC_DIR ?? path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(path.join(publicDir, 'index.html'))) {
   app.use(express.static(publicDir));
   app.get('*', (req, res, next) => {
@@ -240,7 +239,7 @@ if (fs.existsSync(path.join(publicDir, 'index.html'))) {
   });
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   // eslint-disable-next-line no-console
   console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
 });
