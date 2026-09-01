@@ -33,6 +33,11 @@ function inputClass() {
   return 'w-full rounded-xl border border-line bg-white px-3 py-3 text-sm outline-none focus:border-moss-500';
 }
 
+function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
+  if (visible) return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 002.8 2.8" /><path d="M9.9 4.2A10.8 10.8 0 0112 4c5 0 9 5 9 8a10.3 10.3 0 01-2 3.6" /><path d="M6.6 6.6C4.4 8 3 10.1 3 12c0 3 4 8 9 8a9.7 9.7 0 004.2-.9" /></svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
+}
+
 export default function V1PreviewApp() {
   const [apiUrl] = useState(defaultV1ApiUrl());
   const api = useMemo(() => new MyDoctorV1Api(apiUrl), [apiUrl]);
@@ -44,6 +49,7 @@ export default function V1PreviewApp() {
   const [registerPhone, setRegisterPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [channel, setChannel] = useState<MfaChannel>('email');
   const [code, setCode] = useState('');
   const [profiles, setProfiles] = useState<PatientProfile[]>([]);
@@ -99,7 +105,7 @@ export default function V1PreviewApp() {
     if (!email.trim()) throw new Error('Informe seu e-mail.');
     if (password.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres.');
     await api.register({ name: registerName.trim(), email: email.trim(), password, phone: registerPhone.trim() || undefined });
-    setRegisterName(''); setRegisterPhone(''); setPassword(''); setAuthView('login');
+    setRegisterName(''); setRegisterPhone(''); setPassword(''); setShowPassword(false); setAuthView('login');
     setMessage('Cadastro concluído. Agora entre com seu e-mail e senha.');
   });
 
@@ -120,7 +126,7 @@ export default function V1PreviewApp() {
   });
 
   const logout = () => {
-    api.setToken(''); setUser(null); setToken(''); setChallenge(null); setCode('');
+    api.setToken(''); setUser(null); setToken(''); setChallenge(null); setCode(''); setShowPassword(false);
     setProfiles([]); setActiveProfile(null); setEvents([]); setView('record'); setAuthView('login');
     setMessage('Você saiu com segurança.');
   };
@@ -165,6 +171,13 @@ export default function V1PreviewApp() {
     await loadEvents(activeProfile, api); setMessage('Sinal vital salvo no prontuário.');
   });
 
+  const passwordField = (autoComplete: 'current-password' | 'new-password') => <div className="relative mt-1">
+    <input value={password} onChange={(e) => setPassword(e.target.value)} className={`${inputClass()} pr-12`} type={showPassword ? 'text' : 'password'} autoComplete={autoComplete} />
+    <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-mute hover:text-ink focus:outline-none" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'} title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+      <PasswordVisibilityIcon visible={showPassword} />
+    </button>
+  </div>;
+
   const authPanel = () => {
     if (authView === 'register') return <Card>
       <h2 className="font-display text-2xl font-bold text-ink">Criar sua conta</h2>
@@ -172,9 +185,9 @@ export default function V1PreviewApp() {
       <label className="mt-4 block text-xs font-bold text-mute">Nome completo</label><input value={registerName} onChange={(e) => setRegisterName(e.target.value)} className={`${inputClass()} mt-1`} autoComplete="name" />
       <label className="mt-3 block text-xs font-bold text-mute">E-mail</label><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputClass()} mt-1`} type="email" autoComplete="email" />
       <label className="mt-3 block text-xs font-bold text-mute">Celular (opcional)</label><input value={registerPhone} onChange={(e) => setRegisterPhone(e.target.value)} className={`${inputClass()} mt-1`} inputMode="tel" autoComplete="tel" />
-      <label className="mt-3 block text-xs font-bold text-mute">Crie uma senha</label><input value={password} onChange={(e) => setPassword(e.target.value)} className={`${inputClass()} mt-1`} type="password" autoComplete="new-password" />
+      <label className="mt-3 block text-xs font-bold text-mute">Crie uma senha</label>{passwordField('new-password')}
       <button disabled={busy} onClick={() => void createAccount()} className="mt-5 w-full rounded-xl bg-pine-900 px-4 py-3 font-bold text-white disabled:opacity-50">Cadastrar</button>
-      <p className="mt-5 text-center text-sm text-mute">Já tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('login'); setMessage(''); }}>Entrar</button></p>
+      <p className="mt-5 text-center text-sm text-mute">Já tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('login'); setShowPassword(false); setMessage(''); }}>Entrar</button></p>
     </Card>;
 
     if (authView === 'verify') return <Card>
@@ -190,11 +203,11 @@ export default function V1PreviewApp() {
       <h2 className="font-display text-2xl font-bold text-ink">Entrar no MyDoctor</h2>
       <p className="mt-1 text-sm text-mute">Acesse seu prontuário com seu e-mail e senha.</p>
       <label className="mt-5 block text-xs font-bold text-mute">E-mail</label><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputClass()} mt-1`} type="email" autoComplete="email" />
-      <label className="mt-3 block text-xs font-bold text-mute">Senha</label><input value={password} onChange={(e) => setPassword(e.target.value)} className={`${inputClass()} mt-1`} type="password" autoComplete="current-password" />
+      <label className="mt-3 block text-xs font-bold text-mute">Senha</label>{passwordField('current-password')}
       <p className="mt-4 text-xs font-bold uppercase tracking-wide text-mute">Receber código de segurança por</p>
       <div className="mt-2 flex gap-4 text-sm"><label className="flex items-center gap-2"><input type="radio" checked={channel === 'email'} onChange={() => setChannel('email')} /> E-mail</label><label className="flex items-center gap-2"><input type="radio" checked={channel === 'sms'} onChange={() => setChannel('sms')} /> SMS</label></div>
       <button disabled={busy} onClick={() => void startLogin()} className="mt-5 w-full rounded-xl bg-pine-900 px-4 py-3 font-bold text-white disabled:opacity-50">Entrar</button>
-      <p className="mt-5 text-center text-sm text-mute">Você não tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('register'); setMessage(''); }}>Clique aqui para se cadastrar</button></p>
+      <p className="mt-5 text-center text-sm text-mute">Você não tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('register'); setShowPassword(false); setMessage(''); }}>Clique aqui para se cadastrar</button></p>
     </Card>;
   };
 
