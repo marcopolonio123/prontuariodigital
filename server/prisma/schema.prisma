@@ -3,7 +3,9 @@
 // Documentos binários ficam em Object Storage; aqui ficam metadados, proveniência e extrações.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  engineType    = "binary"
+  binaryTargets = ["native", "debian-openssl-1.1.x"]
 }
 
 datasource db {
