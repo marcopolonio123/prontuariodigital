@@ -3,6 +3,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { sendLoginVerificationEmail } from './email.js';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -138,6 +139,10 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
     return fail(res, 400, selectedChannel === 'sms' ? 'Nenhum celular cadastrado para este usuário.' : 'Nenhum e-mail cadastrado.');
   }
 
+  if (selectedChannel === 'sms') {
+    return fail(res, 501, 'Envio por SMS ainda não está habilitado. Selecione e-mail para receber o código.');
+  }
+
   const code = randomCode();
   const codeHash = await bcrypt.hash(code, 10);
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
@@ -165,14 +170,27 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
   });
   if (!challenge) return fail(res, 500, 'Não foi possível iniciar a verificação.');
 
-  // Nesta fase, o envio real fica desacoplado. Em produção, um worker/provedor
-  // enviará o código. Em desenvolvimento o código volta na resposta para teste.
+  try {
+    await sendLoginVerificationEmail({
+      to: destination,
+      code,
+      expiresInMinutes: OTP_TTL_MINUTES,
+    });
+  } catch (error) {
+    console.error('V1 MFA email error', error);
+    await prisma.verificationChallenge.update({
+      where: { id: challenge.id },
+      data: { consumedAt: new Date() },
+    });
+    return fail(res, 503, 'Não foi possível enviar o código por e-mail agora. Tente novamente em instantes.');
+  }
+
   const developmentCode = process.env.NODE_ENV === 'production' ? undefined : code;
 
   return res.json({
     challengeId: challenge.id,
     channel: selectedChannel,
-    destinationMasked: selectedChannel === 'sms' ? maskPhone(destination) : maskEmail(destination),
+    destinationMasked: maskEmail(destination),
     expiresAt: expiresAt.toISOString(),
     ...(developmentCode ? { developmentCode } : {}),
   });
