@@ -9,17 +9,44 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#039;');
 }
 
-type SmtpAttempt = { port: number; secure: boolean; requireTLS?: boolean };
-
-async function sendWithTransport(params: {
-  host: string;
-  user: string;
-  pass: string;
+type EmailMessage = {
   from: string;
   to: string;
   subject: string;
   html: string;
   text: string;
+};
+
+type SmtpAttempt = { port: number; secure: boolean; requireTLS?: boolean };
+
+async function sendWithResend(apiKey: string, message: EmailMessage): Promise<void> {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: message.from,
+      to: [message.to],
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      tags: [{ name: 'category', value: 'login_mfa' }],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Resend API ${response.status}: ${body.slice(0, 500)}`);
+  }
+}
+
+async function sendWithSmtp(params: {
+  host: string;
+  user: string;
+  pass: string;
+  message: EmailMessage;
   attempt: SmtpAttempt;
 }) {
   const transporter = nodemailer.createTransport({
@@ -33,13 +60,35 @@ async function sendWithTransport(params: {
     socketTimeout: 15_000,
   });
 
-  await transporter.sendMail({
-    from: params.from,
-    to: params.to,
-    subject: params.subject,
-    html: params.html,
-    text: params.text,
-  });
+  await transporter.sendMail(params.message);
+}
+
+async function sendWithHostingerFallback(message: EmailMessage): Promise<void> {
+  const host = process.env.SMTP_HOST?.trim() || 'smtp.hostinger.com';
+  const configuredPort = Number(process.env.SMTP_PORT || 465);
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASSWORD;
+
+  if (!user || !pass) {
+    throw new Error('SMTP de contingência não configurado.');
+  }
+
+  const attempts: SmtpAttempt[] = configuredPort === 587
+    ? [{ port: 587, secure: false, requireTLS: true }, { port: 465, secure: true }]
+    : [{ port: configuredPort, secure: configuredPort === 465 }, { port: 587, secure: false, requireTLS: true }];
+
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      await sendWithSmtp({ host, user, pass, message, attempt });
+      return;
+    } catch (error) {
+      lastError = error;
+      console.error(`MyDoctor SMTP fallback failure on port ${attempt.port}`, error);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Falha ao enviar e-mail pelo SMTP de contingência.');
 }
 
 export async function sendLoginVerificationEmail(params: {
@@ -47,24 +96,21 @@ export async function sendLoginVerificationEmail(params: {
   code: string;
   expiresInMinutes: number;
 }): Promise<void> {
-  // O smoke/local continua independente do SMTP externo.
+  // O smoke/local continua independente de serviços externos.
   if (process.env.NODE_ENV !== 'production') return;
 
-  const host = process.env.SMTP_HOST?.trim() || 'smtp.hostinger.com';
-  const configuredPort = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASSWORD;
-  const from = process.env.MAIL_FROM?.trim() || (user ? `MyDoctor <${user}>` : '');
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const from = process.env.RESEND_FROM?.trim()
+    || process.env.MAIL_FROM?.trim()
+    || (smtpUser ? `MyDoctor <${smtpUser}>` : '');
 
-  if (!user || !pass || !from) {
-    throw new Error('E-mail transacional não configurado: SMTP_USER e SMTP_PASSWORD são obrigatórios em produção.');
+  if (!from) {
+    throw new Error('E-mail transacional não configurado: defina RESEND_FROM ou MAIL_FROM.');
   }
 
   const code = escapeHtml(params.code);
-  const message = {
-    host,
-    user,
-    pass,
+  const message: EmailMessage = {
     from,
     to: params.to,
     subject: 'Seu código de acesso ao MyDoctor',
@@ -80,20 +126,17 @@ export async function sendLoginVerificationEmail(params: {
     text: `Seu código de acesso ao MyDoctor é ${params.code}. Ele expira em ${params.expiresInMinutes} minutos. Se você não tentou entrar, ignore esta mensagem.`,
   };
 
-  const attempts: SmtpAttempt[] = configuredPort === 587
-    ? [{ port: 587, secure: false, requireTLS: true }, { port: 465, secure: true }]
-    : [{ port: configuredPort, secure: configuredPort === 465 }, { port: 587, secure: false, requireTLS: true }];
-
-  let lastError: unknown;
-  for (const attempt of attempts) {
+  if (resendApiKey) {
     try {
-      await sendWithTransport({ ...message, attempt });
+      await sendWithResend(resendApiKey, message);
       return;
     } catch (error) {
-      lastError = error;
-      console.error(`MyDoctor SMTP failure on port ${attempt.port}`, error);
+      console.error('MyDoctor Resend delivery failure', error);
+      // Mantemos o SMTP como contingência enquanto a migração para Resend é concluída.
+      await sendWithHostingerFallback(message);
+      return;
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error('Falha ao enviar e-mail pelo SMTP da Hostinger.');
+  await sendWithHostingerFallback(message);
 }
