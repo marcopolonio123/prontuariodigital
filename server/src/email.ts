@@ -127,16 +127,22 @@ export async function sendLoginVerificationEmail(params: {
   };
 
   if (resendApiKey) {
+    console.info('MyDoctor email provider: Resend', {
+      from,
+      apiKeyConfigured: true,
+      apiKeyLength: resendApiKey.length,
+    });
+
     try {
       await sendWithResend(resendApiKey, message);
+      console.info('MyDoctor Resend delivery accepted');
       return;
     } catch (error) {
       console.error('MyDoctor Resend delivery failure', error);
-      // Mantemos o SMTP como contingência enquanto a migração para Resend é concluída.
-      await sendWithHostingerFallback(message);
-      return;
+      throw error;
     }
   }
 
+  console.warn('MyDoctor email provider: SMTP fallback because RESEND_API_KEY is not configured');
   await sendWithHostingerFallback(message);
 }
