@@ -61,6 +61,34 @@ body {
   overflow-x: hidden;
 }
 
+/* Campos nunca podem estourar cards/grades no mobile. */
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+div[class*="grid"] > *,
+div[class*="flex"] > * {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  input[type="date"],
+  input[type="datetime-local"],
+  select {
+    width: 100%;
+  }
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }
