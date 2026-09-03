@@ -110,6 +110,34 @@ body {
   background: var(--color-pine-200);
 }
 
+/* V1: telas de dados abrem em modo consulta/lista; inclusão permanece disponível abaixo. */
+div.space-y-5:has(input[placeholder="Descrição do registro *"]),
+div.space-y-5:has(input[placeholder="Aparelho/dispositivo (opcional)"]) {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+div.space-y-5:has(input[placeholder="Descrição do registro *"]) > section:first-child,
+div.space-y-5:has(input[placeholder="Aparelho/dispositivo (opcional)"]) > section:first-child {
+  order: 2;
+  margin-top: 0;
+}
+
+div.space-y-5:has(input[placeholder="Descrição do registro *"]) > section:nth-child(2),
+div.space-y-5:has(input[placeholder="Aparelho/dispositivo (opcional)"]) > section:nth-child(2) {
+  order: 1;
+  margin-top: 0;
+}
+
+div.grid:has(input[placeholder="Convênio / operadora *"]) > section:has(input[placeholder="Convênio / operadora *"]) {
+  order: 2;
+}
+
+div.grid:has(input[placeholder="Convênio / operadora *"]) > section:not(:has(input[placeholder="Convênio / operadora *"])) {
+  order: 1;
+}
+
 /* ---------- animações ---------- */
 
 @keyframes rise {
