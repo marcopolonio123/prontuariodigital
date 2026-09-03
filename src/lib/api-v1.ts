@@ -144,6 +144,7 @@ export class MyDoctorV1Api {
     name: string;
     relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other';
     birthDate?: string;
+    sex?: string;
     record?: string;
   }) {
     return this.req<PatientProfile>('/profiles', {
