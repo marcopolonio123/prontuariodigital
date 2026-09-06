@@ -19,112 +19,162 @@ model User {
   email           String                  @unique
   phone           String?                 @unique
   passwordHash    String
-  role            String                  @default("titular") // titular | responsavel
+  role            String                  @default("titular") // titular | responsavel | profissional
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   patients        Patient[]               @relation("owner")
   grants          AccessGrant[]           @relation("grantee")
+  grantedAccesses AccessGrant[]           @relation("grantor")
+  accessRequests  AccessRequest[]         @relation("requester")
+  decidedRequests AccessRequest[]         @relation("decider")
+  authoredEvents  HealthEvent[]           @relation("eventAuthor")
+  practitioner    Practitioner?
   logs            IdentificationLog[]
   challenges      VerificationChallenge[]
   subscriptions   Subscription[]
 }
 
 model VerificationChallenge {
-  id         String    @id @default(uuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  purpose    String    @default("login") // login | verify_email | verify_phone | recovery
-  channel    String                        // email | sms
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose     String    @default("login") // login | verify_email | verify_phone | recovery
+  channel     String                        // email | sms
   destination String
-  codeHash   String
-  expiresAt  DateTime
-  consumedAt DateTime?
-  attempts   Int       @default(0)
-  createdAt  DateTime  @default(now())
+  codeHash    String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
 
   @@index([userId, purpose, createdAt])
   @@index([expiresAt])
 }
 
 model Patient {
-  id           String              @id
-  record       String              @default("")
-  name         String
-  ownerUserId  String
-  owner        User                @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  archived     Boolean             @default(false) // regra do produto: nunca excluir; apenas arquivar
-  data         Json                // compatibilidade temporária com o protótipo; será reduzido gradualmente
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  grants       AccessGrant[]
-  logs         IdentificationLog[]
-  events       HealthEvent[]
-  documents    ClinicalDocument[]
+  id             String          @id
+  record         String          @default("")
+  name           String
+  ownerUserId    String
+  owner          User            @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  archived       Boolean         @default(false) // regra do produto: nunca excluir; apenas arquivar
+  data           Json            // compatibilidade temporária com o protótipo; será reduzido gradualmente
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  grants         AccessGrant[]
+  accessRequests AccessRequest[]
+  logs           IdentificationLog[]
+  events         HealthEvent[]
+  documents      ClinicalDocument[]
 
   @@index([ownerUserId, archived])
   @@index([name])
 }
 
-model AccessGrant {
-  id              String   @id @default(uuid())
-  accountId       String
-  account         User     @relation("grantee", fields: [accountId], references: [id], onDelete: Cascade)
-  patientId       String
-  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  grantedByName   String   @default("")
-  level           String   @default("completo") // completo | leitura
-  validUntil      DateTime?
-  createdAt       DateTime @default(now())
-  revokedAt       DateTime?
+// Solicitação explícita de acesso feita por profissional ou outro usuário autorizado.
+// O paciente/responsável decide antes de qualquer leitura ou escrita no prontuário.
+model AccessRequest {
+  id                  String        @id @default(uuid())
+  requesterUserId     String
+  requester           User          @relation("requester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  practitionerId      String?
+  practitioner        Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  patientId           String
+  patient             Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  requestedScope      Json           // ex.: ["record", "documents", "vitals"]
+  requestedPermission String         @default("read") // read | read_write_consultation
+  status              String         @default("pending") // pending | approved | rejected | expired | revoked
+  requestedAt         DateTime       @default(now())
+  expiresAt           DateTime?
+  decidedAt           DateTime?
+  decidedByUserId     String?
+  decidedBy           User?          @relation("decider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decisionNote        String?
+  grant               AccessGrant?
 
-  @@unique([accountId, patientId])
-  @@index([patientId, revokedAt])
+  @@index([patientId, status, requestedAt])
+  @@index([requesterUserId, status, requestedAt])
+  @@index([practitionerId, status])
+}
+
+model AccessGrant {
+  id                  String         @id @default(uuid())
+  accountId           String
+  account             User           @relation("grantee", fields: [accountId], references: [id], onDelete: Cascade)
+  patientId           String
+  patient             Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  grantedByUserId     String?
+  grantedByUser       User?          @relation("grantor", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  grantedByName       String          @default("")
+  practitionerId      String?
+  practitioner        Practitioner?  @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  sourceRequestId     String?         @unique
+  sourceRequest       AccessRequest?  @relation(fields: [sourceRequestId], references: [id], onDelete: SetNull)
+  level               String          @default("completo") // compatibilidade: completo | leitura
+  scope               Json?           // permissões por domínio: record, documents, vitals, insurance...
+  permission          String          @default("read") // read | read_write_consultation
+  validFrom           DateTime        @default(now())
+  validUntil          DateTime?
+  createdAt           DateTime        @default(now())
+  revokedAt           DateTime?
+  events              HealthEvent[]
+
+  @@index([accountId, patientId, revokedAt])
+  @@index([patientId, validUntil, revokedAt])
+  @@index([practitionerId, revokedAt])
 }
 
 // Cadastro mestre de conselhos e demais autoridades de registro profissional.
 model RegistryAuthority {
-  id            String                     @id @default(uuid())
-  code          String                     @unique // CRM, CREFITO, COREN, CRO...
-  name          String
-  country       String                     @default("BR")
-  officialUrl   String?
-  verificationProvider String?
-  createdAt     DateTime                   @default(now())
-  registrations ProfessionalRegistration[]
+  id                       String                     @id @default(uuid())
+  code                     String                     @unique // CRM, CREFITO, COREN, CRO...
+  name                     String
+  country                  String                     @default("BR")
+  officialUrl              String?
+  verificationProvider     String?
+  createdAt                DateTime                   @default(now())
+  registrations            ProfessionalRegistration[]
 }
 
 model Practitioner {
-  id            String                     @id @default(uuid())
-  name          String
-  profession    String
-  specialty     String?
-  documentId    String?                    // identificador interno/externo quando legalmente permitido
-  active        Boolean                    @default(true)
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
-  registrations ProfessionalRegistration[]
-  events        HealthEvent[]
+  id             String                     @id @default(uuid())
+  userId         String?                    @unique
+  user           User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name           String
+  profession     String
+  specialty      String?
+  documentId     String?                    // identificador interno/externo quando legalmente permitido
+  verificationStatus String                 @default("unverified") // unverified | pending | verified | rejected | suspended
+  verifiedAt     DateTime?
+  active         Boolean                    @default(true)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  registrations  ProfessionalRegistration[]
+  events         HealthEvent[]
+  accessRequests AccessRequest[]
+  grants         AccessGrant[]
 
   @@index([name])
   @@index([profession, specialty])
+  @@index([verificationStatus, active])
 }
 
 model ProfessionalRegistration {
-  id              String            @id @default(uuid())
-  practitionerId  String
-  practitioner    Practitioner      @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
-  authorityId     String
-  authority       RegistryAuthority @relation(fields: [authorityId], references: [id], onDelete: Restrict)
-  registration    String
-  region          String?           // UF ou região equivalente
-  status          String            @default("unknown") // active | inactive | suspended | unknown
-  verifiedAt      DateTime?
-  verificationSource String?
-  verificationPayload Json?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                       String            @id @default(uuid())
+  practitionerId           String
+  practitioner             Practitioner      @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  authorityId              String
+  authority                RegistryAuthority @relation(fields: [authorityId], references: [id], onDelete: Restrict)
+  registration             String
+  region                   String?           // UF ou região equivalente
+  status                   String            @default("unknown") // active | inactive | suspended | unknown
+  verifiedAt               DateTime?
+  verificationSource       String?
+  verificationPayload      Json?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
 
   @@unique([authorityId, registration, region])
   @@index([practitionerId, status])
@@ -183,15 +233,15 @@ model Location {
 
 // Origem externa do dado: hospital, clínica, RNDS/SUS, laboratório, dispositivo etc.
 model SourceSystem {
-  id          String             @id @default(uuid())
-  code        String             @unique
-  name        String
-  type        String             // mydoctor | fhir | rnds | hospital | laboratory | device | manual
-  baseUrl     String?
-  active      Boolean            @default(true)
-  createdAt   DateTime           @default(now())
-  events      HealthEvent[]
-  documents   ClinicalDocument[]
+  id        String             @id @default(uuid())
+  code      String             @unique
+  name      String
+  type      String             // mydoctor | fhir | rnds | hospital | laboratory | device | manual
+  baseUrl   String?
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  events    HealthEvent[]
+  documents ClinicalDocument[]
 }
 
 // Coração do prontuário: todo fato clínico relevante é um evento na linha do tempo.
@@ -216,14 +266,20 @@ model HealthEvent {
   sourceSystem      SourceSystem?  @relation(fields: [sourceSystemId], references: [id], onDelete: SetNull)
   externalId        String?
 
+  // Autoria e autorização preservam quem escreveu e com qual consentimento.
+  authoredByUserId  String?
+  authoredByUser    User?          @relation("eventAuthor", fields: [authoredByUserId], references: [id], onDelete: SetNull)
+  accessGrantId     String?
+  accessGrant       AccessGrant?   @relation(fields: [accessGrantId], references: [id], onDelete: SetNull)
+
   // Snapshots preservam o contexto histórico mesmo se cadastros mestres mudarem depois.
-  practitionerNameSnapshot String?
-  professionSnapshot       String?
-  councilSnapshot          String?
-  registrationSnapshot     String?
+  practitionerNameSnapshot   String?
+  professionSnapshot         String?
+  councilSnapshot            String?
+  registrationSnapshot       String?
   registrationRegionSnapshot String?
-  organizationNameSnapshot String?
-  locationNameSnapshot     String?
+  organizationNameSnapshot   String?
+  locationNameSnapshot       String?
 
   payload           Json           // conteúdo clínico semiestruturado, evolutivo e compatível com FHIR
   provenance        Json?          // importador, versão, assinatura, evidências, transformações
@@ -236,6 +292,8 @@ model HealthEvent {
   @@index([practitionerId, occurredAt])
   @@index([organizationId, occurredAt])
   @@index([sourceSystemId, externalId])
+  @@index([authoredByUserId, occurredAt])
+  @@index([accessGrantId, occurredAt])
 }
 
 // Arquivos não ficam no PostgreSQL. objectKey aponta para Object Storage compatível com S3.
@@ -332,20 +390,20 @@ model PlanEntitlement {
 }
 
 model Subscription {
-  id                   String    @id @default(uuid())
-  userId               String
-  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId               String
-  plan                 Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
-  status               String    @default("trialing") // trialing | active | past_due | cancelled | expired
-  provider             String?   // app_store | play_store | stripe | enterprise | manual
+  id                     String    @id @default(uuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                 String    @default("trialing") // trialing | active | past_due | cancelled | expired
+  provider               String?   // app_store | play_store | stripe | enterprise | manual
   providerSubscriptionId String?
-  trialEndsAt          DateTime?
-  currentPeriodStartsAt DateTime?
-  currentPeriodEndsAt  DateTime?
-  cancelledAt          DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  trialEndsAt            DateTime?
+  currentPeriodStartsAt  DateTime?
+  currentPeriodEndsAt    DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   @@index([userId, status])
   @@index([provider, providerSubscriptionId])
