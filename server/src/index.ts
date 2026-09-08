@@ -160,18 +160,27 @@ app.delete('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) 
 
 app.post('/api/grants', auth, async (req: AuthedRequest, res: Response) => {
   const { accountId, patientId, level } = req.body ?? {};
+  const normalizedAccountId = String(accountId);
+  const normalizedPatientId = String(patientId);
   const p = await prisma.patient.findUnique({ where: { id: String(patientId ?? '') } });
   if (!p || p.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode delegar acesso.');
-  const grant = await prisma.accessGrant.upsert({
-    where: { accountId_patientId: { accountId: String(accountId), patientId: String(patientId) } },
-    update: { level: String(level ?? 'completo'), revokedAt: null },
-    create: {
-      accountId: String(accountId),
-      patientId: String(patientId),
-      level: String(level ?? 'completo'),
-      grantedByName: p.name,
-    },
+
+  const existingGrant = await prisma.accessGrant.findFirst({
+    where: { accountId: normalizedAccountId, patientId: normalizedPatientId },
   });
+  const grant = existingGrant
+    ? await prisma.accessGrant.update({
+        where: { id: existingGrant.id },
+        data: { level: String(level ?? 'completo'), revokedAt: null },
+      })
+    : await prisma.accessGrant.create({
+        data: {
+          accountId: normalizedAccountId,
+          patientId: normalizedPatientId,
+          level: String(level ?? 'completo'),
+          grantedByName: p.name,
+        },
+      });
   res.json(grant);
 });
 
