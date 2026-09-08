@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import AccessRequestsPanel from './AccessRequestsPanel';
 import ClinicarPanel from './ClinicarPanel';
 import ProfessionalProfilePanel from './ProfessionalProfilePanel';
 import V1PreviewApp from './V1PreviewApp';
@@ -11,8 +12,9 @@ import {
 
 const PROFESSIONAL_EVENT = 'mydoctor:open-professional-profile';
 const CLINICAR_EVENT = 'mydoctor:open-clinicar';
+const ACCESS_REQUESTS_EVENT = 'mydoctor:open-access-requests';
 
-type ShellView = 'app' | 'professional' | 'clinicar';
+type ShellView = 'app' | 'professional' | 'clinicar' | 'access-requests';
 
 function addProfessionalMenuEntries() {
   const buttons = Array.from(document.querySelectorAll('button'));
@@ -20,6 +22,16 @@ function addProfessionalMenuEntries() {
   if (!logoutButton?.parentElement) return;
 
   const menuGrid = logoutButton.parentElement;
+
+  if (!menuGrid.querySelector('[data-mydoctor-access-requests-entry="true"]')) {
+    const accessButton = document.createElement('button');
+    accessButton.type = 'button';
+    accessButton.dataset.mydoctorAccessRequestsEntry = 'true';
+    accessButton.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
+    accessButton.textContent = 'Solicitações de acesso';
+    accessButton.addEventListener('click', () => window.dispatchEvent(new Event(ACCESS_REQUESTS_EVENT)));
+    menuGrid.insertBefore(accessButton, logoutButton);
+  }
 
   if (!menuGrid.querySelector('[data-mydoctor-professional-entry="true"]')) {
     const professionalButton = document.createElement('button');
@@ -56,16 +68,23 @@ export default function V1ProfessionalShell() {
 
     const openProfessional = () => setView('professional');
     const openClinicar = () => setView('clinicar');
+    const openAccessRequests = () => setView('access-requests');
     window.addEventListener(PROFESSIONAL_EVENT, openProfessional);
     window.addEventListener(CLINICAR_EVENT, openClinicar);
+    window.addEventListener(ACCESS_REQUESTS_EVENT, openAccessRequests);
     return () => {
       observer.disconnect();
       window.removeEventListener(PROFESSIONAL_EVENT, openProfessional);
       window.removeEventListener(CLINICAR_EVENT, openClinicar);
+      window.removeEventListener(ACCESS_REQUESTS_EVENT, openAccessRequests);
     };
   }, []);
 
-  const title = view === 'professional' ? 'Perfil profissional' : 'Clinicar';
+  const title = view === 'professional'
+    ? 'Perfil profissional'
+    : view === 'clinicar'
+      ? 'Clinicar'
+      : 'Solicitações de acesso';
 
   return <>
     <div className={view === 'app' ? '' : 'hidden'}>
@@ -84,11 +103,13 @@ export default function V1ProfessionalShell() {
 
         {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift">
           <h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2>
-          <p className="mt-2 text-sm text-mute">Perfil profissional e Clinicar usam o mesmo login do seu prontuário pessoal.</p>
+          <p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p>
           <button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button>
         </section> : view === 'professional'
           ? <ProfessionalProfilePanel api={api} />
-          : <ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} />}
+          : view === 'clinicar'
+            ? <ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} />
+            : <AccessRequestsPanel api={api} />}
       </div>
     </main>}
   </>;
