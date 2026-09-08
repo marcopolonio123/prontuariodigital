@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AccessRequestsPanel from './AccessRequestsPanel';
 import ClinicarPanel from './ClinicarPanel';
 import ConsultationConfirmationsPanel from './ConsultationConfirmationsPanel';
+import ProfessionalConsultationWorkspace from './ProfessionalConsultationWorkspace';
 import ProfessionalProfilePanel from './ProfessionalProfilePanel';
 import V1PreviewApp from './V1PreviewApp';
 import {
@@ -22,7 +23,6 @@ function addProfessionalMenuEntries() {
   const buttons = Array.from(document.querySelectorAll('button'));
   const logoutButton = buttons.find((button) => button.textContent?.trim() === 'Sair');
   if (!logoutButton?.parentElement) return;
-
   const menuGrid = logoutButton.parentElement;
 
   if (!menuGrid.querySelector('[data-mydoctor-consultation-confirmations-entry="true"]')) {
@@ -34,7 +34,6 @@ function addProfessionalMenuEntries() {
     confirmationButton.addEventListener('click', () => window.dispatchEvent(new Event(CONSULTATION_CONFIRMATIONS_EVENT)));
     menuGrid.insertBefore(confirmationButton, logoutButton);
   }
-
   if (!menuGrid.querySelector('[data-mydoctor-access-requests-entry="true"]')) {
     const accessButton = document.createElement('button');
     accessButton.type = 'button';
@@ -44,7 +43,6 @@ function addProfessionalMenuEntries() {
     accessButton.addEventListener('click', () => window.dispatchEvent(new Event(ACCESS_REQUESTS_EVENT)));
     menuGrid.insertBefore(accessButton, logoutButton);
   }
-
   if (!menuGrid.querySelector('[data-mydoctor-professional-entry="true"]')) {
     const professionalButton = document.createElement('button');
     professionalButton.type = 'button';
@@ -54,7 +52,6 @@ function addProfessionalMenuEntries() {
     professionalButton.addEventListener('click', () => window.dispatchEvent(new Event(PROFESSIONAL_EVENT)));
     menuGrid.insertBefore(professionalButton, logoutButton);
   }
-
   if (!menuGrid.querySelector('[data-mydoctor-clinicar-entry="true"]')) {
     const clinicarButton = document.createElement('button');
     clinicarButton.type = 'button';
@@ -72,12 +69,10 @@ export default function V1ProfessionalShell() {
   const api = useMemo(() => new MyDoctorV1Api(defaultV1ApiUrl(), token), [token]);
 
   useEffect(() => subscribeV1SessionToken(setToken), []);
-
   useEffect(() => {
     const observer = new MutationObserver(() => addProfessionalMenuEntries());
     observer.observe(document.body, { childList: true, subtree: true });
     addProfessionalMenuEntries();
-
     const openProfessional = () => setView('professional');
     const openClinicar = () => setView('clinicar');
     const openAccessRequests = () => setView('access-requests');
@@ -95,40 +90,21 @@ export default function V1ProfessionalShell() {
     };
   }, []);
 
-  const title = view === 'professional'
-    ? 'Perfil profissional'
-    : view === 'clinicar'
-      ? 'Clinicar'
-      : view === 'access-requests'
-        ? 'Solicitações de acesso'
-        : 'Atendimentos para confirmar';
+  const title = view === 'professional' ? 'Perfil profissional' : view === 'clinicar' ? 'Clinicar' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
 
   return <>
-    <div className={view === 'app' ? '' : 'hidden'}>
-      <V1PreviewApp />
-    </div>
-
+    <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp /></div>
     {view !== 'app' && <main className="min-h-screen bg-paper px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-moss-700">MyDoctor</p>
-            <h1 className="font-display text-2xl font-bold text-ink">{title}</h1>
-          </div>
+          <div><p className="text-xs font-bold uppercase tracking-wide text-moss-700">MyDoctor</p><h1 className="font-display text-2xl font-bold text-ink">{title}</h1></div>
           <button type="button" onClick={() => setView('app')} className="rounded-xl border border-moss-500 px-4 py-3 text-sm font-bold text-moss-800">← Voltar ao MyDoctor</button>
         </div>
-
-        {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift">
-          <h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2>
-          <p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p>
-          <button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button>
-        </section> : view === 'professional'
-          ? <ProfessionalProfilePanel api={api} />
-          : view === 'clinicar'
-            ? <ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} />
-            : view === 'access-requests'
-              ? <AccessRequestsPanel api={api} />
-              : <ConsultationConfirmationsPanel api={api} />}
+        {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift"><h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2><p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p><button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button></section>
+          : view === 'professional' ? <ProfessionalProfilePanel api={api} />
+          : view === 'clinicar' ? <div className="space-y-5"><ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} /><ProfessionalConsultationWorkspace api={api} /></div>
+          : view === 'access-requests' ? <AccessRequestsPanel api={api} />
+          : <ConsultationConfirmationsPanel api={api} />}
       </div>
     </main>}
   </>;
