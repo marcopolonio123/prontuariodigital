@@ -34,6 +34,35 @@ export interface PatientProfile {
   validUntil?: string | null;
 }
 
+export interface ProfessionalRegistrationV1 {
+  id: string;
+  council: string;
+  councilName: string;
+  registration: string;
+  region?: string | null;
+  status: string;
+  verifiedAt?: string | null;
+}
+
+export interface ProfessionalProfileV1 {
+  id: string;
+  name: string;
+  profession: string;
+  specialty?: string | null;
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended' | string;
+  verifiedAt?: string | null;
+  active: boolean;
+  registrations: ProfessionalRegistrationV1[];
+}
+
+export interface UpsertProfessionalProfileInput {
+  profession: string;
+  specialty?: string;
+  council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS';
+  registration: string;
+  region?: string;
+}
+
 export interface HealthEventV1 {
   id: string;
   patientId: string;
@@ -132,6 +161,17 @@ export class MyDoctorV1Api {
   verifyPasswordLogin(input: { challengeId: string; code: string }) {
     return this.req<LoginVerifyResponse>('/auth/login/verify', {
       method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  getProfessionalProfile() {
+    return this.req<ProfessionalProfileV1 | null>('/professional/profile');
+  }
+
+  saveProfessionalProfile(input: UpsertProfessionalProfileInput) {
+    return this.req<ProfessionalProfileV1>('/professional/profile', {
+      method: 'PUT',
       body: JSON.stringify(input),
     });
   }
