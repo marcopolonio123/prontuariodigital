@@ -10,6 +10,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import v1Router from './v1.js';
+import professionalAccessRouter from './professional-access.js';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -25,6 +26,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 app.use('/api/v1', v1Router);
+app.use('/api/v1', professionalAccessRouter);
 
 interface AuthedRequest extends Request { userId?: string; }
 function sign(userId: string): string { return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: JWT_TTL }); }
