@@ -61,6 +61,32 @@ export interface IncomingAccessRequestV1 {
   expiresAt?: string | null;
 }
 
+export interface ProfessionalConsultationV1 {
+  id: string;
+  patientId: string;
+  patientName: string;
+  title: string;
+  occurredAt: string;
+  status: 'pending_patient_confirmation' | 'final' | 'rejected_by_patient' | string;
+  createdAt: string;
+}
+
+export interface IncomingConsultationV1 {
+  id: string;
+  patientId: string;
+  patientName: string;
+  title: string;
+  occurredAt: string;
+  organizationName?: string | null;
+  profession?: string | null;
+  practitionerName: string;
+  council?: string | null;
+  registration?: string | null;
+  region?: string | null;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface HealthEventV1 {
   id: string; patientId: string; type: string; status: string; title: string; occurredAt: string; endedAt?: string | null; timezone: string;
   practitionerNameSnapshot?: string | null; professionSnapshot?: string | null; councilSnapshot?: string | null; registrationSnapshot?: string | null;
@@ -101,6 +127,15 @@ export class MyDoctorV1Api {
   requestPatientAccess(patientId: string) { return this.req<ProfessionalAccessRequestV1>('/professional/access-requests', { method: 'POST', body: JSON.stringify({ patientId }) }); }
   listIncomingAccessRequests() { return this.req<IncomingAccessRequestV1[]>('/access-requests/incoming'); }
   decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }); }
+
+  listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
+  createProfessionalConsultation(input: { accessRequestId: string; title: string; occurredAt: string; organizationName?: string; notes?: string }) {
+    return this.req<HealthEventV1>('/professional/consultations', { method: 'POST', body: JSON.stringify(input) });
+  }
+  listIncomingConsultations() { return this.req<IncomingConsultationV1[]>('/consultations/incoming'); }
+  decideConsultation(id: string, decision: 'confirm' | 'reject') {
+    return this.req<{ id: string; status: string }>(`/consultations/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision }) });
+  }
 
   listProfiles() { return this.req<PatientProfile[]>('/profiles'); }
   createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
