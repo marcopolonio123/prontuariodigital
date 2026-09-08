@@ -24,163 +24,78 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
-
-// Nova API evolutiva. As rotas legadas permanecem durante a migração do frontend.
 app.use('/api/v1', v1Router);
 
-interface AuthedRequest extends Request {
-  userId?: string;
-}
-
-function sign(userId: string): string {
-  return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: JWT_TTL });
-}
-
+interface AuthedRequest extends Request { userId?: string; }
+function sign(userId: string): string { return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: JWT_TTL }); }
 function auth(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  try {
-    const payload = jwt.verify(token, JWT_SECRET) as { uid: string };
-    req.userId = payload.uid;
-    next();
-  } catch {
-    res.status(401).json({ error: 'Sessão expirada ou credenciais inválidas.' });
-  }
+  try { req.userId = (jwt.verify(token, JWT_SECRET) as { uid: string }).uid; next(); }
+  catch { res.status(401).json({ error: 'Sessão expirada ou credenciais inválidas.' }); }
 }
-
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, version: '1.2.0', engine: 'mydoctor-server (Node + Prisma)', apiV1: true });
-});
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
-/* ----------------------- autenticação legada ------------------------- */
-// Mantida temporariamente até a nova tela usar /api/v1/auth/login/start + verify.
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body ?? {};
-  if (!name?.trim() || !email?.trim() || !password || String(password).length < 6) {
-    return fail(res, 400, 'Informe nome, e-mail e senha com pelo menos 6 caracteres.');
-  }
+  if (!name?.trim() || !email?.trim() || !password || String(password).length < 6) return fail(res, 400, 'Informe nome, e-mail e senha com pelo menos 6 caracteres.');
   const normalized = String(email).trim().toLowerCase();
-  const exists = await prisma.user.findUnique({ where: { email: normalized } });
-  if (exists) return fail(res, 409, 'Este e-mail já possui conta.');
-  const user = await prisma.user.create({
-    data: { name: String(name).trim(), email: normalized, passwordHash: await bcrypt.hash(String(password), 10) },
-  });
+  if (await prisma.user.findUnique({ where: { email: normalized } })) return fail(res, 409, 'Este e-mail já possui conta.');
+  const user = await prisma.user.create({ data: { name: String(name).trim(), email: normalized, passwordHash: await bcrypt.hash(String(password), 10) } });
   res.json({ token: sign(user.id), user: { id: user.id, name: user.name, email: user.email } });
 });
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body ?? {};
   const user = await prisma.user.findUnique({ where: { email: String(email ?? '').trim().toLowerCase() } });
-  if (!user || !(await bcrypt.compare(String(password ?? ''), user.passwordHash))) {
-    return fail(res, 401, 'E-mail ou senha incorretos.');
-  }
+  if (!user || !(await bcrypt.compare(String(password ?? ''), user.passwordHash))) return fail(res, 401, 'E-mail ou senha incorretos.');
   res.json({ token: sign(user.id), user: { id: user.id, name: user.name, email: user.email } });
 });
 
 async function visiblePatientIds(userId: string): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
     prisma.patient.findMany({ where: { ownerUserId: userId }, select: { id: true } }),
-    prisma.accessGrant.findMany({
-      where: {
-        accountId: userId,
-        revokedAt: null,
-        OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
-      },
-      select: { patientId: true },
-    }),
+    prisma.accessGrant.findMany({ where: { accountId: userId, revokedAt: null, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, select: { patientId: true } }),
   ]);
   return new Set([...owned, ...grants].map((x) => ('patientId' in x ? x.patientId : x.id)));
 }
 
-const toClient = (p: { id: string; record: string; archived: boolean; data: unknown }) => ({
-  ...(p.data as object),
-  id: p.id,
-  record: p.record,
-  archived: p.archived,
-});
+const toClient = (p: { id: string; record: string; archived: boolean; data: unknown }) => ({ ...(p.data as object), id: p.id, record: p.record, archived: p.archived });
 
 app.get('/api/patients', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);
-  const patients = await prisma.patient.findMany({
-    where: { id: { in: [...ids] }, archived: false },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const patients = await prisma.patient.findMany({ where: { id: { in: [...ids] }, archived: false }, orderBy: { updatedAt: 'desc' } });
   res.json(patients.map(toClient));
 });
 
 app.post('/api/patients', auth, async (req: AuthedRequest, res: Response) => {
-  const body = req.body ?? {};
-  const id = String(body.id ?? crypto.randomUUID());
-  const created = await prisma.patient.create({
-    data: {
-      id,
-      record: String(body.record ?? ''),
-      name: String(body.name ?? 'Sem nome'),
-      ownerUserId: req.userId!,
-      data: body,
-    },
-  });
+  const body = req.body ?? {}; const id = String(body.id ?? crypto.randomUUID());
+  const created = await prisma.patient.create({ data: { id, record: String(body.record ?? ''), name: String(body.name ?? 'Sem nome'), ownerUserId: req.userId!, data: body } });
   res.json(toClient(created));
 });
 
 app.put('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => {
-  const { id } = req.params;
-  const body = req.body ?? {};
-  const ids = await visiblePatientIds(req.userId!);
-  const existing = await prisma.patient.findUnique({ where: { id } });
+  const { id } = req.params; const body = req.body ?? {}; const ids = await visiblePatientIds(req.userId!); const existing = await prisma.patient.findUnique({ where: { id } });
   if (existing && !ids.has(id)) return fail(res, 403, 'Você não tem acesso a esta ficha.');
-  const saved = await prisma.patient.upsert({
-    where: { id },
-    update: {
-      name: String(body.name ?? existing?.name ?? 'Sem nome'),
-      archived: Boolean(body.archived ?? existing?.archived ?? false),
-      data: body,
-    },
-    create: {
-      id,
-      record: String(body.record ?? ''),
-      name: String(body.name ?? 'Sem nome'),
-      ownerUserId: existing?.ownerUserId ?? req.userId!,
-      data: body,
-    },
-  });
+  const saved = await prisma.patient.upsert({ where: { id }, update: { name: String(body.name ?? existing?.name ?? 'Sem nome'), archived: Boolean(body.archived ?? existing?.archived ?? false), data: body }, create: { id, record: String(body.record ?? ''), name: String(body.name ?? 'Sem nome'), ownerUserId: existing?.ownerUserId ?? req.userId!, data: body } });
   res.json(toClient(saved));
 });
 
 app.delete('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => {
-  const { id } = req.params;
-  const existing = await prisma.patient.findUnique({ where: { id } });
+  const { id } = req.params; const existing = await prisma.patient.findUnique({ where: { id } });
   if (!existing) return fail(res, 404, 'Ficha não encontrada.');
   if (existing.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono pode arquivar.');
-  const saved = await prisma.patient.update({ where: { id }, data: { archived: true } });
-  res.json(toClient(saved));
+  res.json(toClient(await prisma.patient.update({ where: { id }, data: { archived: true } })));
 });
 
 app.post('/api/grants', auth, async (req: AuthedRequest, res: Response) => {
-  const { accountId, patientId, level } = req.body ?? {};
-  const normalizedAccountId = String(accountId);
-  const normalizedPatientId = String(patientId);
+  const { accountId, patientId, level } = req.body ?? {}; const normalizedAccountId = String(accountId); const normalizedPatientId = String(patientId);
   const p = await prisma.patient.findUnique({ where: { id: String(patientId ?? '') } });
   if (!p || p.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode delegar acesso.');
-
-  const existingGrant = await prisma.accessGrant.findFirst({
-    where: { accountId: normalizedAccountId, patientId: normalizedPatientId },
-  });
-  const grant = existingGrant
-    ? await prisma.accessGrant.update({
-        where: { id: existingGrant.id },
-        data: { level: String(level ?? 'completo'), revokedAt: null },
-      })
-    : await prisma.accessGrant.create({
-        data: {
-          accountId: normalizedAccountId,
-          patientId: normalizedPatientId,
-          level: String(level ?? 'completo'),
-          grantedByName: p.name,
-        },
-      });
+  const existingGrant = await prisma.accessGrant.findFirst({ where: { accountId: normalizedAccountId, patientId: normalizedPatientId } });
+  const grant = existingGrant ? await prisma.accessGrant.update({ where: { id: existingGrant.id }, data: { level: String(level ?? 'completo'), revokedAt: null } }) : await prisma.accessGrant.create({ data: { accountId: normalizedAccountId, patientId: normalizedPatientId, level: String(level ?? 'completo'), grantedByName: p.name } });
   res.json(grant);
 });
 
@@ -189,66 +104,25 @@ app.delete('/api/grants/:id', auth, async (req: AuthedRequest, res: Response) =>
   if (!grant) return fail(res, 404, 'Delegação não encontrada.');
   const patient = await prisma.patient.findUnique({ where: { id: grant.patientId } });
   if (patient?.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode revogar.');
-  await prisma.accessGrant.update({ where: { id: grant.id }, data: { revokedAt: new Date() } });
-  res.status(204).end();
+  await prisma.accessGrant.update({ where: { id: grant.id }, data: { revokedAt: new Date() } }); res.status(204).end();
 });
 
 app.get('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);
-  const logs = await prisma.identificationLog.findMany({
-    where: { OR: [{ patientId: null }, { patientId: { in: [...ids] } }] },
-    orderBy: { at: 'desc' },
-    take: 100,
-  });
-  res.json(
-    logs.map((l) => ({
-      id: l.id,
-      method: l.method,
-      patientId: l.patientId,
-      patientName: l.patientName,
-      confidence: l.confidence,
-      quality: l.quality,
-      result: l.result,
-      at: l.at.getTime(),
-      thumb: null,
-      detail: l.detail ?? undefined,
-      byName: l.byName,
-    })),
-  );
+  const logs = await prisma.identificationLog.findMany({ where: { OR: [{ patientId: null }, { patientId: { in: [...ids] } }] }, orderBy: { at: 'desc' }, take: 100 });
+  res.json(logs.map((l) => ({ id: l.id, method: l.method, patientId: l.patientId, patientName: l.patientName, confidence: l.confidence, quality: l.quality, result: l.result, at: l.at.getTime(), thumb: null as string | null, detail: l.detail ?? undefined, byName: l.byName })));
 });
 
 app.post('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   const b = req.body ?? {};
-  await prisma.identificationLog.create({
-    data: {
-      id: String(b.id ?? crypto.randomUUID()),
-      method: String(b.method ?? 'face'),
-      patientId: b.patientId ? String(b.patientId) : null,
-      patientName: String(b.patientName ?? '—'),
-      confidence: Number(b.confidence ?? 0),
-      quality: b.quality === null || b.quality === undefined ? null : Number(b.quality),
-      result: String(b.result ?? 'none'),
-      byUserId: req.userId!,
-      byName: String(b.byName ?? ''),
-      detail: b.detail ? String(b.detail) : null,
-      at: new Date(Number(b.at ?? Date.now())),
-    },
-  });
+  await prisma.identificationLog.create({ data: { id: String(b.id ?? crypto.randomUUID()), method: String(b.method ?? 'face'), patientId: b.patientId ? String(b.patientId) : null, patientName: String(b.patientName ?? '—'), confidence: Number(b.confidence ?? 0), quality: b.quality === null || b.quality === undefined ? null : Number(b.quality), result: String(b.result ?? 'none'), byUserId: req.userId!, byName: String(b.byName ?? ''), detail: b.detail ? String(b.detail) : null, at: new Date(Number(b.at ?? Date.now())) } });
   res.status(201).json({ ok: true });
 });
 
-// Em produção, o mesmo processo serve o frontend Vite e a API.
-// Na Hostinger o processo parte da raiz do repositório e o Vite gera ./dist.
 const publicDir = process.env.PUBLIC_DIR ?? path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(path.join(publicDir, 'index.html'))) {
   app.use(express.static(publicDir));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) return next();
-    return res.sendFile(path.join(publicDir, 'index.html'));
-  });
+  app.get('*', (req, res, next) => { if (req.path.startsWith('/api/')) return next(); return res.sendFile(path.join(publicDir, 'index.html')); });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  // eslint-disable-next-line no-console
-  console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
-});
+app.listen(PORT, '0.0.0.0', () => { console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`); });
