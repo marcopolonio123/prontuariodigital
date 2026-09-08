@@ -1,5 +1,27 @@
 export type MfaChannel = 'email' | 'sms';
 
+const V1_SESSION_TOKEN_KEY = 'mydoctor.v1.sessionToken';
+const V1_SESSION_EVENT = 'mydoctor:v1-session-token';
+
+export function readV1SessionToken() {
+  if (typeof window === 'undefined') return '';
+  return window.sessionStorage.getItem(V1_SESSION_TOKEN_KEY) ?? '';
+}
+
+function publishV1SessionToken(token: string) {
+  if (typeof window === 'undefined') return;
+  if (token) window.sessionStorage.setItem(V1_SESSION_TOKEN_KEY, token);
+  else window.sessionStorage.removeItem(V1_SESSION_TOKEN_KEY);
+  window.dispatchEvent(new CustomEvent(V1_SESSION_EVENT, { detail: token }));
+}
+
+export function subscribeV1SessionToken(listener: (token: string) => void) {
+  if (typeof window === 'undefined') return () => undefined;
+  const handler = (event: Event) => listener((event as CustomEvent<string>).detail ?? readV1SessionToken());
+  window.addEventListener(V1_SESSION_EVENT, handler);
+  return () => window.removeEventListener(V1_SESSION_EVENT, handler);
+}
+
 export interface LoginStartResponse {
   challengeId: string;
   channel: MfaChannel;
@@ -108,11 +130,12 @@ export interface CreateHealthEventInput {
 export class MyDoctorV1Api {
   constructor(
     private readonly baseUrl: string,
-    private token = '',
+    private token = readV1SessionToken(),
   ) {}
 
   setToken(token: string) {
     this.token = token;
+    publishV1SessionToken(token);
   }
 
   private url(path: string) {
