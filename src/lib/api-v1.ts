@@ -22,210 +22,90 @@ export function subscribeV1SessionToken(listener: (token: string) => void) {
   return () => window.removeEventListener(V1_SESSION_EVENT, handler);
 }
 
-export interface LoginStartResponse {
-  challengeId: string;
-  channel: MfaChannel;
-  destinationMasked: string;
-  expiresAt: string;
-  developmentCode?: string;
-}
+export interface LoginStartResponse { challengeId: string; channel: MfaChannel; destinationMasked: string; expiresAt: string; developmentCode?: string; }
+export interface V1User { id: string; name: string; email: string; phone?: string | null; }
+export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
+export interface LoginVerifyResponse { token: string; user: V1User; }
+export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; }
+export interface ProfessionalRegistrationV1 { id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
+export interface ProfessionalProfileV1 { id: string; name: string; profession: string; specialty?: string | null; verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended' | string; verifiedAt?: string | null; active: boolean; registrations: ProfessionalRegistrationV1[]; }
+export interface UpsertProfessionalProfileInput { profession: string; specialty?: string; council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS'; registration: string; region?: string; }
 
-export interface V1User {
+export interface PatientLookupV1 { patientId: string; name: string; }
+export interface ProfessionalAccessRequestV1 {
   id: string;
-  name: string;
-  email: string;
-  phone?: string | null;
-}
-
-export interface RegisterResponse extends V1User {
-  requiresMfaLogin: true;
-}
-
-export interface LoginVerifyResponse {
-  token: string;
-  user: V1User;
-}
-
-export interface PatientProfile {
-  id: string;
-  record: string;
-  name: string;
-  relationship: string;
-  accessLevel: string;
-  source: 'owned' | 'delegated';
-  validUntil?: string | null;
-}
-
-export interface ProfessionalRegistrationV1 {
-  id: string;
-  council: string;
-  councilName: string;
-  registration: string;
-  region?: string | null;
+  patientId: string;
+  patientName: string;
   status: string;
-  verifiedAt?: string | null;
+  requestedPermission?: string;
+  requestedScope?: unknown;
+  requestedAt: string;
+  expiresAt?: string | null;
+  decidedAt?: string | null;
+  grantId?: string | null;
+  grantValidUntil?: string | null;
+  grantRevokedAt?: string | null;
 }
-
-export interface ProfessionalProfileV1 {
+export interface IncomingAccessRequestV1 {
   id: string;
-  name: string;
-  profession: string;
+  patientId: string;
+  patientName: string;
+  requesterName: string;
+  practitionerName: string;
+  profession?: string | null;
   specialty?: string | null;
-  verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended' | string;
-  verifiedAt?: string | null;
-  active: boolean;
-  registrations: ProfessionalRegistrationV1[];
-}
-
-export interface UpsertProfessionalProfileInput {
-  profession: string;
-  specialty?: string;
-  council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS';
-  registration: string;
-  region?: string;
+  registrations: Array<{ council: string; registration: string; region?: string | null; status: string }>;
+  requestedPermission: string;
+  requestedScope: unknown;
+  requestedAt: string;
+  expiresAt?: string | null;
 }
 
 export interface HealthEventV1 {
-  id: string;
-  patientId: string;
-  type: string;
-  status: string;
-  title: string;
-  occurredAt: string;
-  endedAt?: string | null;
-  timezone: string;
-  practitionerNameSnapshot?: string | null;
-  professionSnapshot?: string | null;
-  councilSnapshot?: string | null;
-  registrationSnapshot?: string | null;
-  registrationRegionSnapshot?: string | null;
-  organizationNameSnapshot?: string | null;
-  locationNameSnapshot?: string | null;
-  payload: Record<string, unknown>;
-  provenance?: Record<string, unknown> | null;
-  createdAt: string;
-  updatedAt: string;
+  id: string; patientId: string; type: string; status: string; title: string; occurredAt: string; endedAt?: string | null; timezone: string;
+  practitionerNameSnapshot?: string | null; professionSnapshot?: string | null; councilSnapshot?: string | null; registrationSnapshot?: string | null;
+  registrationRegionSnapshot?: string | null; organizationNameSnapshot?: string | null; locationNameSnapshot?: string | null;
+  payload: Record<string, unknown>; provenance?: Record<string, unknown> | null; createdAt: string; updatedAt: string;
 }
 
 export interface CreateHealthEventInput {
-  type: string;
-  title: string;
-  occurredAt: string;
-  endedAt?: string;
-  timezone?: string;
-  practitionerId?: string;
-  practitionerName?: string;
-  profession?: string;
-  council?: string;
-  registration?: string;
-  registrationRegion?: string;
-  organizationId?: string;
-  organizationName?: string;
-  locationId?: string;
-  locationName?: string;
-  sourceSystemId?: string;
-  payload?: Record<string, unknown>;
+  type: string; title: string; occurredAt: string; endedAt?: string; timezone?: string; practitionerId?: string; practitionerName?: string;
+  profession?: string; council?: string; registration?: string; registrationRegion?: string; organizationId?: string; organizationName?: string;
+  locationId?: string; locationName?: string; sourceSystemId?: string; payload?: Record<string, unknown>;
 }
 
 export class MyDoctorV1Api {
-  constructor(
-    private readonly baseUrl: string,
-    private token = readV1SessionToken(),
-  ) {}
+  constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
-  setToken(token: string) {
-    this.token = token;
-    publishV1SessionToken(token);
-  }
-
-  private url(path: string) {
-    return `${this.baseUrl.replace(/\/$/, '')}/api/v1${path}`;
-  }
-
+  setToken(token: string) { this.token = token; publishV1SessionToken(token); }
+  private url(path: string) { return `${this.baseUrl.replace(/\/$/, '')}/api/v1${path}`; }
   private async req<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(this.url(path), {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
-
+    const response = await fetch(this.url(path), { ...init, headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...(init.headers ?? {}) } });
     if (!response.ok) {
       let error = `Erro do servidor (${response.status}).`;
-      try {
-        const body = (await response.json()) as { error?: string };
-        if (body.error) error = body.error;
-      } catch {
-        // resposta sem JSON
-      }
+      try { const body = (await response.json()) as { error?: string }; if (body.error) error = body.error; } catch { /* resposta sem JSON */ }
       throw new Error(error);
     }
-
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
 
-  register(input: { name: string; email: string; password: string; phone?: string }) {
-    return this.req<RegisterResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-  }
+  register(input: { name: string; email: string; password: string; phone?: string }) { return this.req<RegisterResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) }); }
+  startPasswordLogin(input: { email: string; password: string; channel: MfaChannel }) { return this.req<LoginStartResponse>('/auth/login/start', { method: 'POST', body: JSON.stringify(input) }); }
+  verifyPasswordLogin(input: { challengeId: string; code: string }) { return this.req<LoginVerifyResponse>('/auth/login/verify', { method: 'POST', body: JSON.stringify(input) }); }
+  getProfessionalProfile() { return this.req<ProfessionalProfileV1 | null>('/professional/profile'); }
+  saveProfessionalProfile(input: UpsertProfessionalProfileInput) { return this.req<ProfessionalProfileV1>('/professional/profile', { method: 'PUT', body: JSON.stringify(input) }); }
 
-  startPasswordLogin(input: { email: string; password: string; channel: MfaChannel }) {
-    return this.req<LoginStartResponse>('/auth/login/start', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-  }
+  lookupPatientByEmail(email: string) { return this.req<PatientLookupV1 | null>(`/professional/patients/lookup?email=${encodeURIComponent(email)}`); }
+  listProfessionalAccessRequests() { return this.req<ProfessionalAccessRequestV1[]>('/professional/access-requests'); }
+  requestPatientAccess(patientId: string) { return this.req<ProfessionalAccessRequestV1>('/professional/access-requests', { method: 'POST', body: JSON.stringify({ patientId }) }); }
+  listIncomingAccessRequests() { return this.req<IncomingAccessRequestV1[]>('/access-requests/incoming'); }
+  decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }); }
 
-  verifyPasswordLogin(input: { challengeId: string; code: string }) {
-    return this.req<LoginVerifyResponse>('/auth/login/verify', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-  }
-
-  getProfessionalProfile() {
-    return this.req<ProfessionalProfileV1 | null>('/professional/profile');
-  }
-
-  saveProfessionalProfile(input: UpsertProfessionalProfileInput) {
-    return this.req<ProfessionalProfileV1>('/professional/profile', {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    });
-  }
-
-  listProfiles() {
-    return this.req<PatientProfile[]>('/profiles');
-  }
-
-  createDependentProfile(input: {
-    name: string;
-    relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other';
-    birthDate?: string;
-    sex?: string;
-    record?: string;
-  }) {
-    return this.req<PatientProfile>('/profiles', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-  }
-
-  listHealthEvents(patientId: string) {
-    return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`);
-  }
-
-  createHealthEvent(patientId: string, input: CreateHealthEventInput) {
-    return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-  }
+  listProfiles() { return this.req<PatientProfile[]>('/profiles'); }
+  createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
+  listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
+  createHealthEvent(patientId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(input) }); }
 }
 
 export function defaultV1ApiUrl() {
