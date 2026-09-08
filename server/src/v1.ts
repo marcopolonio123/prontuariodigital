@@ -12,6 +12,15 @@ const JWT_TTL = '7d';
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 10);
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
 
+const PROFESSIONAL_COUNCILS: Record<string, string> = {
+  CRM: 'Conselho Regional de Medicina',
+  CREFITO: 'Conselho Regional de Fisioterapia e Terapia Ocupacional',
+  CRN: 'Conselho Regional de Nutricionistas',
+  COREN: 'Conselho Regional de Enfermagem',
+  CRO: 'Conselho Regional de Odontologia',
+  OUTROS: 'Outro conselho profissional',
+};
+
 interface AuthedRequest extends Request {
   userId?: string;
 }
@@ -226,6 +235,150 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
       phone: challenge.user.phone,
     },
   });
+});
+
+/** Perfil profissional opcional da mesma conta. A conta continua sendo paciente normalmente. */
+router.get('/professional/profile', auth, async (req: AuthedRequest, res: Response) => {
+  const practitioner = await prisma.practitioner.findUnique({
+    where: { userId: req.userId! },
+    include: { registrations: { include: { authority: true } } },
+  });
+  if (!practitioner) return res.json(null);
+
+  return res.json({
+    id: practitioner.id,
+    name: practitioner.name,
+    profession: practitioner.profession,
+    specialty: practitioner.specialty,
+    verificationStatus: practitioner.verificationStatus,
+    verifiedAt: practitioner.verifiedAt?.toISOString() ?? null,
+    active: practitioner.active,
+    registrations: practitioner.registrations.map((item) => ({
+      id: item.id,
+      council: item.authority.code,
+      councilName: item.authority.name,
+      registration: item.registration,
+      region: item.region,
+      status: item.status,
+      verifiedAt: item.verifiedAt?.toISOString() ?? null,
+    })),
+  });
+});
+
+/**
+ * Solicita habilitação profissional. Nesta fase o cadastro fica EM VALIDAÇÃO:
+ * nenhuma funcionalidade de Clinicar é liberada até verificationStatus === verified.
+ */
+router.put('/professional/profile', auth, async (req: AuthedRequest, res: Response) => {
+  const body = req.body ?? {};
+  const profession = String(body.profession ?? '').trim();
+  const specialty = String(body.specialty ?? '').trim() || null;
+  const council = String(body.council ?? '').trim().toUpperCase();
+  const registration = String(body.registration ?? '').trim().replace(/\s+/g, '');
+  const region = String(body.region ?? '').trim().toUpperCase();
+
+  if (!profession) return fail(res, 400, 'Informe sua profissão.');
+  if (!Object.prototype.hasOwnProperty.call(PROFESSIONAL_COUNCILS, council)) return fail(res, 400, 'Selecione um conselho profissional válido.');
+  if (!registration) return fail(res, 400, 'Informe o número do registro profissional.');
+  if (council !== 'OUTROS' && !/^[A-Z]{2}$/.test(region)) return fail(res, 400, 'Informe a UF do registro profissional.');
+
+  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true } });
+  if (!user) return fail(res, 404, 'Usuário não encontrado.');
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const authority = await tx.registryAuthority.upsert({
+        where: { code: council },
+        update: { name: PROFESSIONAL_COUNCILS[council] },
+        create: { code: council, name: PROFESSIONAL_COUNCILS[council], country: 'BR' },
+      });
+
+      const existingProfessional = await tx.practitioner.findUnique({ where: { userId: user.id } });
+      const practitioner = existingProfessional
+        ? await tx.practitioner.update({
+            where: { id: existingProfessional.id },
+            data: {
+              name: user.name,
+              profession,
+              specialty,
+              verificationStatus: existingProfessional.verificationStatus === 'verified' ? 'verified' : 'pending',
+              active: true,
+            },
+          })
+        : await tx.practitioner.create({
+            data: {
+              userId: user.id,
+              name: user.name,
+              profession,
+              specialty,
+              verificationStatus: 'pending',
+              active: true,
+            },
+          });
+
+      const duplicate = await tx.professionalRegistration.findUnique({
+        where: {
+          authorityId_registration_region: {
+            authorityId: authority.id,
+            registration,
+            region: region || null,
+          },
+        },
+      });
+
+      if (duplicate && duplicate.practitionerId !== practitioner.id) {
+        throw new Error('PROFESSIONAL_REGISTRATION_IN_USE');
+      }
+
+      if (duplicate) {
+        await tx.professionalRegistration.update({
+          where: { id: duplicate.id },
+          data: { status: duplicate.status === 'active' ? 'active' : 'unknown' },
+        });
+      } else {
+        await tx.professionalRegistration.create({
+          data: {
+            practitionerId: practitioner.id,
+            authorityId: authority.id,
+            registration,
+            region: region || null,
+            status: 'unknown',
+          },
+        });
+      }
+
+      return tx.practitioner.findUnique({
+        where: { id: practitioner.id },
+        include: { registrations: { include: { authority: true } } },
+      });
+    });
+
+    if (!result) return fail(res, 500, 'Não foi possível salvar o perfil profissional.');
+    return res.json({
+      id: result.id,
+      name: result.name,
+      profession: result.profession,
+      specialty: result.specialty,
+      verificationStatus: result.verificationStatus,
+      verifiedAt: result.verifiedAt?.toISOString() ?? null,
+      active: result.active,
+      registrations: result.registrations.map((item) => ({
+        id: item.id,
+        council: item.authority.code,
+        councilName: item.authority.name,
+        registration: item.registration,
+        region: item.region,
+        status: item.status,
+        verifiedAt: item.verifiedAt?.toISOString() ?? null,
+      })),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROFESSIONAL_REGISTRATION_IN_USE') {
+      return fail(res, 409, 'Este registro profissional já está associado a outra conta.');
+    }
+    console.error('V1 professional profile error', error);
+    return fail(res, 500, 'Não foi possível salvar o perfil profissional agora.');
+  }
 });
 
 /** Perfis/prontuários que o usuário autenticado pode abrir após o login. */
