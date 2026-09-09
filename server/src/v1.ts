@@ -2,10 +2,9 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import prisma from './db.js';
 import { sendLoginVerificationEmail } from './email.js';
 
-const prisma = new PrismaClient();
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
 const JWT_TTL = '7d';
