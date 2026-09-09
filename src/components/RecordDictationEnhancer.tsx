@@ -1,10 +1,26 @@
 import { useEffect } from 'react';
 
-type RecognitionResultEvent = Event & { results: { length: number; [index: number]: { 0: { transcript: string }; isFinal: boolean } } };
-type Recognition = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((event: RecognitionResultEvent) => void) | null; onerror: (() => void) | null; onend: (() => void) | null };
-type RecognitionConstructor = new () => Recognition;
+type SpeechResult = { 0: { transcript: string }; isFinal: boolean };
+type SpeechEvent = Event & { results: { length: number; [index: number]: SpeechResult } };
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+};
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
-declare global { interface Window { SpeechRecognition?: RecognitionConstructor; webkitSpeechRecognition?: RecognitionConstructor; } }
+function speechRecognitionConstructor(): SpeechRecognitionCtor | undefined {
+  const speechWindow = window as typeof window & {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
 
 function installDictationButton() {
   const labels = Array.from(document.querySelectorAll('label'));
@@ -25,7 +41,7 @@ function installDictationButton() {
   controls.append(button, status);
   label.appendChild(controls);
 
-  let recognition: Recognition | null = null;
+  let recognition: SpeechRecognitionLike | null = null;
   let baseText = '';
   let finalText = '';
   const setValue = (value: string) => {
@@ -36,12 +52,16 @@ function installDictationButton() {
 
   button.addEventListener('click', () => {
     if (recognition) { recognition.stop(); return; }
-    const RecognitionApi = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    const RecognitionApi = speechRecognitionConstructor();
     if (!RecognitionApi) { status.textContent = 'Ditado não disponível neste navegador.'; return; }
-    recognition = new RecognitionApi();
-    recognition.lang = 'pt-BR'; recognition.interimResults = true; recognition.continuous = true;
-    baseText = input.value.trim(); finalText = '';
-    recognition.onresult = (event) => {
+    const activeRecognition = new RecognitionApi();
+    recognition = activeRecognition;
+    activeRecognition.lang = 'pt-BR';
+    activeRecognition.interimResults = true;
+    activeRecognition.continuous = true;
+    baseText = input.value.trim();
+    finalText = '';
+    activeRecognition.onresult = (event) => {
       let interim = '';
       for (let i = 0; i < event.results.length; i += 1) {
         const transcript = event.results[i][0]?.transcript ?? '';
@@ -50,9 +70,11 @@ function installDictationButton() {
       }
       setValue([baseText, finalText.trim(), interim.trim()].filter(Boolean).join(' '));
     };
-    recognition.onerror = () => { status.textContent = 'Não foi possível continuar o ditado.'; };
-    recognition.onend = () => { recognition = null; button.textContent = '🎙️ Ditar'; status.textContent = ''; };
-    button.textContent = '■ Parar ditado'; status.textContent = 'Ouvindo em português...'; recognition.start();
+    activeRecognition.onerror = () => { status.textContent = 'Não foi possível continuar o ditado.'; };
+    activeRecognition.onend = () => { recognition = null; button.textContent = '🎙️ Ditar'; status.textContent = ''; };
+    button.textContent = '■ Parar ditado';
+    status.textContent = 'Ouvindo em português...';
+    activeRecognition.start();
   });
 }
 
