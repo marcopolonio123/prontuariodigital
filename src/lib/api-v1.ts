@@ -57,6 +57,7 @@ export interface IncomingAccessRequestV1 {
   registrations: Array<{ council: string; registration: string; region?: string | null; status: string }>;
   requestedPermission: string;
   requestedScope: unknown;
+  status: string;
   requestedAt: string;
   expiresAt?: string | null;
 }
