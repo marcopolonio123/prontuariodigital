@@ -5,6 +5,7 @@ import ConsultationConfirmationsPanel from './ConsultationConfirmationsPanel';
 import ProfessionalConsultationWorkspace from './ProfessionalConsultationWorkspace';
 import ProfessionalProfilePanel from './ProfessionalProfilePanel';
 import V1PreviewApp from './V1PreviewApp';
+import RecordDictationEnhancer from './components/RecordDictationEnhancer';
 import {
   MyDoctorV1Api,
   defaultV1ApiUrl,
@@ -93,6 +94,7 @@ export default function V1ProfessionalShell() {
   const title = view === 'professional' ? 'Perfil profissional' : view === 'clinicar' ? 'Clinicar' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
 
   return <>
+    <RecordDictationEnhancer />
     <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp /></div>
     {view !== 'app' && <main className="min-h-screen bg-paper px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
