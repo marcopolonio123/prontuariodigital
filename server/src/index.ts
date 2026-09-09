@@ -8,12 +8,11 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import prisma from './db.js';
 import clinicalWorkflowRouter from './clinical-workflow.js';
 import v1Router from './v1.js';
 import professionalAccessRouter from './professional-access.js';
 
-const prisma = new PrismaClient();
 const app = express();
 
 const PORT = Number(process.env.PORT ?? 8787);
