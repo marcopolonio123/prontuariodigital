@@ -6,3 +6,4 @@ import { PrismaClient } from '@prisma/client';
  * engines/threads adicionais e provocar PANIC "timer has gone away".
  */
 export const prisma = new PrismaClient();
+export default prisma;
