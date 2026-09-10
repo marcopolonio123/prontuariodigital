@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-type RecognitionResultEvent = Event & { results: { length: number; [index: number]: { 0: { transcript: string }; isFinal: boolean } } };
+type RecognitionResultEvent = Event & { resultIndex: number; results: { length: number; [index: number]: { 0: { transcript: string }; isFinal: boolean } } };
 type RecognitionErrorEvent = Event & { error?: string };
 type Recognition = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((event: RecognitionResultEvent) => void) | null; onerror: ((event: RecognitionErrorEvent) => void) | null; onend: (() => void) | null };
 type RecognitionConstructor = new () => Recognition;
@@ -23,10 +23,11 @@ export default function DictationTextarea({ value, onChange, rows = 5, placehold
     baseTextRef.current = value.trim(); finalTextRef.current = '';
     recognition.onresult = (event) => {
       let interim = '';
-      for (let i = 0; i < event.results.length; i += 1) {
-        const transcript = event.results[i][0]?.transcript ?? '';
-        if (event.results[i].isFinal) finalTextRef.current += `${transcript.trim()} `;
-        else interim += transcript;
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0]?.transcript?.trim() ?? '';
+        if (!transcript) continue;
+        if (event.results[i].isFinal) finalTextRef.current += `${transcript} `;
+        else interim += `${transcript} `;
       }
       onChange([baseTextRef.current, finalTextRef.current.trim(), interim.trim()].filter(Boolean).join(' '));
     };
