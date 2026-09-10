@@ -11,8 +11,8 @@
     "build:web": "vite build",
     "prepare:hostinger": "npm run build:web && npm --prefix server install && npm --prefix server run prisma:generate && npm --prefix server run build",
     "postinstall": "npm run prepare:hostinger",
-    "build:hostinger": "npm run prepare:hostinger && cd server && npx prisma db push --skip-generate",
-    "start": "node index.js",
+    "build:hostinger": "npm run prepare:hostinger",
+    "start": "node server/dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
