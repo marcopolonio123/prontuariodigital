@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 type SpeechResult = { 0: { transcript: string }; isFinal: boolean };
-type SpeechEvent = Event & { results: { length: number; [index: number]: SpeechResult } };
+type SpeechEvent = Event & { resultIndex: number; results: { length: number; [index: number]: SpeechResult } };
 type SpeechRecognitionLike = {
   lang: string;
   interimResults: boolean;
@@ -63,10 +63,11 @@ function installDictationButton() {
     finalText = '';
     activeRecognition.onresult = (event) => {
       let interim = '';
-      for (let i = 0; i < event.results.length; i += 1) {
-        const transcript = event.results[i][0]?.transcript ?? '';
-        if (event.results[i].isFinal) finalText += `${transcript.trim()} `;
-        else interim += transcript;
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0]?.transcript?.trim() ?? '';
+        if (!transcript) continue;
+        if (event.results[i].isFinal) finalText += `${transcript} `;
+        else interim += `${transcript} `;
       }
       setValue([baseText, finalText.trim(), interim.trim()].filter(Boolean).join(' '));
     };
