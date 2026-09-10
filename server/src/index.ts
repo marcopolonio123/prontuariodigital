@@ -129,15 +129,12 @@ if (fs.existsSync(path.join(publicDir, 'index.html'))) {
   app.get('*', (req, res, next) => { if (req.path.startsWith('/api/')) return next(); return res.sendFile(path.join(publicDir, 'index.html')); });
 }
 
-async function bootstrap() {
-  try {
-    await ensureRuntimeSchema();
-    console.log('My Doctor: schema runtime verificado.');
-  } catch (error) {
-    console.error('My Doctor: não foi possível aplicar o patch aditivo de schema.', error);
-  }
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
 
-  app.listen(PORT, '0.0.0.0', () => { console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`); });
-}
-
-void bootstrap();
+  // Nunca bloquear o startup/health-check da Hostinger com DDL. O patch roda
+  // em segundo plano e tem timeouts próprios no PostgreSQL.
+  void ensureRuntimeSchema()
+    .then(() => console.log('My Doctor: schema runtime verificado.'))
+    .catch((error) => console.error('My Doctor: não foi possível aplicar o patch aditivo de schema.', error));
+});
