@@ -78,9 +78,9 @@ function installDictation(labelPrefix: string, marker: string, selector: 'input'
     activeRecognition.onresult = (event) => {
       const interimSegments: string[] = [];
 
-      // Atualizamos cada índice em vez de concatenar o resultado novamente.
-      // Chrome/WebKit pode reenviar resultados anteriores durante a mesma sessão;
-      // usar o índice impede que uma frase ditada uma vez seja duplicada.
+      // Chrome/WebKit pode reenviar segmentos já reconhecidos. Guardamos cada
+      // resultado pelo seu índice para que a mesma frase não seja concatenada
+      // várias vezes durante uma única sessão de ditado.
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const transcript = event.results[i][0]?.transcript?.trim() ?? '';
         if (!transcript) continue;
@@ -114,6 +114,10 @@ function installDictation(labelPrefix: string, marker: string, selector: 'input'
 
 function installDictationButtons() {
   installDictation('Atendimento(descrição)', 'record-description', 'input');
+  installDictation('Sintomas / Queixa principal', 'record-symptoms', 'textarea');
+  installDictation('Diagnóstico / Causa / Hipótese', 'record-diagnosis', 'textarea');
+  installDictation('Exames', 'record-exams', 'textarea');
+  installDictation('Receitas / Prescrições', 'record-prescriptions', 'textarea');
   installDictation('Observações', 'record-notes', 'textarea');
 }
 
