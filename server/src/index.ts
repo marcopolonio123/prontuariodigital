@@ -8,7 +8,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { ensureRuntimeSchema, prisma } from './db.js';
+import { prisma } from './db.js';
 import clinicalWorkflowRouter from './clinical-workflow.js';
 import v1Router from './v1.js';
 import professionalAccessRouter from './professional-access.js';
@@ -131,10 +131,5 @@ if (fs.existsSync(path.join(publicDir, 'index.html'))) {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
-
-  // Nunca bloquear o startup/health-check da Hostinger com DDL. O patch roda
-  // em segundo plano e tem timeouts próprios no PostgreSQL.
-  void ensureRuntimeSchema()
-    .then(() => console.log('My Doctor: schema runtime verificado.'))
-    .catch((error) => console.error('My Doctor: não foi possível aplicar o patch aditivo de schema.', error));
+  console.log('My Doctor: patch de schema em runtime desativado; migrações devem ocorrer fora do processo web.');
 });
