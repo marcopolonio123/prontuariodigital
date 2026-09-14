@@ -101,6 +101,24 @@ export interface CreateHealthEventInput {
   locationId?: string; locationName?: string; sourceSystemId?: string; payload?: Record<string, unknown>;
 }
 
+type RecordExtras = {
+  symptoms?: string;
+  diagnosis?: string;
+  exams?: string;
+  prescriptions?: string;
+  attachments?: unknown[];
+};
+
+type MyDoctorWindow = typeof window & {
+  __mydoctorPendingRecordExtras?: RecordExtras;
+  __mydoctorHealthEvents?: HealthEventV1[];
+};
+
+function enhancedWindow() {
+  if (typeof window === 'undefined') return undefined;
+  return window as MyDoctorWindow;
+}
+
 export class MyDoctorV1Api {
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
@@ -140,8 +158,30 @@ export class MyDoctorV1Api {
 
   listProfiles() { return this.req<PatientProfile[]>('/profiles'); }
   createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
-  listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
-  createHealthEvent(patientId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(input) }); }
+  async listHealthEvents(patientId: string) {
+    const events = await this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`);
+    const win = enhancedWindow();
+    if (win) win.__mydoctorHealthEvents = events;
+    return events;
+  }
+  async createHealthEvent(patientId: string, input: CreateHealthEventInput) {
+    const win = enhancedWindow();
+    const extras = win?.__mydoctorPendingRecordExtras;
+    const isClinicalRecord = input.type !== 'vital' && input.type !== 'insurance';
+    const hasExtras = Boolean(extras && (
+      extras.symptoms?.trim() || extras.diagnosis?.trim() || extras.exams?.trim() || extras.prescriptions?.trim() || (extras.attachments?.length ?? 0) > 0
+    ));
+    const enhancedInput = isClinicalRecord && hasExtras
+      ? { ...input, payload: { ...(input.payload ?? {}), ...extras } }
+      : input;
+    const created = await this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(enhancedInput) });
+    if (win) {
+      if (isClinicalRecord) win.__mydoctorPendingRecordExtras = {};
+      const cached = win.__mydoctorHealthEvents ?? [];
+      win.__mydoctorHealthEvents = [created, ...cached.filter((event) => event.id !== created.id)];
+    }
+    return created;
+  }
 }
 
 export function defaultV1ApiUrl() {
