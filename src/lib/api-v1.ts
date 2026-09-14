@@ -168,11 +168,17 @@ export class MyDoctorV1Api {
     const win = enhancedWindow();
     const extras = win?.__mydoctorPendingRecordExtras;
     const isClinicalRecord = input.type !== 'vital' && input.type !== 'insurance';
-    const hasExtras = Boolean(extras && (
-      extras.symptoms?.trim() || extras.diagnosis?.trim() || extras.exams?.trim() || extras.prescriptions?.trim() || (extras.attachments?.length ?? 0) > 0
+    const safeExtras = extras ? {
+      symptoms: extras.symptoms,
+      diagnosis: extras.diagnosis,
+      exams: extras.exams,
+      prescriptions: extras.prescriptions,
+    } : undefined;
+    const hasExtras = Boolean(safeExtras && (
+      safeExtras.symptoms?.trim() || safeExtras.diagnosis?.trim() || safeExtras.exams?.trim() || safeExtras.prescriptions?.trim()
     ));
     const enhancedInput = isClinicalRecord && hasExtras
-      ? { ...input, payload: { ...(input.payload ?? {}), ...extras } }
+      ? { ...input, payload: { ...(input.payload ?? {}), ...safeExtras } }
       : input;
     const created = await this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(enhancedInput) });
     if (win) {
