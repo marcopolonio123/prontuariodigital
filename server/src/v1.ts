@@ -521,7 +521,17 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
     },
   });
 
-  res.status(201).json(event);
+  // Confirma a persistencia antes de informar sucesso ao frontend.
+  const persisted = await prisma.healthEvent.findUnique({
+    where: { id: event.id },
+    include: { practitioner: true, organization: true, location: true },
+  });
+  if (!persisted) {
+    console.error('V1 health event persistence verification failed', { eventId: event.id, patientId: req.params.patientId });
+    return fail(res, 500, 'O registro nao pôde ser confirmado no prontuario. Tente novamente.');
+  }
+  console.info('V1 health event persisted', { eventId: persisted.id, patientId: persisted.patientId, status: persisted.status });
+  res.status(201).json(persisted);
 });
 
 export default router;
