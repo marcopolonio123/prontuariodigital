@@ -20,7 +20,11 @@ type EmailMessage = {
 type SmtpAttempt = { port: number; secure: boolean; requireTLS?: boolean };
 
 async function sendWithResend(apiKey: string, message: EmailMessage): Promise<void> {
-  const response = await fetch('https://api.resend.com/emails', {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  let response: Response;
+  try {
+    response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -34,7 +38,16 @@ async function sendWithResend(apiKey: string, message: EmailMessage): Promise<vo
       text: message.text,
       tags: [{ name: 'category', value: 'login_mfa' }],
     }),
-  });
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Resend API timeout após 8 segundos.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
