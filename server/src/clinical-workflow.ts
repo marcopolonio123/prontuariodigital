@@ -26,27 +26,10 @@ async function verifiedPractitioner(userId: string) {
   });
 }
 
-// Linha do tempo principal: somente registros já confirmados/finais.
-router.get('/patients/:patientId/events', auth, async (req: AuthedRequest, res: Response) => {
-  const userId = req.userId!;
-  const patientId = req.params.patientId;
-  const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { ownerUserId: true, archived: true } });
-  if (!patient || patient.archived) return fail(res, 404, 'Prontuário não encontrado.');
-
-  const owns = patient.ownerUserId === userId;
-  const grant = owns ? null : await prisma.accessGrant.findFirst({
-    where: { accountId: userId, patientId, revokedAt: null, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] },
-  });
-  if (!owns && !grant) return fail(res, 403, 'Você não tem acesso a este prontuário.');
-
-  const events = await prisma.healthEvent.findMany({
-    where: { patientId, status: 'final' },
-    include: { practitioner: true, organization: true, location: true },
-    orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-    take: 200,
-  });
-  return res.json(events);
-});
+// A linha do tempo manual (GET/POST /patients/:patientId/events) pertence ao v1Router.
+ // Este router trata apenas o workflow profissional/confirmacao do paciente.
+ // Evitamos duas rotas concorrentes para o mesmo recurso, que tornavam a releitura
+ // apos novo login dependente da ordem de registro dos routers.
 
 router.post('/professional/consultations', auth, async (req: AuthedRequest, res: Response) => {
   const practitioner = await verifiedPractitioner(req.userId!);
