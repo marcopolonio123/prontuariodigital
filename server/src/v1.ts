@@ -136,11 +136,14 @@ router.post('/auth/register', async (req: Request, res: Response) => {
 router.post('/auth/login/start', async (req: Request, res: Response) => {
   const { email, password, channel = 'email' } = req.body ?? {};
   const normalized = String(email ?? '').trim().toLowerCase();
+  console.info('V1 login checkpoint: start', { emailDomain: normalized.split('@')[1] ?? 'invalid' });
   const user = await prisma.user.findUnique({ where: { email: normalized } });
+  console.info('V1 login checkpoint: user lookup complete', { found: Boolean(user) });
   if (!user || !(await bcrypt.compare(String(password ?? ''), user.passwordHash))) {
     return fail(res, 401, 'E-mail ou senha incorretos.');
   }
 
+  console.info('V1 login checkpoint: password verified');
   const selectedChannel = String(channel) === 'sms' ? 'sms' : 'email';
   const destination = selectedChannel === 'sms' ? user.phone : user.email;
   if (!destination) {
@@ -155,6 +158,7 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
   const codeHash = await bcrypt.hash(code, 10);
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
 
+  console.info('V1 login checkpoint: creating MFA challenge');
   await prisma.$transaction([
     prisma.verificationChallenge.updateMany({
       where: { userId: user.id, purpose: 'login', channel: selectedChannel, consumedAt: null },
@@ -172,13 +176,16 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
     }),
   ]);
 
+  console.info('V1 login checkpoint: MFA transaction complete');
   const challenge = await prisma.verificationChallenge.findFirst({
     where: { userId: user.id, purpose: 'login', channel: selectedChannel, consumedAt: null },
     orderBy: { createdAt: 'desc' },
   });
   if (!challenge) return fail(res, 500, 'Não foi possível iniciar a verificação.');
 
+  console.info('V1 login checkpoint: challenge loaded', { found: Boolean(challenge) });
   try {
+    console.info('V1 login checkpoint: sending MFA email');
     await sendLoginVerificationEmail({
       to: destination,
       code,
@@ -193,6 +200,7 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
     return fail(res, 503, 'Não foi possível enviar o código por e-mail agora. Tente novamente em instantes.');
   }
 
+  console.info('V1 login checkpoint: MFA email sent');
   const developmentCode = process.env.NODE_ENV === 'production' ? undefined : code;
 
   return res.json({
