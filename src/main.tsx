@@ -14,11 +14,18 @@ const RootApp = params.get("legacy") === "1" ? App : V1ProfessionalShell;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<RootApp />);
 
-// PWA: registro do service worker (apenas no build de produção)
+// Temporariamente desabilitamos o service worker. O cache-first de bundles podia
+// manter uma versão antiga do prontuário após novos deploys e produzir comportamento
+// diferente do backend em produção. Ao carregar esta versão, removemos workers e
+// caches antigos para que frontend e API fiquem na mesma release.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      /* ambiente sem suporte — o app segue funcionando online */
-    });
+    void navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .then(() => ("caches" in window ? caches.keys() : Promise.resolve([])))
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .catch(() => {
+        /* limpeza de cache nao deve impedir o app online */
+      });
   });
 }
