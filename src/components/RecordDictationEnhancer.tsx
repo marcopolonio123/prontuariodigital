@@ -22,12 +22,12 @@ function speechRecognitionConstructor(): SpeechRecognitionCtor | undefined {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
 }
 
-function installDictationButton() {
+function installDictationButtonForLabel(labelPrefix: string) {
   const labels = Array.from(document.querySelectorAll('label'));
-  const label = labels.find((item) => item.textContent?.replace(/\s+/g, ' ').trim().startsWith('Atendimento(descrição)'));
+  const label = labels.find((item) => item.textContent?.replace(/\s+/g, ' ').trim().startsWith(labelPrefix));
   if (!label || label.querySelector('[data-mydoctor-record-dictation="true"]')) return;
-  const input = label.querySelector('input') as HTMLInputElement | null;
-  if (!input) return;
+  const field = label.querySelector('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
+  if (!field) return;
 
   const controls = document.createElement('div');
   controls.className = 'mt-2 flex flex-wrap items-center gap-2';
@@ -45,9 +45,10 @@ function installDictationButton() {
   let baseText = '';
   let finalText = '';
   const setValue = (value: string) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(input, value);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    setter?.call(field, value);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
   button.addEventListener('click', () => {
@@ -59,7 +60,7 @@ function installDictationButton() {
     activeRecognition.lang = 'pt-BR';
     activeRecognition.interimResults = true;
     activeRecognition.continuous = true;
-    baseText = input.value.trim();
+    baseText = field.value.trim();
     finalText = '';
     activeRecognition.onresult = (event) => {
       let interim = '';
@@ -79,11 +80,21 @@ function installDictationButton() {
   });
 }
 
+function installDictationButtons() {
+  [
+    'Atendimento(descrição)',
+    'Sintomas / Queixa principal',
+    'Diagnóstico / Causa / Hipótese',
+    'Exames',
+    'Receitas / Prescrições',
+    'Observações',
+  ].forEach(installDictationButtonForLabel);
+}
 export default function RecordDictationEnhancer() {
   useEffect(() => {
-    const observer = new MutationObserver(() => installDictationButton());
+    const observer = new MutationObserver(() => installDictationButtons());
     observer.observe(document.body, { childList: true, subtree: true });
-    installDictationButton();
+    installDictationButtons();
     return () => observer.disconnect();
   }, []);
   return null;
