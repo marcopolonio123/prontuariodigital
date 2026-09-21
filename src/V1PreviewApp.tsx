@@ -166,12 +166,21 @@ export default function V1PreviewApp() {
   };
 
   const loadEvents = async (profile: PatientProfile, client = api) => setEvents(await client.listHealthEvents(profile.id));
-  const loadProfiles = async (client = api) => {
+  const loadProfiles = async (client = api, preferredProfileId?: string | null) => {
     const items = await client.listProfiles();
     setProfiles(items);
-    const selected = activeProfile && items.some((item) => item.id === activeProfile.id) ? activeProfile : items[0] ?? null;
+    const rememberedProfileId = preferredProfileId
+      ?? activeProfile?.id
+      ?? window.localStorage.getItem('mydoctor.v1.activeProfileId');
+    const selected = (rememberedProfileId ? items.find((item) => item.id === rememberedProfileId) : null)
+      ?? items.find((item) => item.relationship === 'self')
+      ?? items[0]
+      ?? null;
     setActiveProfile(selected);
-    if (selected) await loadEvents(selected, client);
+    if (selected) {
+      window.localStorage.setItem('mydoctor.v1.activeProfileId', selected.id);
+      await loadEvents(selected, client);
+    }
   };
 
   const createAccount = () => run(async () => {
@@ -206,7 +215,11 @@ export default function V1PreviewApp() {
   };
 
   const go = (next: AppView) => { setView(next); setMenuOpen(false); setMessage(''); };
-  const chooseProfile = (profile: PatientProfile) => run(async () => { setActiveProfile(profile); await loadEvents(profile); });
+  const chooseProfile = (profile: PatientProfile) => run(async () => {
+    setActiveProfile(profile);
+    window.localStorage.setItem('mydoctor.v1.activeProfileId', profile.id);
+    await loadEvents(profile);
+  });
 
   const createDependent = () => run(async () => {
     if (!newName.trim()) throw new Error('Informe o nome da pessoa.');
