@@ -142,6 +142,10 @@ export class MyDoctorV1Api {
   createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
   listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
   createHealthEvent(patientId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(input) }); }
+  updateHealthEvent(patientId: string, eventId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}`, { method: 'PUT', body: JSON.stringify(input) }); }
+  inactivateHealthEvent(patientId: string, eventId: string, reason: string) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/inactivate`, { method: 'POST', body: JSON.stringify({ reason }) }); }
+  reactivateHealthEvent(patientId: string, eventId: string) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/reactivate`, { method: 'POST' }); }
+
 }
 
 export function defaultV1ApiUrl() {
