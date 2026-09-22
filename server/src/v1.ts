@@ -534,4 +534,67 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
   res.status(201).json(persisted);
 });
 
+/** Edita um evento manual preservando snapshot anterior na proveniência. */
+router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
+  if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if (current.status === 'cancelled') return fail(res, 409, 'Reative o registro antes de editá-lo.');
+  const body = req.body ?? {};
+  const previous = {
+    title: current.title, type: current.type, occurredAt: current.occurredAt.toISOString(),
+    payload: current.payload, practitionerNameSnapshot: current.practitionerNameSnapshot,
+    professionSnapshot: current.professionSnapshot, councilSnapshot: current.councilSnapshot,
+    registrationSnapshot: current.registrationSnapshot, registrationRegionSnapshot: current.registrationRegionSnapshot,
+    organizationNameSnapshot: current.organizationNameSnapshot,
+  };
+  const updated = await prisma.healthEvent.update({
+    where: { id: current.id },
+    data: {
+      status: 'amended',
+      title: body.title !== undefined ? String(body.title).trim() : current.title,
+      type: body.type !== undefined ? String(body.type) : current.type,
+      occurredAt: body.occurredAt ? new Date(body.occurredAt) : current.occurredAt,
+      practitionerNameSnapshot: body.practitionerName !== undefined ? String(body.practitionerName).trim() || null : current.practitionerNameSnapshot,
+      professionSnapshot: body.profession !== undefined ? String(body.profession).trim() || null : current.professionSnapshot,
+      councilSnapshot: body.council !== undefined ? String(body.council).trim() || null : current.councilSnapshot,
+      registrationSnapshot: body.registration !== undefined ? String(body.registration).trim() || null : current.registrationSnapshot,
+      registrationRegionSnapshot: body.registrationRegion !== undefined ? String(body.registrationRegion).trim() || null : current.registrationRegionSnapshot,
+      organizationNameSnapshot: body.organizationName !== undefined ? String(body.organizationName).trim() || null : current.organizationNameSnapshot,
+      payload: body.payload ?? current.payload,
+      provenance: { source: 'mydoctor_manual', action: 'amended', actorUserId: req.userId!, amendedAt: new Date().toISOString(), previous },
+    },
+  });
+  res.json(updated);
+});
+
+router.post('/patients/:patientId/events/:eventId/inactivate', auth, async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const reason = String(req.body?.reason ?? '').trim();
+  if (!reason) return fail(res, 400, 'Informe o motivo da inativação.');
+  const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
+  if (!current) return fail(res, 404, 'Registro não encontrado.');
+  const updated = await prisma.healthEvent.update({ where: { id: current.id }, data: {
+    status: 'cancelled',
+    provenance: { source: 'mydoctor_manual', action: 'inactivated', actorUserId: req.userId!, inactivatedAt: new Date().toISOString(), reason, previousStatus: current.status },
+  }});
+  res.json(updated);
+});
+
+router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
+  if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if (current.status !== 'cancelled') return fail(res, 409, 'O registro não está inativo.');
+  const previousProvenance = current.provenance;
+  const updated = await prisma.healthEvent.update({ where: { id: current.id }, data: {
+    status: 'amended',
+    provenance: { source: 'mydoctor_manual', action: 'reactivated', actorUserId: req.userId!, reactivatedAt: new Date().toISOString(), previousProvenance },
+  }});
+  res.json(updated);
+});
+
 export default router;
