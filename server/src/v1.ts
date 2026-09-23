@@ -654,7 +654,7 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
       const { objectKey: _objectKey, ...safeDoc } = doc;
       created.push(safeDoc);
     } catch (error) {
-      await fs.unlink(absolutePath).catch(() => undefined);
+      await fs.unlink(absolutePath).catch((_unlinkError: unknown): void => {});
       throw error;
     }
   }
