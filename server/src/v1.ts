@@ -1,11 +1,29 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 import { sendLoginVerificationEmail } from './email.js';
 
 const router = Router();
+const DOCUMENT_ROOT = path.resolve(process.env.DOCUMENT_STORAGE_PATH ?? path.join(process.cwd(), 'private-documents'));
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+  fileFilter: (_req, file, cb) => cb(null, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)),
+});
+const documentCategories = new Set(['report', 'prescription', 'exam']);
+
+async function ensureDocumentRoot() { await fs.mkdir(DOCUMENT_ROOT, { recursive: true }); }
+function safeObjectPath(objectKey: string) {
+  const resolved = path.resolve(DOCUMENT_ROOT, objectKey);
+  if (!resolved.startsWith(DOCUMENT_ROOT + path.sep)) throw new Error('Caminho de documento inválido.');
+  return resolved;
+}
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
 const JWT_TTL = '7d';
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 10);
@@ -595,6 +613,66 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
     provenance: { source: 'mydoctor_manual', action: 'reactivated', actorUserId: req.userId!, reactivatedAt: new Date().toISOString(), previousProvenance },
   }});
   res.json(updated);
+});
+
+/** Documentos clínicos privados vinculados ao atendimento. */
+router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const docs = await prisma.clinicalDocument.findMany({
+    where: { patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' } },
+    orderBy: { createdAt: 'asc' },
+  });
+  res.json(docs.map(({ objectKey: _objectKey, ...doc }) => doc));
+});
+
+router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array('files', 10), async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
+  if (!event) return fail(res, 404, 'Atendimento não encontrado.');
+  const category = String(req.body?.category ?? '');
+  if (!documentCategories.has(category)) return fail(res, 400, 'Categoria de documento inválida.');
+  const files = (req.files ?? []) as Express.Multer.File[];
+  if (!files.length) return fail(res, 400, 'Selecione ao menos um arquivo.');
+  await ensureDocumentRoot();
+  const created = [];
+  for (const file of files) {
+    const id = crypto.randomUUID();
+    const extension = file.mimetype === 'application/pdf' ? '.pdf' : file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
+    const objectKey = path.join(req.params.patientId, req.params.eventId, id + extension);
+    const absolutePath = safeObjectPath(objectKey);
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, file.buffer, { flag: 'wx' });
+    const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
+    try {
+      const doc = await prisma.clinicalDocument.create({ data: {
+        id, patientId: req.params.patientId, eventId: req.params.eventId, type: category,
+        originalFilename: file.originalname, mimeType: file.mimetype, objectKey, sha256, sizeBytes: file.size,
+        status: 'uploaded', metadata: { storageProvider: 'local_private', ocrStatus: 'not_requested' },
+      }});
+      const { objectKey: _objectKey, ...safeDoc } = doc;
+      created.push(safeDoc);
+    } catch (error) {
+      await fs.unlink(absolutePath).catch(() => undefined);
+      throw error;
+    }
+  }
+  res.status(201).json(created);
+});
+
+router.get('/patients/:patientId/events/:eventId/documents/:documentId/download', auth, async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const doc = await prisma.clinicalDocument.findFirst({ where: {
+    id: req.params.documentId, patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' },
+  }});
+  if (!doc) return fail(res, 404, 'Documento não encontrado.');
+  const absolutePath = safeObjectPath(doc.objectKey);
+  try { await fs.access(absolutePath); } catch { return fail(res, 404, 'Arquivo não encontrado no armazenamento.'); }
+  res.type(doc.mimeType);
+  res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.originalFilename)}`);
+  res.sendFile(absolutePath);
 });
 
 export default router;
