@@ -25,7 +25,6 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
-// Workflow vem antes da V1 porque intercepta a timeline e esconde registros ainda não confirmados.
 app.use('/api/v1', clinicalWorkflowRouter);
 app.use('/api/v1', v1Router);
 app.use('/api/v1', professionalAccessRouter);
