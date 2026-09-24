@@ -684,4 +684,16 @@ router.get('/patients/:patientId/events/:eventId/documents/:documentId/download'
   res.sendFile(absolutePath);
 });
 
+router.post('/patients/:patientId/events/:eventId/documents/:documentId/inactivate', auth, async (req: AuthedRequest, res: Response) => {
+  const ids = await visiblePatientIds(req.userId!);
+  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const doc = await prisma.clinicalDocument.findFirst({ where: { id: req.params.documentId, patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' } } });
+  if (!doc) return fail(res, 404, 'Documento não encontrado.');
+  const updated = await prisma.clinicalDocument.update({ where: { id: doc.id }, data: {
+    status: 'deleted',
+    metadata: { ...(doc.metadata as Record<string, unknown> ?? {}), inactivatedAt: new Date().toISOString(), inactivatedByUserId: req.userId! },
+  }});
+  res.json({ id: updated.id, status: updated.status });
+});
+
 export default router;
