@@ -146,6 +146,22 @@ export class MyDoctorV1Api {
   inactivateHealthEvent(patientId: string, eventId: string, reason: string) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/inactivate`, { method: 'POST', body: JSON.stringify({ reason }) }); }
   reactivateHealthEvent(patientId: string, eventId: string) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/reactivate`, { method: 'POST' }); }
 
+  async uploadHealthEventDocuments(patientId: string, eventId: string, category: 'report' | 'prescription' | 'exam', files: File[]) {
+    const form = new FormData();
+    form.append('category', category);
+    files.forEach((file) => form.append('files', file));
+    const response = await fetch(this.url(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents`), {
+      method: 'POST', headers: this.token ? { Authorization: `Bearer ${this.token}` } : {}, body: form,
+    });
+    if (!response.ok) {
+      let error = `Erro do servidor (${response.status}).`;
+      try { const body = await response.json() as { error?: string }; if (body.error) error = body.error; } catch {}
+      throw new Error(error);
+    }
+    return await response.json() as Array<{ id: string; type: string; originalFilename: string; mimeType: string; sizeBytes: number; status: string }>;
+  }
+  listHealthEventDocuments(patientId: string, eventId: string) { return this.req<Array<{ id: string; type: string; originalFilename: string; mimeType: string; sizeBytes: number; status: string }>>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents`); }
+
 }
 
 export function defaultV1ApiUrl() {
