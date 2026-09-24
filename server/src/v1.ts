@@ -11,6 +11,9 @@ import { sendLoginVerificationEmail } from './email.js';
 
 const router = Router();
 const DOCUMENT_ROOT = path.resolve(process.env.DOCUMENT_STORAGE_PATH ?? path.join(process.cwd(), 'private-documents'));
+if (process.env.NODE_ENV === 'production' && !process.env.DOCUMENT_STORAGE_PATH) {
+  console.warn('My Doctor: DOCUMENT_STORAGE_PATH não configurado; uploads clínicos permanecerão desabilitados até configurar um diretório privado persistente.');
+}
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 10 },
@@ -18,7 +21,13 @@ const upload = multer({
 });
 const documentCategories = new Set(['report', 'prescription', 'exam']);
 
-async function ensureDocumentRoot() { await fs.mkdir(DOCUMENT_ROOT, { recursive: true }); }
+async function ensureDocumentRoot() {
+  if (process.env.NODE_ENV === 'production' && !process.env.DOCUMENT_STORAGE_PATH) {
+    throw new Error('DOCUMENT_STORAGE_PATH não configurado em produção.');
+  }
+  await fs.mkdir(DOCUMENT_ROOT, { recursive: true });
+  await fs.access(DOCUMENT_ROOT);
+}
 function safeObjectPath(objectKey: string) {
   const resolved = path.resolve(DOCUMENT_ROOT, objectKey);
   if (!resolved.startsWith(DOCUMENT_ROOT + path.sep)) throw new Error('Caminho de documento inválido.');
