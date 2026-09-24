@@ -88,6 +88,7 @@ function installDictationButtons() {
     'Exames',
     'Receitas / Prescrições',
     'Observações',
+    'O que está acontecendo?',
   ].forEach(installDictationButtonForLabel);
 }
 export default function RecordDictationEnhancer() {
