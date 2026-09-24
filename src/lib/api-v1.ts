@@ -162,6 +162,17 @@ export class MyDoctorV1Api {
   }
   listHealthEventDocuments(patientId: string, eventId: string) { return this.req<Array<{ id: string; type: string; originalFilename: string; mimeType: string; sizeBytes: number; status: string }>>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents`); }
 
+  async openHealthEventDocument(patientId: string, eventId: string, documentId: string, filename: string) {
+    const response = await fetch(this.url(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/download`), {
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+    });
+    if (!response.ok) throw new Error(`Não foi possível abrir ${filename}.`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
+
 }
 
 export function defaultV1ApiUrl() {
