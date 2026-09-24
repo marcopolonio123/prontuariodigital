@@ -172,6 +172,7 @@ export class MyDoctorV1Api {
     window.open(objectUrl, '_blank', 'noopener,noreferrer');
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
   }
+  inactivateHealthEventDocument(patientId: string, eventId: string, documentId: string) { return this.req<{ id: string; status: string }>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/inactivate`, { method: 'POST' }); }
 
 }
 
