@@ -154,11 +154,31 @@ model Practitioner {
   events         HealthEvent[]
   accessRequests AccessRequest[]
   grants         AccessGrant[]
+  verificationDocuments ProfessionalVerificationDocument[]
 
   @@index([name])
   @@index([profession, specialty])
   @@index([verificationStatus, active])
 }
+
+model ProfessionalVerificationDocument {
+  id             String       @id @default(uuid())
+  practitionerId String
+  practitioner   Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  type           String       // professional_credential | identity
+  originalFilename String
+  mimeType       String
+  objectKey      String       @unique
+  sha256         String
+  sizeBytes      Int
+  status         String       @default("uploaded") // uploaded | accepted | rejected | deleted
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([practitionerId, type, status])
+}
+
 
 model ProfessionalRegistration {
   id                       String            @id @default(uuid())

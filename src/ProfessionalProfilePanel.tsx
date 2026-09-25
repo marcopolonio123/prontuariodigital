@@ -39,6 +39,7 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [profession, setProfession] = useState('');
+  const [notes, setNotes] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [council, setCouncil] = useState<UpsertProfessionalProfileInput['council']>('CRM');
   const [registration, setRegistration] = useState('');
@@ -100,8 +101,8 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
   return <div className="space-y-5">
     <section className="rounded-2xl border border-line bg-card p-5 shadow-lift">
       <p className="text-xs font-bold uppercase tracking-wide text-moss-700">Perfil profissional</p>
-      <h2 className="mt-1 font-display text-2xl font-bold text-ink">Usar o MyDoctor como profissional de saúde</h2>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-mute">Sua conta continua sendo a mesma conta de paciente. A função Clinicar só será liberada depois da confirmação da sua identidade e do registro no conselho profissional.</p>
+      <h2 className="mt-1 font-display text-2xl font-bold text-ink">Habilitação para realizar atendimentos</h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-mute">Sua conta MyDoctor continua sendo a mesma. O Clinicar só será liberado para profissionais habilitados a realizar atendimentos após validação da identidade e do registro profissional.</p>
       <div className="mt-4 rounded-xl border border-line bg-white p-4">
         <strong className="text-sm text-ink">Status: {statusLabel(profile?.verificationStatus)}</strong>
         {profile?.verificationStatus === 'verified' ? <p className="mt-1 text-sm text-moss-700">Seu acesso profissional está habilitado.</p> : <p className="mt-1 text-sm text-mute">Enquanto a validação estiver pendente, você continua usando normalmente seu prontuário pessoal, mas não pode acessar prontuários de terceiros como profissional.</p>}
@@ -111,8 +112,8 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
     <section className="rounded-2xl border border-line bg-card p-5 shadow-lift">
       <h3 className="font-display text-xl font-bold text-ink">Dados para validação</h3>
       <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-        <label className="min-w-0 text-xs font-bold text-mute">Profissão
-          <input value={profession} onChange={(e) => setProfession(e.target.value)} placeholder="Ex.: Médico, Fisioterapeuta, Nutricionista" className={fieldClass()} />
+        <label className="min-w-0 text-xs font-bold text-mute">Profissão habilitada para atendimento
+          <input value={profession} onChange={(e) => setProfession(e.target.value)} placeholder="Ex.: Medicina, Fisioterapia, Psicologia, Nutrição" className={fieldClass()} />
         </label>
         <label className="min-w-0 text-xs font-bold text-mute">Especialidade
           <input value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="Ex.: Cardiologia" className={fieldClass()} />
@@ -131,8 +132,12 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
             {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
           </select>
         </label>
-        <div className="min-w-0 md:col-span-2">
-          <p className="text-xs leading-5 text-mute">Na próxima etapa desta jornada serão adicionados os documentos de comprovação de identidade e do conselho profissional. O envio destes dados agora não equivale à aprovação automática.</p>
+        <label className="min-w-0 text-xs font-bold text-mute md:col-span-2">Observações
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Informações adicionais relevantes para a validação profissional." className={`${fieldClass()} min-h-24`} />
+        </label>
+        <div className="min-w-0 md:col-span-2 rounded-xl border border-line bg-paper p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-mute">Documentos para validação</p>
+          <p className="mt-1 text-xs leading-5 text-mute">Documento do conselho profissional e documento de identidade/CNH serão enviados em área privada. O envio não representa aprovação automática.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 md:col-span-2">
           <button type="button" disabled={saving} onClick={() => void save()} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Salvando...' : profile ? 'Atualizar dados profissionais' : 'Enviar para validação'}</button>
