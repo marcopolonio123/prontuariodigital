@@ -63,7 +63,6 @@ model Patient {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   grants         AccessGrant[]
-  verificationDocuments ProfessionalVerificationDocument[]
   accessRequests AccessRequest[]
   logs           IdentificationLog[]
   events         HealthEvent[]
@@ -155,6 +154,7 @@ model Practitioner {
   events         HealthEvent[]
   accessRequests AccessRequest[]
   grants         AccessGrant[]
+  verificationDocuments ProfessionalVerificationDocument[]
 
   @@index([name])
   @@index([profession, specialty])
