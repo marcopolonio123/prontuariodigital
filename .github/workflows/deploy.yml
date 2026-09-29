@@ -13,7 +13,7 @@ name: Deploy → Hostinger
 
 on:
   push:
-    branches: [develop]
+    branches: [develop] # publicação contínua do MyDoctor
   workflow_dispatch:
 
 concurrency:
