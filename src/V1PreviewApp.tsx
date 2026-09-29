@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import DictationTextarea from './components/DictationTextarea';
 import {
   MyDoctorV1Api,
   defaultV1ApiUrl,
@@ -54,8 +55,8 @@ function PrimaryButton({ children, onClick, disabled = false }: { children: Reac
   return <button type="button" disabled={disabled} onClick={onClick} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{children}</button>;
 }
 
-function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="rounded-xl border border-moss-500 px-4 py-3 text-sm font-bold text-moss-800">{children}</button>;
+function SecondaryButton({ children, onClick, disabled = false }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+  return <button type="button" disabled={disabled} onClick={onClick} className="rounded-xl border border-moss-500 px-4 py-3 text-sm font-bold text-moss-800 disabled:opacity-50">{children}</button>;
 }
 
 function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
@@ -128,6 +129,7 @@ export default function V1PreviewApp() {
   const [showDiaryForm, setShowDiaryForm] = useState(false);
   const [diaryText, setDiaryText] = useState('');
   const [familyHistoryText, setFamilyHistoryText] = useState('');
+  const [editingFamilyHistory, setEditingFamilyHistory] = useState(false);
   const [showInsuranceForm, setShowInsuranceForm] = useState(false);
 
   const [newName, setNewName] = useState('');
@@ -181,6 +183,7 @@ export default function V1PreviewApp() {
   const loadEvents = async (profile: PatientProfile, client = api) => {
     const items = await client.listHealthEvents(profile.id);
     setEvents(items);
+    setEditingFamilyHistory(false);
     setFamilyHistoryText(String(items.find((event) => event.type === 'family_history')?.payload?.text ?? ''));
   };
   const loadProfiles = async (client = api, preferredProfileId?: string | null) => {
@@ -429,7 +432,7 @@ export default function V1PreviewApp() {
     await loadEvents(activeProfile, api);
     setMessage('Histórico familiar salvo.');
   });
-  const familyHistoryView = <div className="space-y-5"><Card><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Histórico familiar</p><h2 className="mt-1 font-display text-2xl font-bold text-ink">{activeProfile?.name ?? 'Escolha um perfil'}</h2><p className="mt-2 text-sm text-mute">Registre em um único texto informações relevantes sobre a saúde da família, como doenças recorrentes, condições hereditárias e antecedentes importantes.</p>{activeProfile && <><label className="mt-4 block text-xs font-bold text-mute">Histórico familiar<textarea value={familyHistoryText} onChange={(e) => setFamilyHistoryText(e.target.value)} className={`${inputClass()} mt-1 min-h-52`} placeholder="Ex.: pai com hipertensão; mãe com diabetes; avó materna com câncer de mama..." /></label><div className="mt-3"><PrimaryButton disabled={busy} onClick={() => void saveFamilyHistory()}>{busy ? 'Salvando...' : 'Salvar histórico familiar'}</PrimaryButton></div></>}</Card></div>;
+  const familyHistoryView = <div className="space-y-5"><Card><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Histórico familiar</p><h2 className="mt-1 font-display text-2xl font-bold text-ink">{activeProfile?.name ?? 'Escolha um perfil'}</h2><p className="mt-2 text-sm text-mute">Registre informações relevantes sobre a saúde da família. Você pode digitar ou ditar o texto e editar o histórico sempre que precisar.</p>{activeProfile && (familyHistoryEvent && !editingFamilyHistory ? <><p className="mt-4 whitespace-pre-wrap rounded-xl border border-line bg-paper p-4 text-sm text-ink">{String(familyHistoryEvent.payload?.text ?? '')}</p><div className="mt-3"><SecondaryButton disabled={busy} onClick={() => { setFamilyHistoryText(String(familyHistoryEvent.payload?.text ?? '')); setEditingFamilyHistory(true); }}>Editar histórico familiar</SecondaryButton></div></> : <><div className="mt-4"><p className="mb-1 text-xs font-bold text-mute">Histórico familiar</p><DictationTextarea key={activeProfile.id} value={familyHistoryText} onChange={setFamilyHistoryText} className={`${inputClass()} min-h-52`} placeholder="Conte os antecedentes importantes da sua família..." /></div><div className="mt-3 flex flex-wrap gap-2"><PrimaryButton disabled={busy} onClick={() => void saveFamilyHistory()}>{busy ? 'Salvando...' : familyHistoryEvent ? 'Salvar alterações' : 'Salvar histórico familiar'}</PrimaryButton>{familyHistoryEvent && <SecondaryButton disabled={busy} onClick={() => { setFamilyHistoryText(String(familyHistoryEvent.payload?.text ?? '')); setEditingFamilyHistory(false); }}>Cancelar</SecondaryButton>}</div></>)}</Card></div>;
 
   const diaryEvents = events.filter((event) => event.type === 'wellbeing_diary');
   const todayKey = localDateTimeInputValue().slice(0, 10);
