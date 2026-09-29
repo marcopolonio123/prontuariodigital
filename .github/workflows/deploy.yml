@@ -52,3 +52,4 @@ jobs:
           exclude: |
             **/.git*
             **/.well-known/**
+            **/.htaccess
