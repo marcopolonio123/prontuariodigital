@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type RecognitionResultEvent = Event & { resultIndex: number; results: { length: number; [index: number]: { 0: { transcript: string }; isFinal: boolean } } };
 type RecognitionErrorEvent = Event & { error?: string };
@@ -13,6 +13,16 @@ export default function DictationTextarea({ value, onChange, rows = 5, placehold
   const finalTextRef = useRef('');
   const [listening, setListening] = useState(false);
   const [hint, setHint] = useState('');
+
+  useEffect(() => () => {
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.stop();
+    }
+  }, []);
 
   const stop = () => { recognitionRef.current?.stop(); };
   const start = () => {
