@@ -126,3 +126,36 @@ assert(savedVital?.payload?.unit === 'mmHg', 'unidade do sinal vital divergente'
 assert(savedVital?.payload?.source === 'manual', 'origem do sinal vital divergente');
 
 console.log('✅ V1 E2E OK: cadastro -> MFA -> perfis -> evento -> sinal vital -> timeline persistente');
+
+console.log('Diary: 60-day retention and permanent per-entry deletion');
+const { createRequire } = await import('node:module');
+const require = createRequire(import.meta.url);
+const db = require('../dist/db.js').default;
+const { retainedDiaryEntries, DIARY_RETENTION_MS } = require('../dist/diary-retention.js');
+const now = Date.now();
+assert(retainedDiaryEntries({ entries: [{ at: new Date(now - DIARY_RETENTION_MS).toISOString(), text: 'boundary' }] }, now).length === 1, 'limite de 60 dias incorreto');
+assert(retainedDiaryEntries({ entries: [{ at: new Date(now - DIARY_RETENTION_MS - 1).toISOString(), text: 'expired' }] }, now).length === 0, 'relato expirado preservado');
+const oldAt = new Date(now - 61 * 86400000);
+const recentAt = new Date(now).toISOString();
+const yesterdayAt = new Date(now - 86400000).toISOString();
+const expired = await db.healthEvent.create({ data: { patientId: profile.id, type: 'wellbeing_diary', title: 'expired', occurredAt: oldAt, payload: { entries: [{ at: oldAt.toISOString(), text: 'old diary' }] } } });
+const mixed = await db.healthEvent.create({ data: { patientId: profile.id, type: 'wellbeing_diary', title: 'mixed', occurredAt: oldAt, payload: { entries: [{ at: oldAt.toISOString(), text: 'old' }, { at: yesterdayAt, text: 'recent A' }, { at: recentAt, text: 'recent B' }] }, provenance: { previous: { payload: { text: 'old snapshot' } } } } });
+const afterPurge = await call('/api/v1/patients/' + profile.id + '/events', { headers: auth });
+assert(!afterPurge.some(e => e.id === expired.id), 'dia expirado retornou');
+assert(await db.healthEvent.findUnique({ where: { id: expired.id } }) === null, 'dia expirado não foi apagado do banco');
+const kept = afterPurge.find(e => e.id === mixed.id);
+assert(kept.payload.entries.length === 2 && !JSON.stringify(kept).includes('old snapshot'), 'relato ou snapshot antigo permaneceu');
+assert(afterPurge.some(e => e.id === event.id), 'retenção afetou atendimento clínico');
+const denied = await fetch(base + '/api/v1/patients/' + profile.id + '/diary/' + mixed.id + '/entries/0', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: '{}' });
+assert(denied.status === 401, 'exclusão sem autenticação permitida');
+const conflict = await fetch(base + '/api/v1/patients/' + profile.id + '/diary/' + mixed.id + '/entries/0', { method: 'DELETE', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ expectedAt: recentAt, expectedText: 'wrong' }) });
+assert(conflict.status === 409, 'exclusão concorrente não foi protegida');
+await call('/api/v1/patients/' + profile.id + '/diary/' + mixed.id + '/entries/0', { method: 'DELETE', headers: auth, body: JSON.stringify({ expectedAt: yesterdayAt, expectedText: 'recent A' }) });
+const updatedDiary = await db.healthEvent.findUnique({ where: { id: mixed.id } });
+assert(updatedDiary.payload.entries.length === 1 && !JSON.stringify(updatedDiary).includes('recent A'), 'relato apagado ficou em snapshot');
+await call('/api/v1/patients/' + profile.id + '/diary/' + mixed.id + '/entries/0', { method: 'DELETE', headers: auth, body: JSON.stringify({ expectedAt: recentAt, expectedText: 'recent B' }) });
+assert(await db.healthEvent.findUnique({ where: { id: mixed.id } }) === null, 'último relato não removeu o dia');
+const noConsent = await fetch(base + '/api/v1/patients/' + profile.id + '/consultant', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ question: 'Como preparar minha consulta?' }) });
+assert(noConsent.status === 400, 'consultor aceitou envio sem consentimento');
+await db.$disconnect();
+console.log('✅ Diary retention, deletion and Consultant consent OK');
