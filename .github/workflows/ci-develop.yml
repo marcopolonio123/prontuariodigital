@@ -50,6 +50,10 @@ jobs:
       - run: npm install
       - run: npm run prisma:generate
       - run: npx prisma db push --skip-generate
+      - name: Feature patches are additive and idempotent
+        run: |
+          NODE_ENV=production node scripts/apply-feature-patches.cjs
+          NODE_ENV=production node scripts/apply-feature-patches.cjs
       - run: npm run build
       - name: V1 end-to-end smoke test
         shell: bash
