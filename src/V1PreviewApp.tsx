@@ -519,11 +519,11 @@ export default function V1PreviewApp() {
   });
   const consultantChat = <Card>
     <h3 className="font-display text-xl font-bold text-ink">Converse com o Consultor MyDoctor</h3>
-    <p className="mt-2 text-sm text-mute">Respostas de IA com os registros disponíveis do prontuário, diário e histórico familiar. Pode cometer erros, não faz pesquisa na web e não substitui atendimento médico.</p>
+    <p className="mt-2 text-sm text-mute">Dúvidas exclusivamente sobre saúde e bem-estar: doenças, dores, sintomas, medicamentos, exercícios e alimentação. A IA considera os registros disponíveis do prontuário, agenda de medicamentos, diário e histórico familiar. Pode cometer erros, não faz pesquisa na web e não substitui atendimento médico.</p>
     <div className="mt-3 rounded-xl border border-line bg-paper p-3 text-sm" aria-live="polite">
       {consultantUsage ? <>
         <p className="font-bold text-ink">{consultantUsage.remaining} de {consultantUsage.limit} perguntas disponíveis</p>
-        <p className="mt-1 text-mute">Limite por conta: {consultantUsage.limit} perguntas respondidas nas últimas {consultantUsage.windowHours} horas, compartilhado entre o site e o aplicativo. Cada mensagem sua que recebe uma resposta conta um uso, inclusive respostas às perguntas do consultor. Falhas não descontam o saldo.</p>
+        <p className="mt-1 text-mute">Limite por conta: {consultantUsage.limit} perguntas respondidas nas últimas {consultantUsage.windowHours} horas, compartilhado entre o site e o aplicativo. Cada mensagem sua que recebe uma resposta conta um uso, inclusive respostas às perguntas do consultor. Falhas e perguntas recusadas por estarem fora de saúde e bem-estar não descontam o saldo.</p>
         {consultantUsage.nextAvailableAt && <p className="mt-1 text-mute">Próxima liberação: {new Date(consultantUsage.nextAvailableAt).toLocaleString('pt-BR')}. Cada uso é liberado {consultantUsage.windowHours} horas após a resposta; não depende da meia-noite.</p>}
         {consultantUsage.pending > 0 && <p className="mt-1 text-mute">{consultantUsage.pending} resposta(s) em processamento, com saldo reservado temporariamente.</p>}
         {!consultantUsage.configured && <p className="mt-2 font-semibold text-danger-600">O consultor ainda não foi ativado pelo administrador. Nenhum uso será descontado.</p>}
@@ -545,5 +545,6 @@ export default function V1PreviewApp() {
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><h1 className="break-words font-display text-2xl font-bold text-ink sm:text-3xl">Sua saúde e seu bem-estar. No seu controle.</h1><p className="mt-1 text-sm text-mute">MyDoctor reúne sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
+
 
 

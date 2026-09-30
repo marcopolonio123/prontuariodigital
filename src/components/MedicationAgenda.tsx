@@ -5,6 +5,7 @@ const days: Array<[number, string]> = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, '
 const inputClass = 'mt-1 block w-full rounded-xl border border-line bg-white px-3 py-3 text-sm';
 const buttonClass = 'rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50';
 const secondaryClass = 'rounded-xl border border-line px-3 py-2 text-sm font-bold text-moss-800 disabled:opacity-50';
+function normalized(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' '); }
 function blank(): MedicationScheduleInput {
   const now = new Date();
   const date = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -49,6 +50,20 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
       {!agenda && !error && <p className="mt-4 text-sm text-mute">Carregando agenda...</p>}
       {(error || feedback) && <p role="status" className="mt-3 rounded-xl border border-line bg-paper p-3 text-sm">{error || feedback}</p>}
     </section>
+    {!!agenda?.registeredMedications?.length && <section className="rounded-2xl border border-line bg-card p-4 sm:p-5">
+      <h3 className="font-display text-xl font-bold">Medicamentos do prontuário</h3>
+      <p className="mt-2 text-sm text-mute">Use o cadastro existente para iniciar uma agenda e confirme os dias e horários da prescrição. Editar ou remover a agenda não altera o cadastro do prontuário.</p>
+      <div className="mt-3 space-y-3">{agenda.registeredMedications.map((medicine, index) => {
+        const matching = agenda.schedules.filter(schedule => normalized(schedule.name) === normalized(medicine.name));
+        const differentDose = matching.some(schedule => normalized(schedule.dose) !== normalized(medicine.dose));
+        return <div key={index} className="rounded-xl border border-line p-3 text-sm">
+          <strong>{medicine.name}</strong><p>{medicine.dose || 'Dose não registrada'}{medicine.frequency ? ' · ' + medicine.frequency : ''}</p>
+          {matching.length > 0 && <p className="mt-1 text-mute">Já possui {matching.length} agenda(s). Consulte os horários abaixo antes de criar outra.</p>}
+          {differentDose && <p className="mt-1 text-warn-600">A dose na agenda difere do prontuário. Confira a prescrição com o profissional antes de ajustar os registros.</p>}
+          {agenda.canEdit && matching.length === 0 && <button className={secondaryClass + ' mt-2'} disabled={busy} onClick={() => { setEditing(null); setForm({ ...blank(), name: medicine.name, dose: medicine.dose }); setFeedback('Confirme os dias e horários conforme a prescrição antes de salvar.'); }}>Agendar este medicamento</button>}
+        </div>;
+      })}</div>
+    </section>}
     {form && agenda?.canEdit && <section className="rounded-2xl border border-line bg-card p-4 sm:p-5">
       <h3 className="font-display text-xl font-bold">{editing ? 'Editar medicamento' : 'Novo medicamento'}</h3>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -76,3 +91,4 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
     </section>)}
   </div>;
 }
+

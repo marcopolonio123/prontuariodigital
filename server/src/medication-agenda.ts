@@ -39,7 +39,12 @@ router.get('/patients/:patientId/medications', auth, async (req: AuthedRequest, 
   if (!patient) return res.status(403).json({ error: 'Você não tem acesso a esta agenda.' });
   const schedules = await prisma.medicationSchedule.findMany({ where: { patientId: patient.id, active: true }, orderBy: { createdAt: 'asc' } });
   const recipients = await medicationRecipients(patient.id);
-  res.json({ schedules, alertsEnabled: patient.medicationAlertsEnabled, canEdit: patient.ownerUserId === req.userId,
+  const data = patient.data && typeof patient.data === 'object' && !Array.isArray(patient.data) ? patient.data as Record<string, unknown> : {};
+  const registeredMedications = Array.isArray(data.medications) ? data.medications.filter((item: any) => item && typeof item.name === 'string' && item.name.trim()).slice(0, 100).map((item: any) => ({
+    name: item.name.slice(0, 150), dose: typeof item.dose === 'string' ? item.dose.slice(0, 150) : '',
+    frequency: typeof item.frequency === 'string' ? item.frequency.slice(0, 300) : '',
+  })) : [];
+  res.json({ registeredMedications, schedules, alertsEnabled: patient.medicationAlertsEnabled, canEdit: patient.ownerUserId === req.userId,
     deliveryAvailable: process.env.NODE_ENV === 'production' && process.env.MEDICATION_REMINDERS_ENABLED === 'true' && medicationEmailConfigured(),
     recipients: recipients.map(user => ({ id: user.id, name: user.name, emailMasked: user.email.replace(/^(.).+(@.*)$/, '$1***$2'), owner: user.id === patient.ownerUserId })) });
 });
@@ -78,3 +83,4 @@ router.delete('/patients/:patientId/medications/:scheduleId', auth, async (req: 
   return result.count ? res.json({ ok: true }) : res.status(404).json({ error: 'Agenda não encontrada.' });
 });
 export default router;
+

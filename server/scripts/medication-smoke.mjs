@@ -43,7 +43,11 @@ try {
   const grant = await db.accessGrant.create({ data: { accountId: dependentUser.id, patientId, level: 'leitura', scope: ['record'] } });
   assert.equal((await call(endpoint)).status, 401);
   assert.equal((await call(endpoint, null, stranger.token)).status, 403);
+  const originalPatient = await db.patient.findUnique({ where: { id: patientId } });
+  const originalData = { ...originalPatient.data, medications: [{ id: 'legacy-medication', name: basic.name, dose: 'Dose antiga', frequency: 'Diariamente' }] };
+  await db.patient.update({ where: { id: patientId }, data: { data: originalData } });
   const agenda = await call(endpoint, null, owner.token);
+  assert.deepEqual(agenda.body.registeredMedications, [{ name: basic.name, dose: 'Dose antiga', frequency: 'Diariamente' }]);
   assert.equal(agenda.body.alertsEnabled, false);
   assert(agenda.body.recipients.some(user => user.id === owner.id));
   assert(agenda.body.recipients.some(user => user.id === dependentUser.id));
@@ -83,6 +87,8 @@ try {
   assert.equal((await call(endpoint + '/' + created.body.id, null, owner.token, 'DELETE')).status, 200);
   assert.equal((await call(endpoint, null, owner.token)).body.schedules.length, 0);
   assert.equal(await dispatchMedicationReminders(new Date(next.getTime() + 60000), sender), 0);
+  assert.deepEqual((await db.patient.findUnique({ where: { id: patientId } })).data.medications, originalData.medications, 'agenda alterou o cadastro antigo');
+  assert.equal((await call(endpoint, null, owner.token)).body.registeredMedications.length, 1);
   console.log('✅ Agenda: validação, fuso/DST, dependente e responsável, concorrência, desligamento, revogação, edição e remoção OK (e-mail simulado).');
 } finally {
   await db.user.deleteMany({ where: { id: { in: accounts } } });
