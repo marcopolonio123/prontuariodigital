@@ -2,7 +2,6 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 import { parseSchedule } from './medication-schedule.js';
-import { medicationEmailConfigured } from './email.js';
 
 interface AuthedRequest extends Request { userId?: string; }
 const router = Router();
@@ -22,9 +21,8 @@ export async function medicationRecipients(patientId: string) {
   const now = new Date();
   const grants = await prisma.accessGrant.findMany({ where: { patientId, practitionerId: null, revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] }, select: { accountId: true, scope: true } });
   const ids = [patient.ownerUserId, ...grants.filter(grant => grantAllowsMedication(grant.scope)).map(grant => grant.accountId)];
-  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, emailVerifiedAt: true, role: true,
-    challenges: { where: { channel: 'email', consumedAt: { not: null } }, select: { destination: true } } } });
-  return users.filter(user => (user.id === patient.ownerUserId || user.role !== 'profissional') && (user.emailVerifiedAt || user.challenges.some(challenge => challenge.destination.toLowerCase() === user.email.toLowerCase())));
+  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, role: true } });
+  return users.filter(user => user.id === patient.ownerUserId || user.role !== 'profissional');
 }
 async function accessible(patientId: string, userId: string) {
   const patient = await prisma.patient.findUnique({ where: { id: patientId } });
@@ -45,13 +43,13 @@ router.get('/patients/:patientId/medications', auth, async (req: AuthedRequest, 
     frequency: typeof item.frequency === 'string' ? item.frequency.slice(0, 300) : '',
   })) : [];
   res.json({ registeredMedications, schedules, alertsEnabled: patient.medicationAlertsEnabled, canEdit: patient.ownerUserId === req.userId,
-    deliveryAvailable: process.env.NODE_ENV === 'production' && process.env.MEDICATION_REMINDERS_ENABLED === 'true' && medicationEmailConfigured(),
+    deliveryAvailable: false,
     recipients: recipients.map(user => ({ id: user.id, name: user.name, emailMasked: user.email.replace(/^(.).+(@.*)$/, '$1***$2'), owner: user.id === patient.ownerUserId })) });
 });
 router.put('/patients/:patientId/medications/alerts', auth, async (req: AuthedRequest, res: Response) => {
   const patient = await accessible(req.params.patientId, req.userId!);
-  if (!patient || patient.ownerUserId !== req.userId) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar os avisos.' });
-  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Informe se os avisos estão ligados ou desligados.' });
+  if (!patient || patient.ownerUserId !== req.userId) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar os alertas.' });
+  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Informe se os alertas estão ligados ou desligados.' });
   await prisma.patient.update({ where: { id: patient.id }, data: { medicationAlertsEnabled: req.body.enabled } });
   res.json({ alertsEnabled: req.body.enabled });
 });
@@ -61,7 +59,7 @@ async function save(req: AuthedRequest, res: Response) {
   try {
     const input = parseSchedule(req.body);
     const recipients = await medicationRecipients(patient.id);
-    if (input.recipientIds.some(id => !recipients.some(user => user.id === id))) return res.status(400).json({ error: 'Escolha pessoas com acesso vigente a este perfil e e-mail confirmado.' });
+    if (input.recipientIds.some(id => !recipients.some(user => user.id === id))) return res.status(400).json({ error: 'Escolha pessoas com acesso vigente a este perfil .' });
     if (req.params.scheduleId) {
       const current = await prisma.medicationSchedule.findFirst({ where: { id: req.params.scheduleId, patientId: patient.id, active: true } });
       if (!current) return res.status(404).json({ error: 'Agenda não encontrada.' });
@@ -83,4 +81,5 @@ router.delete('/patients/:patientId/medications/:scheduleId', auth, async (req: 
   return result.count ? res.json({ ok: true }) : res.status(404).json({ error: 'Agenda não encontrada.' });
 });
 export default router;
+
 
