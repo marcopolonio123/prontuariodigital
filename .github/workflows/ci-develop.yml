@@ -64,3 +64,5 @@ jobs:
             sleep 1
           done
           node scripts/v1-smoke.mjs
+          node scripts/consultant-smoke.mjs
+

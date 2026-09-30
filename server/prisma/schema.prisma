@@ -33,6 +33,20 @@ model User {
   logs            IdentificationLog[]
   challenges      VerificationChallenge[]
   subscriptions   Subscription[]
+  consultantUsage ConsultantUsage[]
+}
+
+// Apenas metadados de consumo. Não armazena perguntas, respostas ou dados clínicos.
+model ConsultantUsage {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       String   @default("pending") // pending | completed
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+  leaseUntil   DateTime
+
+  @@index([userId, status, completedAt])
 }
 
 model VerificationChallenge {
