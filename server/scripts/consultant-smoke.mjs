@@ -21,7 +21,7 @@ globalThis.fetch = async (url, options) => {
   return realFetch(url, options);
 };
 await import('../dist/index.js');
-const { default: db } = await import('../dist/db.js');
+const { prisma: db } = await import('../dist/db.js');
 const { usageSummary } = await import('../dist/consultant-usage.js');
 const base = 'http://127.0.0.1:8788/api/v1';
 async function call(path, body, token) {
