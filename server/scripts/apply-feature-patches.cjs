@@ -1,9 +1,10 @@
-// Apenas durante build/deploy; nunca é importado pelo processo web.
+// Executado em processo separado durante build ou preparação do entrypoint,
+// antes de carregar o Prisma e de iniciar o servidor HTTP.
 const fs = require('node:fs');
 const path = require('node:path');
 
 async function main() {
-  if (!process.env.DATABASE_URL || process.env.NODE_ENV !== 'production') {
+  if (!process.env.DATABASE_URL || (process.env.NODE_ENV !== 'production' && !process.argv.includes('--startup'))) {
     console.info('MyDoctor: patches de recursos não executados (build sem banco de produção).');
     return;
   }
@@ -14,6 +15,17 @@ async function main() {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query("SET LOCAL statement_timeout = '30s'");
+    await client.query("SELECT pg_advisory_xact_lock(734829105)");
+    const ready = await client.query(`SELECT
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Patient' AND column_name = 'medicationAlertsEnabled') AS patient_ready,
+      to_regclass('"ConsultantUsage"') IS NOT NULL AS consultant_ready,
+      to_regclass('"MedicationSchedule"') IS NOT NULL AS schedule_ready,
+      to_regclass('"MedicationReminderDelivery"') IS NOT NULL AS delivery_ready`);
+    if (Object.values(ready.rows[0]).every(value => value === true)) {
+      await client.query('COMMIT');
+      console.info('MyDoctor: schema dos recursos já preparado.');
+      return;
+    }
     for (const filename of ['consultant-usage.sql', 'medication-agenda.sql']) {
       await client.query(fs.readFileSync(path.join(__dirname, '..', 'prisma', filename), 'utf8'));
     }
@@ -28,3 +40,4 @@ main().catch(() => {
   console.error('MyDoctor: não foi possível preparar o banco. Build interrompido; verifique conexão e permissões.');
   process.exitCode = 1;
 });
+
