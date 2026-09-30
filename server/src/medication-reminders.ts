@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import prisma from './db.js';
 import { dueSlots, parseSchedule } from './medication-schedule.js';
 import { medicationRecipients } from './medication-agenda.js';
-import { medicationEmailConfigured, sendMedicationReminderEmail } from './email.js';
+import type { sendMedicationReminderEmail } from './email.js';
 
 /** Injetar sender nos testes: nunca usa contas/serviços reais em CI. */
-export async function dispatchMedicationReminders(now = new Date(), sender = sendMedicationReminderEmail) {
+export async function dispatchMedicationReminders(now = new Date(), sender?: typeof sendMedicationReminderEmail) {
+  // Transporte real desativado: alertas serão enviados pelo aplicativo mobile.
+  if (!sender) return 0;
   const schedules = await prisma.medicationSchedule.findMany({ where: { active: true, alertsEnabled: true, patient: { archived: false, medicationAlertsEnabled: true } }, include: { patient: true } });
   let accepted = 0;
   for (const schedule of schedules) {
@@ -46,16 +48,5 @@ export async function dispatchMedicationReminders(now = new Date(), sender = sen
 }
 
 export function startMedicationReminders() {
-  if (process.env.MEDICATION_REMINDERS_ENABLED !== 'true' || process.env.NODE_ENV !== 'production') return;
-  if (!medicationEmailConfigured()) { console.warn('MyDoctor: lembretes aguardam configuração de e-mail.'); return; }
-  let running = false;
-  const tick = async () => {
-    if (running) return;
-    running = true;
-    try { await dispatchMedicationReminders(); }
-    catch { console.warn('MyDoctor: serviço de lembretes indisponível neste ciclo.'); }
-    finally { running = false; }
-  };
-  void tick();
-  setInterval(() => void tick(), 60000).unref();
+  // Nenhum e-mail ou timer de envio. A integração de notificações mobile é futura.
 }
