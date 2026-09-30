@@ -214,6 +214,8 @@ model Practitioner {
 
   @@index([name])
   @@index([profession, specialty])
+  verificationDecisions ProfessionalVerificationDecision[]
+
   @@index([verificationStatus, active])
 }
 
@@ -465,3 +467,20 @@ model Subscription {
   @@index([provider, providerSubscriptionId])
 }
 
+
+
+model ProfessionalVerificationDecision {
+  id String @id @default(uuid())
+  practitionerId String
+  practitioner Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  actorUserId String
+  actorName String
+  decision String
+  previousStatus String
+  status String
+  note String
+  evidence String?
+  registrationSnapshot Json
+  createdAt DateTime @default(now())
+  @@index([practitionerId, createdAt])
+}

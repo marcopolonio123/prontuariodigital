@@ -70,5 +70,7 @@ jobs:
           node scripts/v1-smoke.mjs
           node scripts/consultant-smoke.mjs
           node scripts/medication-smoke.mjs
+          node scripts/professional-admin-smoke.mjs
+
 
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import ProfessionalAdminPanel from './ProfessionalAdminPanel';
 import AccessRequestsPanel from './AccessRequestsPanel';
 import ClinicarPanel from './ClinicarPanel';
 import ConsultationConfirmationsPanel from './ConsultationConfirmationsPanel';
@@ -13,18 +14,30 @@ import {
   subscribeV1SessionToken,
 } from './lib/api-v1';
 
+const ADMIN_EVENT = 'mydoctor:open-administration';
 const PROFESSIONAL_EVENT = 'mydoctor:open-professional-profile';
 const CLINICAR_EVENT = 'mydoctor:open-clinicar';
 const ACCESS_REQUESTS_EVENT = 'mydoctor:open-access-requests';
 const CONSULTATION_CONFIRMATIONS_EVENT = 'mydoctor:open-consultation-confirmations';
 
-type ShellView = 'app' | 'professional' | 'clinicar' | 'access-requests' | 'consultation-confirmations';
+type ShellView = 'administration' | 'app' | 'professional' | 'clinicar' | 'access-requests' | 'consultation-confirmations';
 
-function addProfessionalMenuEntries() {
+function addProfessionalMenuEntries(canAdmin = false) {
   const buttons = Array.from(document.querySelectorAll('button'));
   const logoutButton = buttons.find((button) => button.textContent?.trim() === 'Sair');
   if (!logoutButton?.parentElement) return;
   const menuGrid = logoutButton.parentElement;
+  const oldAdminButton = menuGrid.querySelector('[data-mydoctor-admin-entry="true"]');
+  if (!canAdmin) oldAdminButton?.remove();
+  if (canAdmin && !oldAdminButton) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.dataset.mydoctorAdminEntry = 'true';
+    button.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
+    button.textContent = 'Administração';
+    button.addEventListener('click', () => window.dispatchEvent(new Event(ADMIN_EVENT)));
+    menuGrid.insertBefore(button, logoutButton);
+  }
+
 
   if (!menuGrid.querySelector('[data-mydoctor-consultation-confirmations-entry="true"]')) {
     const confirmationButton = document.createElement('button');
@@ -67,13 +80,21 @@ function addProfessionalMenuEntries() {
 export default function V1ProfessionalShell() {
   const [view, setView] = useState<ShellView>('app');
   const [token, setToken] = useState(readV1SessionToken());
+  const [canAdmin, setCanAdmin] = useState(false);
   const api = useMemo(() => new MyDoctorV1Api(defaultV1ApiUrl(), token), [token]);
 
   useEffect(() => subscribeV1SessionToken(setToken), []);
   useEffect(() => {
-    const observer = new MutationObserver(() => addProfessionalMenuEntries());
+    let current = true; setCanAdmin(false);
+    if (token) api.getAdminSession().then(result => { if (current) setCanAdmin(result.authorized); }).catch(() => { if (current) setCanAdmin(false); });
+    return () => { current = false; };
+  }, [api, token]);
+  useEffect(() => {
+    const observer = new MutationObserver(() => addProfessionalMenuEntries(canAdmin));
     observer.observe(document.body, { childList: true, subtree: true });
-    addProfessionalMenuEntries();
+    addProfessionalMenuEntries(canAdmin);
+    const openAdministration = () => setView('administration');
+    window.addEventListener(ADMIN_EVENT, openAdministration);
     const openProfessional = () => setView('professional');
     const openClinicar = () => setView('clinicar');
     const openAccessRequests = () => setView('access-requests');
@@ -84,14 +105,15 @@ export default function V1ProfessionalShell() {
     window.addEventListener(CONSULTATION_CONFIRMATIONS_EVENT, openConsultationConfirmations);
     return () => {
       observer.disconnect();
+      window.removeEventListener(ADMIN_EVENT, openAdministration);
       window.removeEventListener(PROFESSIONAL_EVENT, openProfessional);
       window.removeEventListener(CLINICAR_EVENT, openClinicar);
       window.removeEventListener(ACCESS_REQUESTS_EVENT, openAccessRequests);
       window.removeEventListener(CONSULTATION_CONFIRMATIONS_EVENT, openConsultationConfirmations);
     };
-  }, []);
+  }, [canAdmin]);
 
-  const title = view === 'professional' ? 'Perfil profissional' : view === 'clinicar' ? 'Clinicar' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
+  const title = view === 'administration' ? 'Administração' : view === 'professional' ? 'Perfil profissional' : view === 'clinicar' ? 'Clinicar' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
 
   return <>
     <RecordDictationEnhancer />
@@ -103,6 +125,7 @@ export default function V1ProfessionalShell() {
           <button type="button" onClick={() => setView('app')} className="rounded-xl border border-moss-500 px-4 py-3 text-sm font-bold text-moss-800">← Voltar ao MyDoctor</button>
         </div>
         {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift"><h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2><p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p><button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button></section>
+          : view === 'administration' ? <ProfessionalAdminPanel api={api} />
           : view === 'professional' ? <ProfessionalProfilePanel api={api} />
           : view === 'clinicar' ? <div className="space-y-5"><ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} /><ProfessionalConsultationWorkspace api={api} /></div>
           : view === 'access-requests' ? <AccessRequestsPanel api={api} />
@@ -111,3 +134,4 @@ export default function V1ProfessionalShell() {
     </main>}
   </>;
 }
+

@@ -119,9 +119,20 @@ export interface MedicationAgendaV1 {
   recipients: Array<{ id: string; name: string; emailMasked: string; owner: boolean }>;
 }
 
+export interface AdminProfessionalV1 {
+  id: string; name: string; email: string; profession: string; specialty: string | null;
+  verificationStatus: string; active: boolean; updatedAt: string;
+  registrations: Array<{ id: string; council: string; registration: string; region: string | null; status: string }>;
+  history: Array<{ id: string; decision: string; status: string; actorName: string; note: string; evidence: string | null; createdAt: string }>;
+}
 export class MyDoctorV1Api {
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
+  getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
+  listAdminProfessionals() { return this.req<AdminProfessionalV1[]>('/admin/professionals'); }
+  decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; expectedUpdatedAt: string }) {
+    return this.req<{ status: string }>(`/admin/professionals/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify(input) });
+  }
   setToken(token: string) { this.token = token; publishV1SessionToken(token); }
   private url(path: string) { return `${this.baseUrl.replace(/\/$/, '')}/api/v1${path}`; }
   private async req<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -222,6 +233,7 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 
 
 
