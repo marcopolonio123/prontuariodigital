@@ -101,6 +101,12 @@ export interface CreateHealthEventInput {
   locationId?: string; locationName?: string; sourceSystemId?: string; payload?: Record<string, unknown>;
 }
 
+export interface ConsultantUsageV1 {
+  limit: number; windowHours: number; used: number; pending: number; remaining: number;
+  nextAvailableAt: string | null; configured: boolean;
+  countingRule: 'answered_messages'; scope: 'account'; renewal: 'rolling';
+}
+
 export class MyDoctorV1Api {
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
@@ -153,7 +159,8 @@ export class MyDoctorV1Api {
   listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
   createHealthEvent(patientId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(input) }); }
   updateHealthEvent(patientId: string, eventId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}`, { method: 'PUT', body: JSON.stringify(input) }); }
-  askConsultant(patientId: string, question: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>, consent: boolean) { return this.req<{ answer: string }>(`/patients/${encodeURIComponent(patientId)}/consultant`, { method: 'POST', body: JSON.stringify({ question, messages, consent }) }); }
+  getConsultantUsage() { return this.req<ConsultantUsageV1>('/consultant/usage'); }
+  askConsultant(patientId: string, question: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>, consent: boolean) { return this.req<{ answer: string; usage: ConsultantUsageV1 }>(`/patients/${encodeURIComponent(patientId)}/consultant`, { method: 'POST', body: JSON.stringify({ question, messages, consent }) }); }
   deleteDiaryEntry(patientId: string, eventId: string, entryIndex: number, expectedAt: string, expectedText: string) { return this.req<{ ok: boolean }>(`/patients/${encodeURIComponent(patientId)}/diary/${encodeURIComponent(eventId)}/entries/${entryIndex}`, { method: 'DELETE', body: JSON.stringify({ expectedAt, expectedText }) }); }
   inactivateHealthEvent(patientId: string, eventId: string, reason: string) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/inactivate`, { method: 'POST', body: JSON.stringify({ reason }) }); }
   reactivateHealthEvent(patientId: string, eventId: string) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/reactivate`, { method: 'POST' }); }
@@ -194,3 +201,4 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
