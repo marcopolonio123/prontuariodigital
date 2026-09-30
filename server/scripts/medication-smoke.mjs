@@ -24,6 +24,11 @@ async function account(name) {
 try {
   for (let i = 0; i < 30; i++) { try { await fetch('http://127.0.0.1:8789/api/health'); break; } catch { await delay(100); } }
   const basic = { name: 'Medicamento teste', dose: 'Conforme prescrição de teste', weekdays: [0, 1, 2, 3, 4, 5, 6], times: ['08:00'], timezone: 'America/Sao_Paulo', startsOn: '2026-09-30', endsOn: null, recipientIds: [], alertsEnabled: false };
+  const continuous = parseSchedule({ ...basic, continuousUse: true, startsOn: undefined, endsOn: 'invalid-date' });
+  assert.equal(continuous.continuousUse, true);
+  assert.equal(continuous.endsOn, null);
+  assert.match(continuous.startsOn, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(dueSlots({ ...continuous, startsOn: '2099-01-01' }, new Date('2026-09-30T11:00:00Z')).length, 1, 'uso contínuo não depende de datas');
   assert.throws(() => parseSchedule({ ...basic, times: ['24:00'] }));
   assert.throws(() => parseSchedule({ ...basic, weekdays: [7] }));
   assert.throws(() => parseSchedule({ ...basic, timezone: 'invalid-zone' }));
@@ -54,6 +59,14 @@ try {
   assert(!agenda.body.recipients.some(user => user.id === stranger.id));
   assert.equal((await call(endpoint, basic, dependentUser.token)).status, 403, 'leitura não pode criar medicamento');
   assert.equal((await call(endpoint, { ...basic, recipientIds: [stranger.id] }, owner.token)).status, 400);
+  const regular = await call(endpoint, { ...basic, continuousUse: true, startsOn: undefined, endsOn: undefined }, owner.token);
+  assert.equal(regular.status, 201, 'uso contínuo exigiu data do usuário');
+  assert.equal(regular.body.continuousUse, true); assert.equal(regular.body.endsOn, null);
+  const regularSaved = await call(endpoint, null, owner.token);
+  assert.equal(regularSaved.body.schedules.find(item => item.id === regular.body.id).continuousUse, true, 'uso contínuo não persistiu');
+  const dated = await call(endpoint + '/' + regular.body.id, { ...basic, continuousUse: false, expectedUpdatedAt: regular.body.updatedAt }, owner.token, 'PUT');
+  assert.equal(dated.status, 200); assert.equal(dated.body.continuousUse, false);
+  await call(endpoint + '/' + regular.body.id, null, owner.token, 'DELETE');
   const now = new Date(Math.floor(Date.now() / 60000) * 60000);
   const today = now.toISOString().slice(0, 10);
   const time = now.toISOString().slice(11, 16);
@@ -97,4 +110,5 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 

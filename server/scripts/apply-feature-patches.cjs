@@ -20,6 +20,7 @@ async function main() {
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Patient' AND column_name = 'medicationAlertsEnabled') AS patient_ready,
       to_regclass('"ConsultantUsage"') IS NOT NULL AS consultant_ready,
       to_regclass('"MedicationSchedule"') IS NOT NULL AS schedule_ready,
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'MedicationSchedule' AND column_name = 'continuousUse') AS schedule_mode_ready,
       to_regclass('"MedicationReminderDelivery"') IS NOT NULL AS delivery_ready`);
     if (Object.values(ready.rows[0]).every(value => value === true)) {
       await client.query('COMMIT');
@@ -40,4 +41,5 @@ main().catch(() => {
   console.error('MyDoctor: não foi possível preparar o banco. Build interrompido; verifique conexão e permissões.');
   process.exitCode = 1;
 });
+
 

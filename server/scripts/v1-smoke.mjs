@@ -168,6 +168,7 @@ await db.accessGrant.create({ data: { accountId: registered.id, patientId: deleg
 let startupProcess;
 try {
   await pg.query('ALTER TABLE "Patient" DROP COLUMN "medicationAlertsEnabled"');
+  await pg.query('ALTER TABLE "MedicationSchedule" DROP COLUMN "continuousUse"');
   const oldSchemaProfiles = await call('/api/v1/profiles', { headers: auth });
   assert(oldSchemaProfiles.some(p => p.id === self.id) && oldSchemaProfiles.some(p => p.id === delegated.id), 'schema antigo bloqueou perfis próprios/delegados');
   const oldSchemaEvents = await call('/api/v1/patients/' + profile.id + '/events', { headers: auth });
@@ -183,6 +184,8 @@ try {
   assert(ready, 'entrypoint não iniciou após preparar schema antigo');
   const restored = await pg.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'Patient' AND column_name = 'medicationAlertsEnabled'");
   assert(restored.rowCount === 1, 'entrypoint não restaurou coluna ausente');
+  const modeRestored = await pg.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'MedicationSchedule' AND column_name = 'continuousUse'");
+  assert(modeRestored.rowCount === 1, 'entrypoint não restaurou coluna de uso contínuo');
   const preserved = await db.patient.findUnique({ where: { id: profile.id } });
   assert(preserved.name === 'Filho Teste CI' && preserved.medicationAlertsEnabled === false, 'patch alterou dados antigos');
   console.log('✅ Schema antigo: perfis próprios/delegados e prontuário funcionam; entrypoint repara coluna antes de iniciar HTTP, mesmo com NODE_ENV=test.');
@@ -190,9 +193,11 @@ try {
   if (startupProcess && startupProcess.exitCode === null) startupProcess.kill();
   // Restauração garantida mesmo se o teste falhar.
   await pg.query('ALTER TABLE "Patient" ADD COLUMN IF NOT EXISTS "medicationAlertsEnabled" BOOLEAN NOT NULL DEFAULT false');
+  await pg.query('ALTER TABLE "MedicationSchedule" ADD COLUMN IF NOT EXISTS "continuousUse" BOOLEAN NOT NULL DEFAULT false');
   await pg.end();
   await db.user.delete({ where: { id: delegateOwner.id } });
 }
 await db.$disconnect();
 console.log('✅ Diary retention, deletion and Consultant consent OK');
+
 
