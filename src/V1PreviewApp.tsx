@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import DictationTextarea from './components/DictationTextarea';
-import { answerLocalConsultant } from './lib/consultant-local';
 import {
   MyDoctorV1Api,
   defaultV1ApiUrl,
   type HealthEventV1,
+  type ConsultantUsageV1,
   type LoginStartResponse,
   type MfaChannel,
   type PatientProfile,
@@ -131,9 +131,10 @@ export default function V1PreviewApp() {
   const [diaryText, setDiaryText] = useState('');
   const [consultantQuestion, setConsultantQuestion] = useState('');
   const [consultantConsent, setConsultantConsent] = useState(false);
-  const [consultantMode, setConsultantMode] = useState<'local' | 'external'>('local');
+  const [consultantUsage, setConsultantUsage] = useState<ConsultantUsageV1 | null>(null);
+  const [consultantUsageError, setConsultantUsageError] = useState('');
   const [consultantMessages, setConsultantMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  useEffect(() => { setConsultantQuestion(''); setConsultantMessages([]); setConsultantConsent(false); setConsultantMode('local'); }, [activeProfile?.id]);
+  useEffect(() => { setConsultantQuestion(''); setConsultantMessages([]); setConsultantConsent(false); }, [activeProfile?.id]);
   const [familyHistoryText, setFamilyHistoryText] = useState('');
   const [editingFamilyHistory, setEditingFamilyHistory] = useState(false);
   const [showInsuranceForm, setShowInsuranceForm] = useState(false);
@@ -179,6 +180,19 @@ export default function V1PreviewApp() {
   const [insuranceBack, setInsuranceBack] = useState<string | null>(null);
 
   useEffect(() => { api.setToken(token); }, [api, token]);
+
+  useEffect(() => {
+    if (!token || view !== 'consultant') { setConsultantUsage(null); return; }
+    let current = true;
+    const refresh = () => api.getConsultantUsage().then(usage => {
+      if (current) { setConsultantUsage(usage); setConsultantUsageError(''); }
+    }).catch(() => {
+      if (current) { setConsultantUsage(null); setConsultantUsageError('Não foi possível verificar a disponibilidade e o saldo do Consultor. Tente novamente mais tarde.'); }
+    });
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 30000);
+    return () => { current = false; window.clearInterval(interval); };
+  }, [api, token, view]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true); setMessage('');
@@ -484,22 +498,41 @@ export default function V1PreviewApp() {
 
 
   const askConsultant = () => run(async () => {
+    if (busy) return;
     if (!activeProfile) throw new Error('Escolha um perfil.');
     const question = consultantQuestion.trim();
     if (!question) throw new Error('Digite ou dite sua pergunta.');
-    if (consultantMode === 'external' && !consultantConsent) throw new Error('Autorize o envio do contexto à IA para continuar.');
-    const [freshEvents, record] = await Promise.all([
-      api.listHealthEvents(activeProfile.id),
-      api.getConsultantRecord(activeProfile.id).catch(() => null),
-    ]);
-    setEvents(freshEvents);
-    const result = consultantMode === 'local'
-      ? { answer: answerLocalConsultant(question, activeProfile.name, freshEvents, record, consultantMessages) }
-      : await api.askConsultant(activeProfile.id, question, consultantMessages, consultantConsent);
-    setConsultantMessages((current) => [...current, { role: 'user', content: question }, { role: 'assistant', content: result.answer }]);
-    setConsultantQuestion('');
+    if (!consultantConsent) throw new Error('Autorize o envio do contexto à IA para continuar.');
+    const profileId = activeProfile.id;
+    try {
+      const result = await api.askConsultant(profileId, question, consultantMessages, consultantConsent);
+      setConsultantUsage(result.usage);
+      setConsultantMessages(current => [...current, { role: 'user', content: question }, { role: 'assistant', content: result.answer }]);
+      setConsultantQuestion('');
+    } finally {
+      await api.getConsultantUsage().then(setConsultantUsage).catch(() => undefined);
+    }
   });
-  const consultantChat = <Card><h3 className="font-display text-xl font-bold text-ink">Pergunte ao Consultor IA</h3><p className="mt-2 text-sm text-mute">O modo local funciona sem chave e usa a base informativa do MyDoctor. Não é uma IA generativa, não pesquisa na web e não substitui avaliação médica.</p>{activeProfile && <><label className="mt-3 block text-xs font-bold text-mute">Modo<select className={`${inputClass()} mt-1`} value={consultantMode} onChange={(e) => { setConsultantMode(e.target.value as 'local' | 'external'); setConsultantConsent(false); }}><option value="local">Local — sem chave</option><option value="external">IA externa — opcional</option></select></label><div className="mt-4 space-y-3">{consultantMessages.map((item, index) => <div key={index} className="rounded-xl border border-line bg-paper p-3"><p className="text-xs font-bold text-moss-700">{item.role === 'user' ? 'Sua pergunta' : 'Consultor IA'}</p><p className="mt-1 whitespace-pre-wrap text-sm text-ink">{item.content}</p></div>)}</div><div className="mt-4"><DictationTextarea key={activeProfile.id} value={consultantQuestion} onChange={setConsultantQuestion} placeholder="Digite ou dite sua pergunta..." className={`${inputClass()} min-h-24`} /></div>{consultantMode === 'external' && <label className="mt-3 flex gap-2 text-xs text-mute"><input type="checkbox" checked={consultantConsent} onChange={(e) => setConsultantConsent(e.target.checked)} />Autorizo enviar minha pergunta e o contexto do prontuário ao provedor de IA configurado pelo MyDoctor para responder.</label>}<div className="mt-3"><PrimaryButton disabled={busy || (consultantMode === 'external' && !consultantConsent)} onClick={() => void askConsultant()}>{busy ? 'Consultando...' : 'Enviar pergunta'}</PrimaryButton></div></>}</Card>;
+  const consultantChat = <Card>
+    <h3 className="font-display text-xl font-bold text-ink">Converse com o Consultor MyDoctor</h3>
+    <p className="mt-2 text-sm text-mute">Respostas de IA com os registros disponíveis do prontuário, diário e histórico familiar. Pode cometer erros, não faz pesquisa na web e não substitui atendimento médico.</p>
+    <div className="mt-3 rounded-xl border border-line bg-paper p-3 text-sm" aria-live="polite">
+      {consultantUsage ? <>
+        <p className="font-bold text-ink">{consultantUsage.remaining} de {consultantUsage.limit} perguntas disponíveis</p>
+        <p className="mt-1 text-mute">Limite por conta: {consultantUsage.limit} perguntas respondidas nas últimas {consultantUsage.windowHours} horas, compartilhado entre o site e o aplicativo. Cada mensagem sua que recebe uma resposta conta um uso, inclusive respostas às perguntas do consultor. Falhas não descontam o saldo.</p>
+        {consultantUsage.nextAvailableAt && <p className="mt-1 text-mute">Próxima liberação: {new Date(consultantUsage.nextAvailableAt).toLocaleString('pt-BR')}. Cada uso é liberado {consultantUsage.windowHours} horas após a resposta; não depende da meia-noite.</p>}
+        {consultantUsage.pending > 0 && <p className="mt-1 text-mute">{consultantUsage.pending} resposta(s) em processamento, com saldo reservado temporariamente.</p>}
+        {!consultantUsage.configured && <p className="mt-2 font-semibold text-danger-600">O consultor ainda não foi ativado pelo administrador. Nenhum uso será descontado.</p>}
+        {consultantUsage.configured && consultantUsage.remaining === 0 && <p className="mt-2 font-semibold text-mute">Seu limite foi atingido. Aguarde a próxima liberação para enviar outra pergunta.</p>}
+      </> : <p className="text-mute">{consultantUsageError || 'Verificando disponibilidade e saldo...'}</p>}
+    </div>
+    {activeProfile && <>
+      <div className="mt-4 space-y-3">{consultantMessages.map((item, index) => <div key={index} className="rounded-xl border border-line bg-paper p-3"><p className="text-xs font-bold text-moss-700">{item.role === 'user' ? 'Sua pergunta' : 'Consultor MyDoctor'}</p><p className="mt-1 whitespace-pre-wrap text-sm text-ink">{item.content}</p></div>)}</div>
+      <div className="mt-4"><DictationTextarea key={activeProfile.id} value={consultantQuestion} onChange={setConsultantQuestion} placeholder="Digite ou dite sua pergunta..." className={`${inputClass()} min-h-24`} /></div>
+      <label className="mt-3 flex gap-2 text-xs text-mute"><input type="checkbox" checked={consultantConsent} onChange={e => setConsultantConsent(e.target.checked)} />Autorizo enviar minha pergunta e os registros clínicos disponíveis ao provedor de IA usado pelo MyDoctor para esta conversa.</label>
+      <div className="mt-3"><PrimaryButton disabled={busy || !consultantConsent || !consultantQuestion.trim() || !consultantUsage?.configured || consultantUsage.remaining === 0} onClick={() => void askConsultant()}>{busy ? 'Consultando...' : 'Enviar pergunta'}</PrimaryButton></div>
+    </>}
+  </Card>;
 
   const consultantSummary = (() => { const latest = new Map<string, HealthEventV1>(); vitalEvents.forEach((event) => { const type = String(event.payload?.vitalType ?? 'vital'); if (!latest.has(type)) latest.set(type, event); }); return { latestVitals: [...latest.values()], recentClinical: clinicalEvents.slice(0, 5), insurance: insuranceEvents[0] }; })();
   const consultantView = <div className="space-y-5">{consultantChat}<Card><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Consultor MyDoctor</p><h2 className="mt-1 font-display text-2xl font-bold text-ink">Prepare sua próxima consulta</h2><p className="mt-2 text-sm leading-6 text-mute">Organiza o que já existe no prontuário para facilitar a conversa com o profissional de saúde. Não faz diagnóstico.</p></Card><Card><h3 className="font-display text-xl font-bold text-ink">Resumo de {activeProfile?.name ?? 'perfil'}</h3>{!activeProfile ? <p className="mt-3 text-sm text-mute">Escolha um perfil.</p> : <div className="mt-4 space-y-4"><div><p className="text-xs font-bold uppercase text-mute">Últimos sinais vitais</p>{consultantSummary.latestVitals.length === 0 ? <p className="text-sm text-mute">Nenhum sinal vital registrado.</p> : consultantSummary.latestVitals.map((event) => <p key={event.id} className="text-sm text-ink">• {event.title}</p>)}</div><div><p className="text-xs font-bold uppercase text-mute">Convênio</p><p className="text-sm text-ink">{consultantSummary.insurance?.title ?? 'Nenhum convênio cadastrado.'}</p></div><div><p className="text-xs font-bold uppercase text-mute">Histórico familiar</p><p className="whitespace-pre-wrap text-sm text-ink">{familyHistoryEvent?.payload?.text ? 'Histórico familiar disponível para consulta pelo consultor.' : 'Nenhum histórico familiar registrado.'}</p></div><div><p className="text-xs font-bold uppercase text-mute">Eventos recentes</p>{consultantSummary.recentClinical.length === 0 ? <p className="text-sm text-mute">Nenhum evento clínico registrado.</p> : consultantSummary.recentClinical.map((event) => <p key={event.id} className="text-sm text-ink">• {event.title}</p>)}</div></div>}</Card></div>;
@@ -508,3 +541,4 @@ export default function V1PreviewApp() {
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><h1 className="break-words font-display text-2xl font-bold text-ink sm:text-3xl">Sua saúde e seu bem-estar. No seu controle.</h1><p className="mt-1 text-sm text-mute">MyDoctor reúne sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
+
