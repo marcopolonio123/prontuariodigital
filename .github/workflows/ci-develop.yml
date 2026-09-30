@@ -65,4 +65,6 @@ jobs:
           done
           node scripts/v1-smoke.mjs
           node scripts/consultant-smoke.mjs
+          node scripts/medication-smoke.mjs
+
 
