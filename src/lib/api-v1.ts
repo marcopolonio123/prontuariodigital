@@ -114,6 +114,7 @@ export interface MedicationScheduleV1 {
 }
 export type MedicationScheduleInput = Pick<MedicationScheduleV1, 'name' | 'dose' | 'weekdays' | 'times' | 'timezone' | 'startsOn' | 'endsOn' | 'recipientIds' | 'alertsEnabled'>;
 export interface MedicationAgendaV1 {
+  registeredMedications?: Array<{ name: string; dose: string; frequency: string }>;
   schedules: MedicationScheduleV1[]; alertsEnabled: boolean; canEdit: boolean; deliveryAvailable: boolean;
   recipients: Array<{ id: string; name: string; emailMasked: string; owner: boolean }>;
 }
@@ -221,5 +222,6 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 
 
