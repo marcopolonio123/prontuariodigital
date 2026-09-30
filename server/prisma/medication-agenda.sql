@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS "MedicationSchedule" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE "MedicationSchedule" ADD COLUMN IF NOT EXISTS "continuousUse" BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS "MedicationSchedule_patientId_active_idx" ON "MedicationSchedule"("patientId", "active");
 CREATE TABLE IF NOT EXISTS "MedicationReminderDelivery" (
   "id" TEXT PRIMARY KEY,
@@ -24,3 +25,4 @@ CREATE TABLE IF NOT EXISTS "MedicationReminderDelivery" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "MedicationReminderDelivery_scheduleId_userId_slotKey_key" ON "MedicationReminderDelivery"("scheduleId", "userId", "slotKey");
 CREATE INDEX IF NOT EXISTS "MedicationReminderDelivery_dueAt_status_idx" ON "MedicationReminderDelivery"("dueAt", "status");
+
