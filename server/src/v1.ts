@@ -420,15 +420,18 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
 /** Perfis/prontuários que o usuário autenticado pode abrir após o login. */
 router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
   const userId = req.userId!;
+  // Não selecionar colunas de recursos novos para listar perfis antigos.
+  const profileSelect = { id: true, record: true, name: true, ownerUserId: true, archived: true, data: true } as const;
+  try {
   const [owned, grants] = await Promise.all([
-    prisma.patient.findMany({ where: { ownerUserId: userId, archived: false }, orderBy: { name: 'asc' } }),
+    prisma.patient.findMany({ where: { ownerUserId: userId, archived: false }, orderBy: { name: 'asc' }, select: profileSelect }),
     prisma.accessGrant.findMany({
       where: {
         accountId: userId,
         revokedAt: null,
         OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
       },
-      include: { patient: true },
+      include: { patient: { select: profileSelect } },
     }),
   ]);
 
@@ -456,6 +459,10 @@ router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
 
   const dedup = [...new Map(items.map((x) => [x.id, x])).values()];
   res.json(dedup);
+  } catch {
+    console.error('MyDoctor: falha ao carregar perfis; processo preservado.');
+    return fail(res, 503, 'Não foi possível carregar os perfis. Tente novamente em instantes.');
+  }
 });
 
 /** Cria um perfil dependente sem exigir credenciais próprias. */
@@ -844,6 +851,7 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
 
