@@ -157,5 +157,42 @@ await call('/api/v1/patients/' + profile.id + '/diary/' + mixed.id + '/entries/0
 assert(await db.healthEvent.findUnique({ where: { id: mixed.id } }) === null, 'último relato não removeu o dia');
 const noConsent = await fetch(base + '/api/v1/patients/' + profile.id + '/consultant', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ question: 'Como preparar minha consulta?' }) });
 assert(noConsent.status === 400, 'consultor aceitou envio sem consentimento');
+// Reproduzir exatamente o schema anterior SOMENTE no PostgreSQL descartável do CI.
+assert(process.env.NODE_ENV === 'test' && ['localhost', '127.0.0.1'].includes(new URL(process.env.DATABASE_URL).hostname), 'teste de schema requer banco local de teste');
+const { Client } = require('pg');
+const pg = new Client({ connectionString: process.env.DATABASE_URL });
+await pg.connect();
+const delegateOwner = await db.user.create({ data: { name: 'Dono delegado CI', email: 'schema-' + Date.now() + '@mydoctor.test', passwordHash: 'test-unused' } });
+const delegated = await db.patient.create({ data: { id: 'schema-' + Date.now(), ownerUserId: delegateOwner.id, name: 'Perfil delegado CI', data: {} } });
+await db.accessGrant.create({ data: { accountId: registered.id, patientId: delegated.id, level: 'leitura' } });
+let startupProcess;
+try {
+  await pg.query('ALTER TABLE "Patient" DROP COLUMN "medicationAlertsEnabled"');
+  const oldSchemaProfiles = await call('/api/v1/profiles', { headers: auth });
+  assert(oldSchemaProfiles.some(p => p.id === self.id) && oldSchemaProfiles.some(p => p.id === delegated.id), 'schema antigo bloqueou perfis próprios/delegados');
+  const oldSchemaEvents = await call('/api/v1/patients/' + profile.id + '/events', { headers: auth });
+  assert(oldSchemaEvents.some(e => e.id === event.id), 'schema antigo bloqueou prontuário');
+  const { spawn } = await import('node:child_process');
+  const { setTimeout: delay } = await import('node:timers/promises');
+  startupProcess = spawn(process.execPath, ['../index.js'], { env: { ...process.env, NODE_ENV: 'test', PORT: '8790' }, stdio: 'inherit' });
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    try { if ((await fetch('http://127.0.0.1:8790/api/health')).ok) { ready = true; break; } } catch {}
+    await delay(100);
+  }
+  assert(ready, 'entrypoint não iniciou após preparar schema antigo');
+  const restored = await pg.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'Patient' AND column_name = 'medicationAlertsEnabled'");
+  assert(restored.rowCount === 1, 'entrypoint não restaurou coluna ausente');
+  const preserved = await db.patient.findUnique({ where: { id: profile.id } });
+  assert(preserved.name === 'Filho Teste CI' && preserved.medicationAlertsEnabled === false, 'patch alterou dados antigos');
+  console.log('✅ Schema antigo: perfis próprios/delegados e prontuário funcionam; entrypoint repara coluna antes de iniciar HTTP, mesmo com NODE_ENV=test.');
+} finally {
+  if (startupProcess && startupProcess.exitCode === null) startupProcess.kill();
+  // Restauração garantida mesmo se o teste falhar.
+  await pg.query('ALTER TABLE "Patient" ADD COLUMN IF NOT EXISTS "medicationAlertsEnabled" BOOLEAN NOT NULL DEFAULT false');
+  await pg.end();
+  await db.user.delete({ where: { id: delegateOwner.id } });
+}
 await db.$disconnect();
 console.log('✅ Diary retention, deletion and Consultant consent OK');
+
