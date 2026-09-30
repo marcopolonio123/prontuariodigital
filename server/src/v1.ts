@@ -645,12 +645,13 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
     // Família e diário são consultados separadamente para não desaparecerem da janela clínica.
     const select = { type: true, title: true, occurredAt: true, payload: true } as const;
     const active = { patientId: req.params.patientId, status: { notIn: ['cancelled', 'inactive', 'rejected_by_patient'] } };
-    const [clinical, family, diary] = await Promise.all([
+    const [clinical, family, diary, medicationAgenda] = await Promise.all([
       prisma.healthEvent.findMany({ where: { ...active, type: { notIn: ['family_history', 'wellbeing_diary', 'insurance'] } }, orderBy: { occurredAt: 'desc' }, take: 70, select }),
       prisma.healthEvent.findFirst({ where: { ...active, type: 'family_history' }, orderBy: { occurredAt: 'desc' }, select }),
       prisma.healthEvent.findMany({ where: { ...active, type: 'wellbeing_diary' }, orderBy: { occurredAt: 'desc' }, take: 60, select }),
+      prisma.medicationSchedule.findMany({ where: { patientId: req.params.patientId, active: true }, take: 50, select: { name: true, dose: true, weekdays: true, times: true, timezone: true, startsOn: true, endsOn: true } }),
     ]);
-    const context = JSON.stringify({ record, clinical, family, diary });
+    const context = JSON.stringify({ record, medicationAgenda, clinical, family, diary });
     const boundedContext = context.length > 50000 ? context.slice(0, 50000) + '\n[Contexto truncado por limite de tamanho; não afirmar que todos os registros foram analisados.]' : context;
     const previous = Array.isArray(req.body?.messages) ? req.body.messages.slice(-20).filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string').map((m: any) => ({ role: m.role, content: m.content.slice(0, 4000) })) : [];
     const response = await fetch(process.env.CONSULTANT_BASE_URL!.replace(/\/$/, '') + '/chat/completions', {
@@ -824,4 +825,5 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 

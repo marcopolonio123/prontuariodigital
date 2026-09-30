@@ -34,6 +34,7 @@ model User {
   challenges      VerificationChallenge[]
   subscriptions   Subscription[]
   consultantUsage ConsultantUsage[]
+  medicationDeliveries MedicationReminderDelivery[]
 }
 
 // Apenas metadados de consumo. Não armazena perguntas, respostas ou dados clínicos.
@@ -73,6 +74,8 @@ model Patient {
   ownerUserId    String
   owner          User            @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   archived       Boolean         @default(false) // regra do produto: nunca excluir; apenas arquivar
+  medicationAlertsEnabled Boolean @default(false)
+  medicationSchedules MedicationSchedule[]
   data           Json            // compatibilidade temporária com o protótipo; será reduzido gradualmente
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -84,6 +87,45 @@ model Patient {
 
   @@index([ownerUserId, archived])
   @@index([name])
+}
+
+model MedicationSchedule {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name          String
+  dose          String   @default("")
+  weekdays      Json
+  times         Json
+  timezone      String   @default("America/Sao_Paulo")
+  startsOn      String
+  endsOn        String?
+  recipientIds  Json
+  alertsEnabled Boolean  @default(false)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deliveries    MedicationReminderDelivery[]
+
+  @@index([patientId, active])
+}
+
+model MedicationReminderDelivery {
+  id          String   @id @default(uuid())
+  scheduleId  String
+  schedule    MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slotKey     String
+  dueAt       DateTime
+  status      String   @default("pending") // pending | sent | failed | skipped
+  attempts    Int      @default(1)
+  leaseUntil  DateTime
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([scheduleId, userId, slotKey])
+  @@index([dueAt, status])
 }
 
 // Solicitação explícita de acesso feita por profissional ou outro usuário autorizado.

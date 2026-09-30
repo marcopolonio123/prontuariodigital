@@ -15,6 +15,7 @@ type EmailMessage = {
   subject: string;
   html: string;
   text: string;
+  category?: string;
 };
 
 type SmtpAttempt = { port: number; secure: boolean; requireTLS?: boolean };
@@ -36,7 +37,7 @@ async function sendWithResend(apiKey: string, message: EmailMessage): Promise<vo
       subject: message.subject,
       html: message.html,
       text: message.text,
-      tags: [{ name: 'category', value: 'login_mfa' }],
+      tags: [{ name: 'category', value: message.category ?? 'login_mfa' }],
     }),
       signal: controller.signal,
     });
@@ -53,6 +54,23 @@ async function sendWithResend(apiKey: string, message: EmailMessage): Promise<vo
     const body = await response.text().catch(() => '');
     throw new Error(`Resend API ${response.status}: ${body.slice(0, 500)}`);
   }
+}
+
+export function medicationEmailConfigured() {
+  const from = process.env.RESEND_FROM?.trim() || process.env.MAIL_FROM?.trim() || process.env.SMTP_USER?.trim();
+  return Boolean(from && (process.env.RESEND_API_KEY?.trim() || (process.env.SMTP_USER?.trim() && process.env.SMTP_PASSWORD)));
+}
+
+export async function sendMedicationReminderEmail(params: { to: string; patientName: string; name: string; dose: string; date: string; time: string; timezone: string }) {
+  if (process.env.NODE_ENV !== 'production') throw new Error('Envio real de lembretes desabilitado fora de produção.');
+  if (!medicationEmailConfigured()) throw new Error('Serviço de e-mail não configurado.');
+  const from = process.env.RESEND_FROM?.trim() || process.env.MAIL_FROM?.trim() || `MyDoctor <${process.env.SMTP_USER?.trim()}>`;
+  const text = `Lembrete de medicamento de ${params.patientName}\nMedicamento cadastrado: ${params.name}\n${params.dose ? 'Dose registrada: ' + params.dose + '\n' : ''}Horário agendado: ${params.date} às ${params.time} (${params.timezone}).\nConfira sua agenda em https://mydoctor.med.br/?v1=1\nOs avisos podem ser desligados no perfil da pessoa, na Agenda de medicamentos.`;
+  const message: EmailMessage = { from, to: params.to, subject: 'MyDoctor — lembrete de medicamento', text,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px"><h2>Lembrete MyDoctor</h2><p style="white-space:pre-line">${escapeHtml(text)}</p></div>`, category: 'medication_reminder' };
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (key) await sendWithResend(key, message);
+  else await sendWithHostingerFallback(message);
 }
 
 async function sendWithSmtp(params: {

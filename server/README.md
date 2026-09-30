@@ -91,3 +91,31 @@ Planos ativos/em teste podem sobrescrever os padrões por `PlanEntitlement`:
 - `consultant.window.hours`: inteiro positivo.
 
 A tabela guarda apenas ID da conta, datas e status de consumo, nunca o texto da conversa. A política de uso do MyDoctor é distinta dos limites técnicos/de cobrança do provedor; não representa perguntas incluídas em uma assinatura pessoal do ChatGPT.
+
+
+## Agenda de medicamentos por perfil (incluindo dependentes)
+
+Cadastros com dias da semana, vários horários, fuso IANA, início e término opcional, descrição da dose cadastrada pelo usuário e destinatários. Não calcula nem recomenda doses. O titular/responsável que administra o perfil pode editar/remover agendas e desligar todos os avisos daquele perfil. Delegados autorizados podem consultar, mas não editar.
+
+Destinatários são contas com acesso vigente ao perfil (titular ou delegados familiares, sem acesso profissional), e-mail confirmado por cadastro ou login MFA por e-mail e escopo `record`/`medications` ou completo. Não aceita endereços arbitrários nem envia para uma pessoa apenas porque seu nome consta em um dependente. Para o dependente receber, ele precisa de uma conta com acesso ao perfil e e-mail confirmado. O serviço revalida acesso e configuração imediatamente antes do envio.
+
+Primeira entrega: alertas por e-mail do servidor, sem depender de página aberta. Push Android/iOS ainda não implementado. Não representa confirmação de ingestão da dose.
+
+Ativação na hospedagem:
+1. Aplicar `server/prisma/medication-agenda.sql` fora do processo web (patch aditivo/idempotente).
+2. Gerar o cliente Prisma, compilar e redeploy do servidor.
+3. Usar o serviço transacional já configurado (`RESEND_API_KEY` + remetente ou SMTP + remetente) e definir `MEDICATION_REMINDERS_ENABLED=true` em produção.
+4. Manter o processo Node continuamente ativo. Worker executa a cada minuto e recupera somente ocorrências dos últimos 15 minutos; pausas maiores podem resultar em avisos não enviados. Não é um sistema de emergência.
+5. Usuário liga os avisos do perfil e de cada medicamento e escolhe destinatários. Todos iniciam desligados.
+
+Reservas persistentes e chave única por medicamento/destinatário/ocorrência evitam duplicação em ciclos concorrentes; até 3 tentativas no período de recuperação após falhas. Aceite do provedor de e-mail não garante leitura/entrega na caixa de entrada. Um crash entre aceite do provedor e confirmação no banco pode resultar em duplicata na recuperação; não prometer entrega exatamente uma vez. Desligar impede novos envios, mas não cancela um e-mail já aceito pelo provedor.
+
+APIs autenticadas: `GET/POST /api/v1/patients/:id/medications`, `PUT/DELETE .../medications/:scheduleId`, `PUT .../medications/alerts`. GET informa disponibilidade efetiva do envio, para a interface não anunciar alertas ativos quando falta ativação do serviço.
+
+Testes CI: e-mail simulado, sem envio a pessoas reais; autorização/escopo, destinatários, dependente e responsável, fusos/DST, concorrência, falha/repetição, desligamento, revogação e edição concorrente.
+
+### Preparação do banco no build Hostinger
+
+`npm run prepare:hostinger` aplica os dois patches aditivos (Consultor e Agenda) por conexão PostgreSQL direta quando o build tem `NODE_ENV=production` e `DATABASE_URL`. Os patches são idempotentes, transacionais e têm tempo limite de locks. Uma falha interrompe o build antes da publicação. Não é DDL no runtime web, não usa o query engine Prisma para migrar e não remove dados.
+
+Se a Hostinger disponibilizar as variáveis apenas no runtime, configure-as também no build ou execute explicitamente `NODE_ENV=production node server/scripts/apply-feature-patches.cjs` no ambiente do projeto antes do redeploy. Builds sem essas condições informam que os patches foram omitidos. A ativação dos e-mails ainda exige `MEDICATION_REMINDERS_ENABLED=true` e o provedor transacional configurado.

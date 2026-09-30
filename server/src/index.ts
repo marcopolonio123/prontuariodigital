@@ -12,6 +12,8 @@ import { prisma } from './db.js';
 import clinicalWorkflowRouter from './clinical-workflow.js';
 import v1Router from './v1.js';
 import professionalAccessRouter from './professional-access.js';
+import medicationAgendaRouter from './medication-agenda.js';
+import { startMedicationReminders } from './medication-reminders.js';
 
 const app = express();
 
@@ -28,6 +30,7 @@ app.use(express.json({ limit: '15mb' }));
 app.use('/api/v1', clinicalWorkflowRouter);
 app.use('/api/v1', v1Router);
 app.use('/api/v1', professionalAccessRouter);
+app.use('/api/v1', medicationAgendaRouter);
 
 interface AuthedRequest extends Request { userId?: string; }
 function sign(userId: string): string { return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: JWT_TTL }); }
@@ -129,6 +132,7 @@ if (fs.existsSync(path.join(publicDir, 'index.html'))) {
 }
 
 app.listen(PORT, '0.0.0.0', () => {
+  startMedicationReminders();
   console.log(`My Doctor ouvindo na porta ${PORT} — saúde em /api/health — V1 em /api/v1`);
   // O schema de produção é migrado fora do processo web.
   // Nunca executar DDL pelo Prisma durante o runtime: na Hostinger isso pode
