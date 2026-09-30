@@ -40,7 +40,7 @@ router.get('/patients/:patientId/medications', auth, async (req: AuthedRequest, 
   const schedules = await prisma.medicationSchedule.findMany({ where: { patientId: patient.id, active: true }, orderBy: { createdAt: 'asc' } });
   const recipients = await medicationRecipients(patient.id);
   res.json({ schedules, alertsEnabled: patient.medicationAlertsEnabled, canEdit: patient.ownerUserId === req.userId,
-    deliveryAvailable: process.env.MEDICATION_REMINDERS_ENABLED === 'true' && medicationEmailConfigured(),
+    deliveryAvailable: process.env.NODE_ENV === 'production' && process.env.MEDICATION_REMINDERS_ENABLED === 'true' && medicationEmailConfigured(),
     recipients: recipients.map(user => ({ id: user.id, name: user.name, emailMasked: user.email.replace(/^(.).+(@.*)$/, '$1***$2'), owner: user.id === patient.ownerUserId })) });
 });
 router.put('/patients/:patientId/medications/alerts', auth, async (req: AuthedRequest, res: Response) => {
