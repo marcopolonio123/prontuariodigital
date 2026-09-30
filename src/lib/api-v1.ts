@@ -138,6 +138,16 @@ export class MyDoctorV1Api {
     return this.req<{ id: string; status: string }>(`/consultations/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision }) });
   }
 
+  async getConsultantRecord(patientId: string): Promise<Record<string, unknown> | null> {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/api/patients`, {
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+    });
+    if (!response.ok) throw new Error('Não foi possível consultar a ficha do prontuário.');
+    const patients: unknown = await response.json();
+    if (!Array.isArray(patients)) throw new Error('Resposta inválida do prontuário.');
+    return patients.find(patient => patient?.id === patientId) ?? null;
+  }
+
   listProfiles() { return this.req<PatientProfile[]>('/profiles'); }
   createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
   listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
