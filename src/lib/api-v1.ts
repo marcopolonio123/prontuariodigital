@@ -109,10 +109,10 @@ export interface ConsultantUsageV1 {
 
 export interface MedicationScheduleV1 {
   id: string; patientId: string; name: string; dose: string; weekdays: number[]; times: string[];
-  timezone: string; startsOn: string; endsOn: string | null; recipientIds: string[];
+  continuousUse?: boolean; timezone: string; startsOn: string; endsOn: string | null; recipientIds: string[];
   alertsEnabled: boolean; active: boolean; updatedAt: string;
 }
-export type MedicationScheduleInput = Pick<MedicationScheduleV1, 'name' | 'dose' | 'weekdays' | 'times' | 'timezone' | 'startsOn' | 'endsOn' | 'recipientIds' | 'alertsEnabled'>;
+export type MedicationScheduleInput = Pick<MedicationScheduleV1, 'name' | 'dose' | 'weekdays' | 'times' | 'timezone' | 'continuousUse' | 'startsOn' | 'endsOn' | 'recipientIds' | 'alertsEnabled'>;
 export interface MedicationAgendaV1 {
   registeredMedications?: Array<{ name: string; dose: string; frequency: string }>;
   schedules: MedicationScheduleV1[]; alertsEnabled: boolean; canEdit: boolean; deliveryAvailable: boolean;
@@ -222,6 +222,7 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 
 
 
