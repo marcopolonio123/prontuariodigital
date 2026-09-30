@@ -68,3 +68,26 @@ No app: Nuvem & servidor → Servidor real → `http://localhost:8787` (localhos
 - **Nunca excluir**: `DELETE /api/patients/:id` apenas arquiva
 - Visibilidade por dono/delegação aplicada em todas as consultas
 - Limite de payload 15 MB (anexos); para produção com muitos anexos, mova as fotos para armazenamento de objetos (S3/Cloudflare R2) e guarde a URL
+
+
+## Consultor IA externo e limite de uso
+
+O comprador utiliza o consultor do MyDoctor sem escolher um provedor ou fornecer uma chave. As credenciais ficam somente no servidor. Configure no ambiente Node da hospedagem:
+
+- `CONSULTANT_API_KEY`: chave privada do provedor compatível com Chat Completions.
+- `CONSULTANT_BASE_URL`: URL HTTPS da API, sem `/chat/completions`.
+- `CONSULTANT_MODEL`: identificador de um modelo habilitado nessa conta.
+- `CONSULTANT_RESPONSE_LIMIT`: padrão inicial 20 (ajustável; ainda não é preço/plano comercial definitivo).
+- `CONSULTANT_WINDOW_HOURS`: padrão 24; pode ser 48 ou outra janela inteira.
+
+Antes de publicar o backend, execute o patch aditivo `server/prisma/consultant-usage.sql` no PostgreSQL. Não rodar DDL no processo web. Gere o cliente Prisma e compile o servidor. Para banco de desenvolvimento/CI, `prisma db push` inclui a tabela.
+
+A regra é por **mensagem respondida nas últimas N horas por conta**, incluindo as respostas do usuário às perguntas da IA. Site, Android, iOS e todos os perfis da mesma conta compartilham o saldo. Cada resposta devolve um uso N horas depois de concluída. Erros e respostas vazias liberam a reserva e não descontam usos. Reservas concorrentes ficam protegidas por lock PostgreSQL por conta e expiram em 2 minutos se houver interrupção do processo. Não há fallback silencioso para respostas prontas.
+
+`GET /api/v1/consultant/usage` exige login e retorna `configured`, `limit`, `windowHours`, `used`, `pending`, `remaining` e `nextAvailableAt`. A tela exibe a regra, saldo e data/hora local da próxima liberação antes do envio. O POST do consultor valida e aplica o limite no servidor; retorna 429 com `usage` e `Retry-After` quando esgotado. Um 429 do provedor é tratado como indisponibilidade temporária, sem descontar o saldo do app. A futura tela de compra deve usar esta mesma política da API, evitando prometer limites fixos diferentes da assinatura.
+
+Planos ativos/em teste podem sobrescrever os padrões por `PlanEntitlement`:
+- `consultant.responses.max`: inteiro positivo.
+- `consultant.window.hours`: inteiro positivo.
+
+A tabela guarda apenas ID da conta, datas e status de consumo, nunca o texto da conversa. A política de uso do MyDoctor é distinta dos limites técnicos/de cobrança do provedor; não representa perguntas incluídas em uma assinatura pessoal do ChatGPT.
