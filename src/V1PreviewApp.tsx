@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DictationTextarea from './components/DictationTextarea';
 import {
   MyDoctorV1Api,
@@ -116,6 +116,8 @@ export default function V1PreviewApp() {
   const [code, setCode] = useState('');
   const [profiles, setProfiles] = useState<PatientProfile[]>([]);
   const [activeProfile, setActiveProfile] = useState<PatientProfile | null>(null);
+  const activeProfileIdRef = useRef<string | null>(null);
+  activeProfileIdRef.current = activeProfile?.id ?? null;
   const [events, setEvents] = useState<HealthEventV1[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -507,6 +509,7 @@ export default function V1PreviewApp() {
     try {
       const result = await api.askConsultant(profileId, question, consultantMessages, consultantConsent);
       setConsultantUsage(result.usage);
+      if (activeProfileIdRef.current !== profileId) return;
       setConsultantMessages(current => [...current, { role: 'user', content: question }, { role: 'assistant', content: result.answer }]);
       setConsultantQuestion('');
     } finally {
