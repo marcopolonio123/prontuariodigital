@@ -337,8 +337,9 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
               name: user.name,
               profession,
               specialty,
-              verificationStatus: existingProfessional.verificationStatus === 'verified' ? 'verified' : 'pending',
-              active: true,
+              verificationStatus: existingProfessional.verificationStatus === 'suspended' ? 'suspended' : 'pending',
+              verifiedAt: null,
+              active: existingProfessional.verificationStatus !== 'suspended',
             },
           })
         : await tx.practitioner.create({
@@ -383,6 +384,10 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
         });
       }
 
+      if (existingProfessional) {
+        await tx.accessGrant.updateMany({ where: { practitionerId: practitioner.id, revokedAt: null }, data: { revokedAt: new Date() } });
+        await tx.accessRequest.updateMany({ where: { practitionerId: practitioner.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
+      }
       return tx.practitioner.findUnique({
         where: { id: practitioner.id },
         include: { registrations: { include: { authority: true } } },
@@ -851,6 +856,7 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
 
