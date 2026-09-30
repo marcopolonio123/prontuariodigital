@@ -98,6 +98,7 @@ model MedicationSchedule {
   weekdays      Json
   times         Json
   timezone      String   @default("America/Sao_Paulo")
+  continuousUse Boolean  @default(false)
   startsOn      String
   endsOn        String?
   recipientIds  Json
@@ -463,3 +464,4 @@ model Subscription {
   @@index([userId, status])
   @@index([provider, providerSubscriptionId])
 }
+
