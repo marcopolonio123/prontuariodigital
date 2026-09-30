@@ -666,12 +666,18 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
       }),
     });
     if (!response.ok) {
+      await releaseConsultantResponse(reservationId);
+      reservationId = null;
       if (response.status === 429) return fail(res, 503, 'O provedor de IA está temporariamente no limite de capacidade. Tente mais tarde; seu saldo não será descontado.');
       return fail(res, 502, 'A IA não respondeu. Tente novamente; seu saldo não será descontado.');
     }
     const result = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const answer = result.choices?.[0]?.message?.content?.trim();
-    if (!answer) return fail(res, 502, 'A IA retornou uma resposta vazia. Seu saldo não será descontado.');
+    if (!answer) {
+      await releaseConsultantResponse(reservationId);
+      reservationId = null;
+      return fail(res, 502, 'A IA retornou uma resposta vazia. Seu saldo não será descontado.');
+    }
     await completeConsultantResponse(reservationId);
     reservationId = null;
     const usage = await getConsultantUsage(req.userId!, policy);
@@ -679,7 +685,7 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
   } catch {
     return fail(res, 502, 'Não foi possível concluir a resposta do Consultor. Tente novamente.');
   } finally {
-    if (reservationId) await releaseConsultantResponse(reservationId).catch(() => undefined);
+    if (reservationId) await releaseConsultantResponse(reservationId).catch((): void => undefined);
   }
 });
 
