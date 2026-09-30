@@ -113,3 +113,9 @@ Reservas persistentes e chave única por medicamento/destinatário/ocorrência e
 APIs autenticadas: `GET/POST /api/v1/patients/:id/medications`, `PUT/DELETE .../medications/:scheduleId`, `PUT .../medications/alerts`. GET informa disponibilidade efetiva do envio, para a interface não anunciar alertas ativos quando falta ativação do serviço.
 
 Testes CI: e-mail simulado, sem envio a pessoas reais; autorização/escopo, destinatários, dependente e responsável, fusos/DST, concorrência, falha/repetição, desligamento, revogação e edição concorrente.
+
+### Preparação do banco no build Hostinger
+
+`npm run prepare:hostinger` aplica os dois patches aditivos (Consultor e Agenda) por conexão PostgreSQL direta quando o build tem `NODE_ENV=production` e `DATABASE_URL`. Os patches são idempotentes, transacionais e têm tempo limite de locks. Uma falha interrompe o build antes da publicação. Não é DDL no runtime web, não usa o query engine Prisma para migrar e não remove dados.
+
+Se a Hostinger disponibilizar as variáveis apenas no runtime, configure-as também no build ou execute explicitamente `NODE_ENV=production node server/scripts/apply-feature-patches.cjs` no ambiente do projeto antes do redeploy. Builds sem essas condições informam que os patches foram omitidos. A ativação dos e-mails ainda exige `MEDICATION_REMINDERS_ENABLED=true` e o provedor transacional configurado.
