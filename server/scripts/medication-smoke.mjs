@@ -60,6 +60,8 @@ try {
   const input = { ...basic, timezone: 'UTC', startsOn: today, times: [time], recipientIds: [owner.id, dependentUser.id], alertsEnabled: true };
   const created = await call(endpoint, input, owner.token);
   assert.equal(created.status, 201);
+  assert.equal((await call(endpoint, null, owner.token)).body.deliveryAvailable, false, 'não anunciar transporte mobile antes da integração');
+  assert.equal(await dispatchMedicationReminders(now), 0, 'não enviar e-mail sem transporte explícito');
   const sent = [];
   const sender = async message => { await delay(30); sent.push(message); };
   assert.equal(await dispatchMedicationReminders(now, sender), 0, 'perfil desligado enviou avisos');
@@ -95,3 +97,4 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
