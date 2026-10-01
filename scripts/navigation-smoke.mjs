@@ -16,11 +16,13 @@ const event = (id, patientId, type, title, status = 'final') => ({ id, patientId
 const healthEvents = [event('own', 'p1', 'consultation', 'Atendimento próprio'), event('foreign', 'marco-clinical-patient', 'consultation', 'Registro de outra conta'), event('family', 'p1', 'family_history', 'family_history'), event('diary', 'p1', 'wellbeing_diary', 'wellbeing_diary'), event('pending', 'p1', 'consultation', 'Atendimento pendente', 'pending_patient_confirmation')];
 let account = { id: 'u1', name: 'Pessoa teste', email: 'teste@mydoctor.test', phone: '', birthDate: '1980-01-01', sex: '', city: '', state: '', completed: true, isHealthProfessional: true, postalCode: '', street: '', neighborhood: '', country: 'Brasil', number: '42', complement: 'Casa' };
 let requests = [];
+let pendingConsultations = [{ id: 'confirmed-consultation', patientId: 'p1', patientName: 'Pessoa teste', title: 'Consulta do Dr. Lucas', practitionerName: 'Dr. Lucas', occurredAt: new Date().toISOString() }];
 globalThis.fetch = async (url, init = {}) => {
   if (String(url).includes('/api/v1/address/cep/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
+  if (path === '/consultations/confirmed-consultation/decision' && init.method === 'POST') { pendingConsultations = []; healthEvents.push(event('confirmed-consultation', 'p1', 'consultation', 'Consulta do Dr. Lucas')); return { ok: true, status: 200, json: async () => ({ id: 'confirmed-consultation', status: 'final' }) }; }
   if (path === '/account' && init.method === 'PUT') account = { ...account, ...JSON.parse(init.body) };
-  const data = path === '/patients/p1/events' ? healthEvents : path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
+  const data = path === '/consultations/incoming' ? pendingConsultations : path === '/patients/p1/events' ? healthEvents : path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
   return { ok: true, status: 200, json: async () => data };
 };
 const outfile = '.navigation-test.cjs';
@@ -106,6 +108,13 @@ try {
   assert.equal(account.postalCode, '99999-999');
   await menu();
   assert.equal([...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Clinicar')), false, 'Clinicar visível para conta não profissional');
+  await click('Atendimentos para confirmar');
+  await click('Confirmar e incluir no prontuário');
+  assert.match(document.body.textContent, /Atendimento confirmado e incluído no prontuário/);
+  await click('← Voltar ao MyDoctor');
+  await menu(); await click('Prontuário');
+  assert.match(document.body.textContent, /Consulta do Dr. Lucas/, 'Consulta confirmada não apareceu ao voltar para o prontuário');
+  await menu();
   await click('Sair');
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
@@ -128,6 +137,7 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 
 
