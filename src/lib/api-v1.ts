@@ -78,6 +78,7 @@ export interface ProfessionalConsultationV1 {
 }
 
 export interface IncomingConsultationV1 {
+  documents?: Array<{ id: string; originalFilename: string }>;
   clinical?: Record<string, string>;
   id: string;
   patientId: string;
