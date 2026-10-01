@@ -84,7 +84,11 @@ try {
   assert.match(document.body.textContent, /CEP não encontrado/);
   assert.equal(document.querySelector('input[autocomplete="address-line1"]').value, 'Praça da Sé');
   await settle(() => Simulate.change(document.querySelector('input[type=checkbox]'), { target: { checked: false } }));
+  const phoneInput = document.getElementById('account-phone');
+  await settle(() => Simulate.change(phoneInput, { target: { value: '11987654321' } }));
+  assert.equal(phoneInput.value, '+55 (11) 98765-4321');
   await click('Salvar cadastro');
+  assert.equal(account.phone, '+5511987654321');
   assert.match(document.body.textContent, /Cadastro salvo/);
   assert.equal(account.cpf, '529.982.247-25');
   assert.equal(account.rg, '11.966.756-3');
@@ -96,4 +100,5 @@ try {
   assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
