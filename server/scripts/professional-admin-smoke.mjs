@@ -50,6 +50,8 @@ try {
   assert.equal((await call('/professional/access-requests', professional.token)).status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'aprovação concedeu acesso ao paciente');
   row = await reviewRow(); assert.equal(row.history.length, 1); assert.equal(row.history[0].actorName, 'Administrador teste');
+  await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "test_legacy_grant_pair_unique" ON "AccessGrant" ("accountId", "patientId")');
+  const legacyGrant = await db.accessGrant.create({ data: { accountId: professional.id, patientId: patient.patientId, level: 'leitura', revokedAt: new Date() } });
   const access = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
   const incoming = await call('/access-requests/incoming', patient.token);
   assert.equal(incoming.body.find(item => item.id === access.body.id).status, 'pending');
@@ -59,6 +61,8 @@ try {
   assert.equal(permission.status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200);
   assert.equal(permission.body.validUntil, null);
+  assert.equal(permission.body.grantId, legacyGrant.id, 'Autorização antiga não foi renovada');
+  assert.equal(await db.accessGrant.count({ where: { accountId: professional.id, patientId: patient.patientId } }), 1);
   assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === access.body.id).status, 'approved');
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', admin.token, {})).status, 403);
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', patient.token, {})).status, 200);
@@ -71,6 +75,8 @@ try {
   assert.equal(decisions.filter(result => result.status === 409).length, 1);
   const timedGrant = decisions.find(result => result.status === 200).body;
   assert.equal(timedGrant.validUntil, until);
+  assert.equal(timedGrant.grantId, legacyGrant.id);
+  assert.equal((await db.accessGrant.findUnique({ where: { id: legacyGrant.id } })).revokedAt, null);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200);
   await db.accessGrant.update({ where: { id: timedGrant.grantId }, data: { validUntil: new Date(Date.now() - 1000) } });
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
@@ -78,6 +84,9 @@ try {
   assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === timed.body.id).status, 'expired');
   const renewed = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
   assert.equal((await call('/access-requests/' + renewed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'indefinite' })).status, 200);
+  assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === timed.body.id).status, 'revoked');
+  assert.equal((await call('/access-requests/' + timed.body.id + '/revoke', patient.token, {})).status, 200);
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200, 'Revogar solicitação antiga afetou a nova autorização');
   row = await reviewRow();
   assert.equal((await call(path, admin.token, { ...input, decision: 'suspend', expectedUpdatedAt: row.updatedAt })).status, 200);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 403);
@@ -100,9 +109,11 @@ try {
   assert.equal((await call('/admin/professionals', admin.token)).status, 403, 'remoção de administração não surtiu efeito');
   console.log('✅ Administração: autorização, aprovação manual, rejeição, suspensão/revogação, auditoria, concorrência e bloqueio de autovalidação OK.');
 } finally {
+  await db.$executeRawUnsafe('DROP INDEX IF EXISTS "test_legacy_grant_pair_unique"');
   await db.practitioner.deleteMany({ where: { id: { in: professionals } } });
   await db.user.deleteMany({ where: { id: { in: accounts } } });
   await db.$disconnect();
 }
 process.exit(0);
+
 
