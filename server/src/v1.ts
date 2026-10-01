@@ -276,16 +276,17 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
 
 function accountView(user: { id: string; name: string; email: string; phone: string | null }, data: any) {
   return { id: user.id, name: user.name, email: user.email, phone: user.phone,
+    avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
     birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
 router.get('/account', auth, async (req: AuthedRequest, res: Response) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true, email: true, phone: true } });
+    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
     if (!user) return fail(res, 401, 'Entre novamente.');
     const patients = await prisma.patient.findMany({ where: { ownerUserId: user.id, archived: false }, select: { data: true } });
     const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
     const practitioner = await prisma.practitioner.findUnique({ where: { userId: user.id }, select: { id: true } });
-    const data = { ...((self?.data as object) ?? {}) };
+    const data = { ...((self?.data as object) ?? {}), ...((user.accountData as object) ?? {}) };
     res.json({ ...accountView(user, data), isHealthProfessional: typeof (data as any).isHealthProfessional === 'boolean' ? (data as any).isHealthProfessional : Boolean(practitioner) });
   } catch { fail(res, 503, 'Não foi possível carregar seu cadastro.'); }
 });
@@ -294,18 +295,31 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   const name = String(body.name ?? '').trim(); const phone = String(body.phone ?? '').trim() || null;
   const birthDate = String(body.birthDate ?? ''); const sex = String(body.sex ?? '');
   const city = String(body.city ?? '').trim(); const state = String(body.state ?? '').toUpperCase();
+  const cpfRaw = String(body.cpf ?? '').trim(); const cpf = cpfRaw.replace(/[.\s-]/g, '');
+  const rg = String(body.rg ?? '').trim();
+  const postalCode = String(body.postalCode ?? '').trim().replace(/[\s-]/g, '');
+  const address = { postalCode, street: String(body.street ?? '').trim(), number: String(body.number ?? '').trim(), complement: String(body.complement ?? '').trim(), neighborhood: String(body.neighborhood ?? '').trim(), country: String(body.country ?? 'Brasil').trim() || 'Brasil' };
+  const validCpf = !cpf || (/^\d{11}$/.test(cpf) && !/^(\d)\1{10}$/.test(cpf) && [9, 10].every(length => {
+    const sum = cpf.slice(0, length).split('').reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
+    const check = (sum * 10) % 11 % 10; return check === Number(cpf[length]);
+  }));
+  if (!validCpf) return fail(res, 400, 'Confira o CPF informado.');
+  if (rg.length > 30 || (postalCode && !/^\d{8}$/.test(postalCode)) || address.street.length > 180 || address.number.length > 20 || address.complement.length > 100 || address.neighborhood.length > 100 || address.country.length > 80) return fail(res, 400, 'Confira RG, CEP e endereço.');
+  const avatar = String(body.avatarDataUrl ?? '');
+  if (avatar && (avatar.length > 256 * 1024 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar))) return fail(res, 400, 'Selecione uma foto ou avatar válido.');
+  if (avatar) { const bytes = Buffer.from(avatar.split(',')[1], 'base64'); if (bytes[0] !== 255 || bytes[1] !== 216 || bytes[2] !== 255) return fail(res, 400, 'Imagem de perfil inválida.'); }
   const date = new Date(birthDate + 'T00:00:00Z');
   if (name.length < 2 || name.length > 150 || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== birthDate || date > new Date() || date.getUTCFullYear() < 1900 || !['', 'female', 'male', 'other', 'unknown'].includes(sex) || city.length > 100 || (state && !/^[A-Z]{2}$/.test(state)) || (phone && !/^\+?[\d ()-]{8,25}$/.test(phone))) return fail(res, 400, 'Confira nome, data de nascimento, celular e UF.');
   try {
     const result = await prisma.$transaction(async tx => {
       const old = await tx.user.findUniqueOrThrow({ where: { id: req.userId! } });
-      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true } });
+      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...address, cpf, rg, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
       const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
       const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
       else await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });
-      if (old.name !== name) {
+      if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || ((old.accountData as any)?.rg ?? '') !== rg) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
         if (practitioner) {
           await tx.practitioner.update({ where: { id: practitioner.id }, data: { name, verificationStatus: practitioner.verificationStatus === 'suspended' ? 'suspended' : 'pending', verifiedAt: null } });
@@ -313,7 +327,7 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
           await tx.accessRequest.updateMany({ where: { practitionerId: practitioner.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
         }
       }
-      return accountView(user, data);
+      return accountView(user, { ...data, ...(user.accountData as object) });
     });
     res.json(result);
   } catch (error: any) { fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
