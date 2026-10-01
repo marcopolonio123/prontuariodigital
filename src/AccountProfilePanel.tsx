@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { AccountProfileV1, MyDoctorV1Api, VerificationDocumentV1 } from './lib/api-v1';
 const field = 'mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm';
 const question = 'Você é um profissional da saúde e deseja clinicar pelo APP? (Médico, fisioterapeuta, nutricionista...)';
+function under18(birthDate: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return false;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const value = (type: string) => Number(parts.find(part => part.type === type)?.value);
+  const [year, month, day] = birthDate.split('-').map(Number);
+  const today = `${value('year')}-${String(value('month')).padStart(2,'0')}-${String(value('day')).padStart(2,'0')}`;
+  const parsed = new Date(birthDate + 'T00:00:00Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === birthDate && birthDate <= today && year >= 1900 && value('year') - year - (value('month') < month || (value('month') === month && value('day') < day) ? 1 : 0) < 18;
+}
 export default function AccountProfilePanel({ api, onSaved, onContinue, onProfessional }: { api: MyDoctorV1Api; onSaved: (account: AccountProfileV1) => Promise<void>; onContinue: () => void; onProfessional: () => void }) {
   const [data, setData] = useState<AccountProfileV1 | null>(null);
   const [document, setDocument] = useState<VerificationDocumentV1 | null>(null);
@@ -43,6 +52,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     }, 350);
     return () => { current = false; clearTimeout(debounce); clearTimeout(timeout); controller.abort(); };
   }, [data?.postalCode, data?.country]);
+  useEffect(() => { if (kind === 'Certidão de nascimento' && !under18(data?.birthDate ?? '')) setKind('CNH'); }, [data?.birthDate, kind]);
   async function save() {
     if (!data || busy || cepLoading) return; setBusy(true); setMessage('');
     try {
@@ -98,8 +108,8 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
       <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-bold">Identificação</legend>
         {text('CPF (opcional)', 'cpf', 14)}{text('RG (opcional)', 'rg', 30)}
-        <p className="text-xs text-mute sm:col-span-2">Você também pode guardar um documento de identificação. Se solicitar acesso profissional, o administrador poderá consultá-lo na validação.</p>
-        <label className="text-xs font-bold">Tipo de documento<select value={kind} onChange={e => setKind(e.target.value)} className={field}><option>CNH</option><option>RG</option><option>Passaporte</option><option>Certidão de nascimento</option></select></label>
+        <p className="text-xs text-mute sm:col-span-2">Você também pode guardar um documento de identificação. Certidão de nascimento é permitida apenas para menores de 18 anos. Se solicitar acesso profissional, o administrador poderá consultá-lo na validação.</p>
+        <label className="text-xs font-bold">Tipo de documento<select value={kind} onChange={e => setKind(e.target.value)} className={field}><option>CNH</option><option>RG</option><option>Passaporte</option>{under18(data.birthDate) && <option>Certidão de nascimento</option>}</select></label>
         <label className="min-w-0 text-xs font-bold">Anexar documento (opcional)<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e => setFile(e.target.files?.[0] ?? null)} className={field} /><span className="mt-1 block font-normal text-mute">PDF ou imagem, até 3 MB. {file && `Selecionado: ${file.name}`}</span></label>
         {document && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line p-3 text-xs sm:col-span-2"><span className="min-w-0 break-words">{document.kind} · {document.filename}</span><button type="button" className="font-bold text-moss-700 underline" onClick={() => void api.openVerificationDocument('account:' + document.id).catch(error => setMessage(error.message))}>Abrir</button><button type="button" className="text-danger-600" onClick={() => { if (!window.confirm('Remover o documento de identificação?')) return; setBusy(true); void api.removeIdentityDocument(document.id).then(() => setDocument(null)).catch(error => setMessage(error.message)).finally(() => setBusy(false)); }}>Remover</button></div>}
       </fieldset>
