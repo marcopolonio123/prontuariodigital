@@ -113,8 +113,10 @@ router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Re
   if (patientIds.length === 0) return res.json([]);
 
   const rows = await prisma.accessRequest.findMany({
-    where: { patientId: { in: patientIds }, status: 'pending' },
+    where: { patientId: { in: patientIds } },
+    take: 200,
     include: {
+      grant: { select: { id: true, validUntil: true, revokedAt: true } },
       patient: { select: { name: true } },
       requester: { select: { name: true } },
       practitioner: { include: { registrations: { include: { authority: true } } } },
@@ -123,7 +125,11 @@ router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Re
   });
 
   const now = Date.now();
-  return res.json(rows.filter((row) => !row.expiresAt || row.expiresAt.getTime() > now).map((row) => ({
+  return res.json(rows.map((row) => ({
+    status: row.status === 'pending' && row.expiresAt && row.expiresAt.getTime() <= now ? 'expired' : row.status === 'approved' && row.grant?.revokedAt ? 'revoked' : row.status === 'approved' && row.grant?.validUntil && row.grant.validUntil.getTime() <= now ? 'expired' : row.status,
+    grantId: row.grant?.id ?? null,
+    grantValidUntil: row.grant?.validUntil?.toISOString() ?? null,
+    grantRevokedAt: row.grant?.revokedAt?.toISOString() ?? null,
     id: row.id,
     patientId: row.patientId,
     patientName: row.patient.name,
@@ -151,19 +157,35 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
   if (request.patient.ownerUserId !== req.userId) return fail(res, 403, 'Somente o titular deste prontuário pode decidir.');
   if (request.status !== 'pending') return fail(res, 409, 'Esta solicitação já foi decidida.');
   if (request.expiresAt && request.expiresAt.getTime() <= Date.now()) {
-    await prisma.accessRequest.update({ where: { id: request.id }, data: { status: 'expired', decidedAt: new Date(), decidedByUserId: req.userId! } });
+    await prisma.accessRequest.updateMany({ where: { id: request.id, status: 'pending' }, data: { status: 'expired', decidedAt: new Date(), decidedByUserId: req.userId! } });
     return fail(res, 410, 'Esta solicitação expirou.');
   }
 
   const note = String(req.body?.note ?? '').trim() || null;
   const now = new Date();
   if (decision === 'reject') {
-    const rejected = await prisma.accessRequest.update({ where: { id: request.id }, data: { status: 'rejected', decidedAt: now, decidedByUserId: req.userId!, decisionNote: note } });
+    const changed = await prisma.accessRequest.updateMany({ where: { id: request.id, status: 'pending' }, data: { status: 'rejected', decidedAt: now, decidedByUserId: req.userId!, decisionNote: note } });
+    if (!changed.count) return fail(res, 409, 'Esta solicitação já foi decidida.');
+    const rejected = await prisma.accessRequest.findUniqueOrThrow({ where: { id: request.id } });
     return res.json({ id: rejected.id, status: rejected.status, decidedAt: rejected.decidedAt?.toISOString() ?? null });
   }
 
-  const validUntil = new Date(now.getTime() + GRANT_TTL_HOURS * 60 * 60 * 1000);
+  let validUntil: Date | null = new Date(now.getTime() + GRANT_TTL_HOURS * 60 * 60 * 1000);
+  const duration = req.body?.duration;
+  if (duration === 'indefinite') validUntil = null;
+  else if (duration === 'until') {
+    const raw = req.body?.validUntil;
+    if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(raw)) return fail(res, 400, 'Informe data, horário e fuso do término do acesso.');
+    validUntil = new Date(raw);
+    if (!Number.isFinite(validUntil.getTime()) || validUntil.getTime() <= now.getTime()) return fail(res, 400, 'O término do acesso deve ser uma data e horário no futuro.');
+  } else if (duration !== undefined) return fail(res, 400, 'Escolha acesso por tempo indeterminado ou até data e horário.');
+  try {
   const result = await prisma.$transaction(async (tx) => {
+    // Lock professional row to serialize approval against suspension/revalidation.
+    const verified = await tx.practitioner.updateMany({ where: { id: request.practitionerId ?? '', active: true, verificationStatus: 'verified' }, data: { updatedAt: new Date() } });
+    if (!verified.count) throw new Error('UNVERIFIED');
+    const claimed = await tx.accessRequest.updateMany({ where: { id: request.id, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, data: { status: 'approved', decidedAt: now, decidedByUserId: req.userId!, decisionNote: note } });
+    if (!claimed.count) throw new Error('DECIDED');
     await tx.accessGrant.updateMany({
       where: { accountId: request.requesterUserId, patientId: request.patientId, revokedAt: null },
       data: { revokedAt: now },
@@ -191,6 +213,28 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
   });
 
   return res.json({ id: result.approved.id, status: result.approved.status, decidedAt: result.approved.decidedAt?.toISOString() ?? null, grantId: result.grant.id, validUntil: result.grant.validUntil?.toISOString() ?? null });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    return fail(res, code === 'UNVERIFIED' ? 403 : code === 'DECIDED' ? 409 : 503, code === 'UNVERIFIED' ? 'Este profissional não possui validação ativa. Não é possível autorizar o acesso.' : code === 'DECIDED' ? 'Esta solicitação já foi decidida. Atualize a lista.' : 'Não foi possível autorizar. Atualize a lista para conferir o status antes de tentar novamente.');
+  }
+});
+
+router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res: Response) => {
+  try {
+    await prisma.$transaction(async tx => {
+      const request = await tx.accessRequest.findUnique({ where: { id: req.params.id }, include: { patient: true } });
+      if (!request) throw new Error('NOT_FOUND');
+      if (request.patient.ownerUserId !== req.userId) throw new Error('FORBIDDEN');
+      if (request.status !== 'approved' && request.status !== 'revoked') throw new Error('STATUS');
+      await tx.accessRequest.update({ where: { id: request.id }, data: { status: 'revoked' } });
+      await tx.accessGrant.updateMany({ where: { sourceRequestId: request.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    });
+    res.json({ status: 'revoked' });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    fail(res, code === 'NOT_FOUND' ? 404 : code === 'FORBIDDEN' ? 403 : code === 'STATUS' ? 409 : 503, code === 'FORBIDDEN' ? 'Somente o titular deste prontuário pode revogar.' : code === 'STATUS' ? 'Não existe autorização ativa nesta solicitação.' : 'Não foi possível revogar o acesso. Atualize a lista e tente novamente.');
+  }
 });
 
 export default router;
+

@@ -62,6 +62,9 @@ export interface IncomingAccessRequestV1 {
   status: string;
   requestedAt: string;
   expiresAt?: string | null;
+  grantId?: string | null;
+  grantValidUntil?: string | null;
+  grantRevokedAt?: string | null;
 }
 
 export interface ProfessionalConsultationV1 {
@@ -184,9 +187,10 @@ export class MyDoctorV1Api {
   listProfessionalAccessRequests() { return this.req<ProfessionalAccessRequestV1[]>('/professional/access-requests'); }
   requestPatientAccess(patientId: string) { return this.req<ProfessionalAccessRequestV1>('/professional/access-requests', { method: 'POST', body: JSON.stringify({ patientId }) }); }
   listIncomingAccessRequests() { return this.req<IncomingAccessRequestV1[]>('/access-requests/incoming'); }
-  decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }); }
+  decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string, duration?: 'indefinite' | 'until', validUntil?: string) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note, duration, validUntil }) }); }
 
   listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
+  revokePatientAccess(id: string) { return this.req<{ status: string }>(`/access-requests/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); }
   createProfessionalConsultation(input: { accessRequestId: string; title: string; occurredAt: string; organizationName?: string; notes?: string }) {
     return this.req<HealthEventV1>('/professional/consultations', { method: 'POST', body: JSON.stringify(input) });
   }
@@ -261,3 +265,4 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+

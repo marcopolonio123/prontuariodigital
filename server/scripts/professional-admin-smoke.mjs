@@ -51,9 +51,34 @@ try {
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'aprovação concedeu acesso ao paciente');
   row = await reviewRow(); assert.equal(row.history.length, 1); assert.equal(row.history[0].actorName, 'Administrador teste');
   const access = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
-  const permission = await call('/access-requests/' + access.body.id + '/decision', patient.token, { decision: 'approve' });
+  const incoming = await call('/access-requests/incoming', patient.token);
+  assert.equal(incoming.body.find(item => item.id === access.body.id).status, 'pending');
+  assert.equal((await call('/access-requests/' + access.body.id + '/decision', admin.token, { decision: 'approve', duration: 'indefinite' })).status, 403);
+  assert.equal((await call('/access-requests/' + access.body.id + '/decision', patient.token, { decision: 'approve', duration: 'until', validUntil: '2000-01-01T00:00:00Z' })).status, 400);
+  const permission = await call('/access-requests/' + access.body.id + '/decision', patient.token, { decision: 'approve', duration: 'indefinite' });
   assert.equal(permission.status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200);
+  assert.equal(permission.body.validUntil, null);
+  assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === access.body.id).status, 'approved');
+  assert.equal((await call('/access-requests/' + access.body.id + '/revoke', admin.token, {})).status, 403);
+  assert.equal((await call('/access-requests/' + access.body.id + '/revoke', patient.token, {})).status, 200);
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
+  assert.equal((await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Teste', occurredAt: new Date().toISOString() })).status, 403);
+  const timed = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
+  const until = new Date(Date.now() + 3600000).toISOString();
+  const decisions = await Promise.all([call('/access-requests/' + timed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'until', validUntil: until }), call('/access-requests/' + timed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'until', validUntil: until })]);
+  assert.equal(decisions.filter(result => result.status === 200).length, 1);
+  assert.equal(decisions.filter(result => result.status === 409).length, 1);
+  const timedGrant = decisions.find(result => result.status === 200).body;
+  assert.equal(timedGrant.validUntil, until);
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200);
+  await db.accessGrant.update({ where: { id: timedGrant.grantId }, data: { validUntil: new Date(Date.now() - 1000) } });
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
+  assert.equal((await call('/professional/consultations', professional.token, { accessRequestId: timed.body.id, title: 'Teste', occurredAt: new Date().toISOString() })).status, 403);
+  assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === timed.body.id).status, 'expired');
+  const renewed = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
+  assert.equal((await call('/access-requests/' + renewed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'indefinite' })).status, 200);
+  row = await reviewRow();
   assert.equal((await call(path, admin.token, { ...input, decision: 'suspend', expectedUpdatedAt: row.updatedAt })).status, 200);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 403);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'suspensão manteve acesso');
@@ -80,3 +105,4 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+

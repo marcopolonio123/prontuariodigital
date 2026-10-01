@@ -19,6 +19,8 @@ type ShellView = 'administration' | 'app' | 'professional' | 'clinicar' | 'acces
 export default function V1ProfessionalShell() {
   const [view, setView] = useState<ShellView>('app');
   const [token, setToken] = useState(readV1SessionToken());
+  const [canClinicar, setCanClinicar] = useState(false);
+  const [checkingClinicar, setCheckingClinicar] = useState(true);
   const [canAdmin, setCanAdmin] = useState(false);
   const api = useMemo(() => new MyDoctorV1Api(defaultV1ApiUrl(), token), [token]);
 
@@ -29,6 +31,12 @@ export default function V1ProfessionalShell() {
     return () => { current = false; };
   }, [api, token]);
   useEffect(() => { if (!token) setView('app'); }, [token]);
+  useEffect(() => {
+    let current = true; setCanClinicar(false); setCheckingClinicar(true);
+    if (token && view === 'clinicar') Promise.all([api.getAccount(), api.getProfessionalProfile()]).then(([account, profile]) => { if (current) setCanClinicar(Boolean(account.isHealthProfessional && profile?.active && profile.verificationStatus === 'verified')); }).catch(() => {}).finally(() => { if (current) setCheckingClinicar(false); });
+    else setCheckingClinicar(false);
+    return () => { current = false; };
+  }, [api, token, view]);
 
   const title = view === 'administration' ? 'Administração' : view === 'professional' ? 'Perfil profissional' : view === 'clinicar' ? 'Clinicar' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
 
@@ -44,10 +52,11 @@ export default function V1ProfessionalShell() {
         {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift"><h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2><p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p><button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button></section>
           : view === 'administration' ? <ProfessionalAdminPanel api={api} />
           : view === 'professional' ? <ProfessionalProfilePanel api={api} />
-          : view === 'clinicar' ? <div className="space-y-5"><ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} /><ProfessionalConsultationWorkspace api={api} /></div>
+          : view === 'clinicar' ? (checkingClinicar ? <p role="status">Verificando habilitação profissional...</p> : !canClinicar ? <section className="rounded-xl border border-line bg-card p-5">Clinicar será liberado após a aprovação do seu perfil profissional.</section> : <div className="space-y-5"><ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} /><ProfessionalConsultationWorkspace api={api} /></div>)
           : view === 'access-requests' ? <AccessRequestsPanel api={api} />
           : <ConsultationConfirmationsPanel api={api} />}
       </div>
     </main>}
   </>;
 }
+

@@ -127,6 +127,12 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
   const [message, setMessage] = useState('');
   const [view, setView] = useState<AppView>('welcome');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [canClinicar, setCanClinicar] = useState(false);
+  useEffect(() => {
+    let current = true; setCanClinicar(false);
+    if (token && user?.isHealthProfessional && menuOpen) api.getProfessionalProfile().then(profile => { if (current) setCanClinicar(Boolean(profile?.active && profile.verificationStatus === 'verified')); }).catch(() => {});
+    return () => { current = false; };
+  }, [api, token, user?.isHealthProfessional, menuOpen]);
 
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [showRecordForm, setShowRecordForm] = useState(false);
@@ -451,7 +457,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
 
   const menu = user && menuOpen ? <div className="mb-5 rounded-2xl border border-line bg-white p-2 shadow-lift"><div className="grid min-w-0 gap-1 sm:grid-cols-2 lg:grid-cols-3">
     {([['account', 'Meu cadastro'], ['welcome', 'Início'], ['record', 'Prontuário'], ['vitals', 'Sinais vitais'], ['diary', 'Meu Diário'], ['family-history', 'Histórico familiar'], ['medications', 'Agenda de medicamentos'], ['insurance', 'Convênios'], ['consultant', 'Consultor'], ['profiles', 'Perfis e dependentes']] as [AppView, string][]).map(([key, label]) => <button key={key} onClick={() => go(key)} className={`rounded-xl px-4 py-3 text-left text-sm font-bold ${view === key ? 'bg-moss-50 text-moss-800' : 'text-ink hover:bg-paper'}`}>{label}</button>)}
-    {onNavigate && ([...(user.isHealthProfessional ? [['professional', 'Perfil profissional'], ['clinicar', 'Clinicar']] : []), ['access-requests', 'Solicitações de acesso'], ['consultation-confirmations', 'Atendimentos para confirmar'], ...(canAdmin ? [['administration', 'Administração']] : [])] as Array<Parameters<NonNullable<typeof onNavigate>>[0][]>).map(([key, label]) => <button type="button" key={key} onClick={() => { setMenuOpen(false); onNavigate(key); }} className="rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper">{label}</button>)}
+    {onNavigate && ([...(user.isHealthProfessional ? [['professional', 'Perfil profissional'], ['clinicar', 'Clinicar']] : []), ['access-requests', 'Solicitações de acesso'], ['consultation-confirmations', 'Atendimentos para confirmar'], ...(canAdmin ? [['administration', 'Administração']] : [])] as Array<Parameters<NonNullable<typeof onNavigate>>[0][]>).map(([key, label]) => <button type="button" key={key} disabled={key === 'clinicar' && !canClinicar} title={key === 'clinicar' && !canClinicar ? 'Disponível após aprovação do perfil profissional' : undefined} onClick={() => { if (key === 'clinicar' && !canClinicar) return; setMenuOpen(false); onNavigate(key); }} className="rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-40">{label}{key === 'clinicar' && !canClinicar && <span className="ml-2 text-xs font-normal">Aguardando validação</span>}</button>)}
     <button onClick={logout} className="rounded-xl px-4 py-3 text-left text-sm font-bold text-danger-600 hover:bg-paper">Sair</button>
   </div></div> : null;
 
@@ -564,3 +570,4 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><h1 className="break-words font-display text-2xl font-bold text-ink sm:text-3xl">Sua saúde e seu bem-estar. No seu controle.</h1><p className="mt-1 text-sm text-mute">MyDoctor reúne sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
+
