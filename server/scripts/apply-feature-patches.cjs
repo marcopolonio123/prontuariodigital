@@ -22,13 +22,14 @@ async function main() {
       to_regclass('"MedicationSchedule"') IS NOT NULL AS schedule_ready,
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'MedicationSchedule' AND column_name = 'continuousUse') AS schedule_mode_ready,
       to_regclass('"MedicationReminderDelivery"') IS NOT NULL AS delivery_ready,
-      to_regclass('"ProfessionalVerificationDecision"') IS NOT NULL AS admin_ready`);
+      to_regclass('"ProfessionalVerificationDecision"') IS NOT NULL AS admin_ready,
+      to_regclass('"ProfessionalVerificationDocument"') IS NOT NULL AS documents_ready`);
     if (Object.values(ready.rows[0]).every(value => value === true)) {
       await client.query('COMMIT');
       console.info('MyDoctor: schema dos recursos já preparado.');
       return;
     }
-    for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql']) {
+    for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql', 'professional-documents.sql']) {
       await client.query(fs.readFileSync(path.join(__dirname, '..', 'prisma', filename), 'utf8'));
     }
     await client.query('COMMIT');
@@ -42,6 +43,3 @@ main().catch(() => {
   console.error('MyDoctor: não foi possível preparar o banco. Build interrompido; verifique conexão e permissões.');
   process.exitCode = 1;
 });
-
-
-

@@ -14,68 +14,7 @@ import {
   subscribeV1SessionToken,
 } from './lib/api-v1';
 
-const ADMIN_EVENT = 'mydoctor:open-administration';
-const PROFESSIONAL_EVENT = 'mydoctor:open-professional-profile';
-const CLINICAR_EVENT = 'mydoctor:open-clinicar';
-const ACCESS_REQUESTS_EVENT = 'mydoctor:open-access-requests';
-const CONSULTATION_CONFIRMATIONS_EVENT = 'mydoctor:open-consultation-confirmations';
-
 type ShellView = 'administration' | 'app' | 'professional' | 'clinicar' | 'access-requests' | 'consultation-confirmations';
-
-function addProfessionalMenuEntries(canAdmin = false) {
-  const buttons = Array.from(document.querySelectorAll('button'));
-  const logoutButton = buttons.find((button) => button.textContent?.trim() === 'Sair');
-  if (!logoutButton?.parentElement) return;
-  const menuGrid = logoutButton.parentElement;
-  const oldAdminButton = menuGrid.querySelector('[data-mydoctor-admin-entry="true"]');
-  if (!canAdmin) oldAdminButton?.remove();
-  if (canAdmin && !oldAdminButton) {
-    const button = document.createElement('button');
-    button.type = 'button'; button.dataset.mydoctorAdminEntry = 'true';
-    button.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
-    button.textContent = 'Administração';
-    button.addEventListener('click', () => window.dispatchEvent(new Event(ADMIN_EVENT)));
-    menuGrid.insertBefore(button, logoutButton);
-  }
-
-
-  if (!menuGrid.querySelector('[data-mydoctor-consultation-confirmations-entry="true"]')) {
-    const confirmationButton = document.createElement('button');
-    confirmationButton.type = 'button';
-    confirmationButton.dataset.mydoctorConsultationConfirmationsEntry = 'true';
-    confirmationButton.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
-    confirmationButton.textContent = 'Atendimentos para confirmar';
-    confirmationButton.addEventListener('click', () => window.dispatchEvent(new Event(CONSULTATION_CONFIRMATIONS_EVENT)));
-    menuGrid.insertBefore(confirmationButton, logoutButton);
-  }
-  if (!menuGrid.querySelector('[data-mydoctor-access-requests-entry="true"]')) {
-    const accessButton = document.createElement('button');
-    accessButton.type = 'button';
-    accessButton.dataset.mydoctorAccessRequestsEntry = 'true';
-    accessButton.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
-    accessButton.textContent = 'Solicitações de acesso';
-    accessButton.addEventListener('click', () => window.dispatchEvent(new Event(ACCESS_REQUESTS_EVENT)));
-    menuGrid.insertBefore(accessButton, logoutButton);
-  }
-  if (!menuGrid.querySelector('[data-mydoctor-professional-entry="true"]')) {
-    const professionalButton = document.createElement('button');
-    professionalButton.type = 'button';
-    professionalButton.dataset.mydoctorProfessionalEntry = 'true';
-    professionalButton.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
-    professionalButton.textContent = 'Perfil profissional';
-    professionalButton.addEventListener('click', () => window.dispatchEvent(new Event(PROFESSIONAL_EVENT)));
-    menuGrid.insertBefore(professionalButton, logoutButton);
-  }
-  if (!menuGrid.querySelector('[data-mydoctor-clinicar-entry="true"]')) {
-    const clinicarButton = document.createElement('button');
-    clinicarButton.type = 'button';
-    clinicarButton.dataset.mydoctorClinicarEntry = 'true';
-    clinicarButton.className = 'rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper';
-    clinicarButton.textContent = 'Clinicar';
-    clinicarButton.addEventListener('click', () => window.dispatchEvent(new Event(CLINICAR_EVENT)));
-    menuGrid.insertBefore(clinicarButton, logoutButton);
-  }
-}
 
 export default function V1ProfessionalShell() {
   const [view, setView] = useState<ShellView>('app');
@@ -89,35 +28,13 @@ export default function V1ProfessionalShell() {
     if (token) api.getAdminSession().then(result => { if (current) setCanAdmin(result.authorized); }).catch(() => { if (current) setCanAdmin(false); });
     return () => { current = false; };
   }, [api, token]);
-  useEffect(() => {
-    const observer = new MutationObserver(() => addProfessionalMenuEntries(canAdmin));
-    observer.observe(document.body, { childList: true, subtree: true });
-    addProfessionalMenuEntries(canAdmin);
-    const openAdministration = () => setView('administration');
-    window.addEventListener(ADMIN_EVENT, openAdministration);
-    const openProfessional = () => setView('professional');
-    const openClinicar = () => setView('clinicar');
-    const openAccessRequests = () => setView('access-requests');
-    const openConsultationConfirmations = () => setView('consultation-confirmations');
-    window.addEventListener(PROFESSIONAL_EVENT, openProfessional);
-    window.addEventListener(CLINICAR_EVENT, openClinicar);
-    window.addEventListener(ACCESS_REQUESTS_EVENT, openAccessRequests);
-    window.addEventListener(CONSULTATION_CONFIRMATIONS_EVENT, openConsultationConfirmations);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener(ADMIN_EVENT, openAdministration);
-      window.removeEventListener(PROFESSIONAL_EVENT, openProfessional);
-      window.removeEventListener(CLINICAR_EVENT, openClinicar);
-      window.removeEventListener(ACCESS_REQUESTS_EVENT, openAccessRequests);
-      window.removeEventListener(CONSULTATION_CONFIRMATIONS_EVENT, openConsultationConfirmations);
-    };
-  }, [canAdmin]);
+  useEffect(() => { if (!token) setView('app'); }, [token]);
 
   const title = view === 'administration' ? 'Administração' : view === 'professional' ? 'Perfil profissional' : view === 'clinicar' ? 'Clinicar' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
 
   return <>
     <RecordDictationEnhancer />
-    <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp /></div>
+    <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp canAdmin={canAdmin} onNavigate={setView} /></div>
     {view !== 'app' && <main className="min-h-screen bg-paper px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -134,4 +51,3 @@ export default function V1ProfessionalShell() {
     </main>}
   </>;
 }
-

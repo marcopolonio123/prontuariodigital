@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  type VerificationDocumentV1,
   type MyDoctorV1Api,
   type ProfessionalProfileV1,
   type UpsertProfessionalProfileInput,
@@ -43,12 +44,16 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
   const [council, setCouncil] = useState<UpsertProfessionalProfileInput['council']>('CRM');
   const [registration, setRegistration] = useState('');
   const [region, setRegion] = useState('');
+  const [documents, setDocuments] = useState<VerificationDocumentV1[]>([]);
+  const [identityFile, setIdentityFile] = useState<File | null>(null);
+  const [councilFile, setCouncilFile] = useState<File | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const current = await api.getProfessionalProfile();
       setProfile(current);
+      setDocuments(await api.listVerificationDocuments());
       if (current) {
         setProfession(current.profession ?? '');
         setSpecialty(current.specialty ?? '');
@@ -85,7 +90,9 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
         region: region || undefined,
       });
       setProfile(saved);
-      setMessage('Dados profissionais enviados para validação.');
+      for (const [kind, file] of [['identity', identityFile], ['council', councilFile]] as const) { if (file) { await api.uploadVerificationDocument(kind, file); if (kind === 'identity') setIdentityFile(null); else setCouncilFile(null); } }
+      setDocuments(await api.listVerificationDocuments());
+      setMessage('Cadastro e documentos enviados para análise do administrador.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Não foi possível salvar o perfil profissional.');
     } finally {
@@ -132,10 +139,13 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
           </select>
         </label>
         <div className="min-w-0 md:col-span-2">
-          <p className="text-xs leading-5 text-mute">Na próxima etapa desta jornada serão adicionados os documentos de comprovação de identidade e do conselho profissional. O envio destes dados agora não equivale à aprovação automática.</p>
+          <p className="text-xs leading-5 text-mute">Anexe a identidade e o comprovante do conselho profissional. PDF, JPG, PNG ou WEBP, até 3 MB por arquivo e 6 documentos no total. Somente você e a administração podem acessá-los. A aprovação depende da análise do administrador.</p>
         </div>
+        <label className="text-xs font-bold text-mute">Documento de identidade<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e => setIdentityFile(e.target.files?.[0] ?? null)} className={fieldClass()} />{identityFile && <span>{identityFile.name}</span>}</label>
+        <label className="text-xs font-bold text-mute">Comprovante do conselho<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e => setCouncilFile(e.target.files?.[0] ?? null)} className={fieldClass()} />{councilFile && <span>{councilFile.name}</span>}</label>
+        {documents.length > 0 && <div className="md:col-span-2 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th className="py-2">Documento enviado</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>{documents.map(doc => <tr key={doc.id} className="border-t border-line"><td className="py-2">{doc.filename}</td><td>{doc.kind === 'identity' ? 'Identidade' : 'Conselho'}</td><td><button disabled={saving} type="button" className="mr-3 text-moss-700 underline" onClick={() => void api.openVerificationDocument(doc.id).catch(error => setMessage(error.message))}>Abrir</button><button disabled={saving} type="button" className="text-danger-600" onClick={() => { if (!window.confirm('Remover documento? O cadastro precisará de nova análise.')) return; setSaving(true); void api.removeVerificationDocument(doc.id).then(load).catch(error => setMessage(error.message)).finally(() => setSaving(false)); }}>Remover</button></td></tr>)}</tbody></table></div>}
         <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-          <button type="button" disabled={saving} onClick={() => void save()} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Salvando...' : profile ? 'Atualizar dados profissionais' : 'Enviar para validação'}</button>
+          <button type="button" disabled={saving} onClick={() => void save()} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Salvando...' : 'Enviar cadastro e documentos para validação'}</button>
           {message && <span className="text-sm text-mute">{message}</span>}
         </div>
       </div>

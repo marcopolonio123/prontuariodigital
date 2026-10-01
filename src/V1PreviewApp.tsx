@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import AccountProfilePanel from './AccountProfilePanel';
 import MedicationAgenda from './components/MedicationAgenda';
 import DictationTextarea from './components/DictationTextarea';
 import {
   MyDoctorV1Api,
   defaultV1ApiUrl,
+  readV1SessionToken,
   type HealthEventV1,
   type ConsultantUsageV1,
   type LoginStartResponse,
@@ -29,7 +31,7 @@ const BRAZIL_UFS = [
   'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
 ] as const;
 
-type AppView = 'welcome' | 'record' | 'vitals' | 'diary' | 'family-history' | 'medications' | 'profiles' | 'insurance' | 'consultant';
+type AppView = 'account' | 'welcome' | 'record' | 'vitals' | 'diary' | 'family-history' | 'medications' | 'profiles' | 'insurance' | 'consultant';
 type AuthView = 'login' | 'register' | 'verify';
 type VitalType = (typeof VITAL_TYPES)[number][0];
 
@@ -101,15 +103,16 @@ function localDateTimeInputValue(date = new Date()) {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-export default function V1PreviewApp() {
+export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmin?: boolean; onNavigate?: (view: 'app' | 'professional' | 'clinicar' | 'access-requests' | 'consultation-confirmations' | 'administration') => void }) {
   const [apiUrl] = useState(defaultV1ApiUrl());
   const api = useMemo(() => new MyDoctorV1Api(apiUrl), [apiUrl]);
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(readV1SessionToken);
   const [user, setUser] = useState<V1User | null>(null);
   const [authView, setAuthView] = useState<AuthView>('login');
   const [challenge, setChallenge] = useState<LoginStartResponse | null>(null);
   const [registerName, setRegisterName] = useState('');
   const [registerPhone, setRegisterPhone] = useState('');
+  const [registerProfessional, setRegisterProfessional] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -226,11 +229,25 @@ export default function V1PreviewApp() {
     }
   };
 
+  useEffect(() => {
+    const savedToken = readV1SessionToken();
+    if (!savedToken) return;
+    let current = true;
+    api.setToken(savedToken);
+    void api.getAccount().then(async account => {
+      if (!current) return;
+      setUser(account); setToken(savedToken);
+      await loadProfiles(api);
+      if (current && !account.completed) setView('account');
+    }).catch(error => { if (current) { api.setToken(''); setToken(''); setMessage(error instanceof Error ? error.message : 'Entre novamente.'); } });
+    return () => { current = false; };
+  }, [api]);
+
   const createAccount = () => run(async () => {
     if (!registerName.trim()) throw new Error('Informe seu nome.');
     if (!email.trim()) throw new Error('Informe seu e-mail.');
     if (password.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres.');
-    await api.register({ name: registerName.trim(), email: email.trim(), password, phone: registerPhone.trim() || undefined });
+    await api.register({ name: registerName.trim(), email: email.trim(), password, phone: registerPhone.trim() || undefined, isHealthProfessional: registerProfessional });
     setRegisterName(''); setRegisterPhone(''); setPassword(''); setShowPassword(false); setAuthView('login');
     setMessage('Cadastro concluído. Agora entre com seu e-mail e senha.');
   });
@@ -247,7 +264,7 @@ export default function V1PreviewApp() {
     if (!challenge) return;
     const result = await api.verifyPasswordLogin({ challengeId: challenge.challengeId, code });
     setToken(result.token); setUser(result.user); api.setToken(result.token);
-    await loadProfiles(api); setView('welcome'); setMessage('');
+    await loadProfiles(api); const account = await api.getAccount(); setUser(account); setView(account.completed ? 'welcome' : 'account'); setMessage('');
   });
 
   const logout = () => {
@@ -409,6 +426,7 @@ export default function V1PreviewApp() {
       <label className="mt-3 block text-xs font-bold text-mute">E-mail</label><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputClass()} mt-1`} type="email" autoComplete="email" />
       <label className="mt-3 block text-xs font-bold text-mute">Celular (opcional)</label><input value={registerPhone} onChange={(e) => setRegisterPhone(e.target.value)} className={`${inputClass()} mt-1`} inputMode="tel" autoComplete="tel" />
       <label className="mt-3 block text-xs font-bold text-mute">Crie uma senha</label>{passwordField('new-password')}
+      <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={registerProfessional} onChange={e => setRegisterProfessional(e.target.checked)} style={{ width: 16, height: 16, maxWidth: 16, flex: '0 0 16px' }} />Você é profissional de saúde?</label><p className="mt-1 text-xs text-mute">Se marcar, poderá completar os dados profissionais e enviar documentos após entrar.</p>
       <button disabled={busy} onClick={() => void createAccount()} className="mt-5 w-full rounded-xl bg-pine-900 px-4 py-3 font-bold text-white disabled:opacity-50">Cadastrar</button>
       <p className="mt-5 text-center text-sm text-mute">Já tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('login'); setShowPassword(false); }}>Entrar</button></p>
     </Card>;
@@ -432,7 +450,8 @@ export default function V1PreviewApp() {
   };
 
   const menu = user && menuOpen ? <div className="mb-5 rounded-2xl border border-line bg-white p-2 shadow-lift"><div className="grid min-w-0 gap-1 sm:grid-cols-2 lg:grid-cols-3">
-    {([['welcome', 'Início'], ['record', 'Prontuário'], ['vitals', 'Sinais vitais'], ['diary', 'Meu Diário'], ['family-history', 'Histórico familiar'], ['medications', 'Agenda de medicamentos'], ['insurance', 'Convênios'], ['consultant', 'Consultor'], ['profiles', 'Perfis e dependentes']] as [AppView, string][]).map(([key, label]) => <button key={key} onClick={() => go(key)} className={`rounded-xl px-4 py-3 text-left text-sm font-bold ${view === key ? 'bg-moss-50 text-moss-800' : 'text-ink hover:bg-paper'}`}>{label}</button>)}
+    {([['account', 'Meu cadastro'], ['welcome', 'Início'], ['record', 'Prontuário'], ['vitals', 'Sinais vitais'], ['diary', 'Meu Diário'], ['family-history', 'Histórico familiar'], ['medications', 'Agenda de medicamentos'], ['insurance', 'Convênios'], ['consultant', 'Consultor'], ['profiles', 'Perfis e dependentes']] as [AppView, string][]).map(([key, label]) => <button key={key} onClick={() => go(key)} className={`rounded-xl px-4 py-3 text-left text-sm font-bold ${view === key ? 'bg-moss-50 text-moss-800' : 'text-ink hover:bg-paper'}`}>{label}</button>)}
+    {onNavigate && ([...(user.isHealthProfessional ? [['professional', 'Perfil profissional'], ['clinicar', 'Clinicar']] : []), ['access-requests', 'Solicitações de acesso'], ['consultation-confirmations', 'Atendimentos para confirmar'], ...(canAdmin ? [['administration', 'Administração']] : [])] as Array<Parameters<NonNullable<typeof onNavigate>>[0][]>).map(([key, label]) => <button type="button" key={key} onClick={() => { setMenuOpen(false); onNavigate(key); }} className="rounded-xl px-4 py-3 text-left text-sm font-bold text-ink hover:bg-paper">{label}</button>)}
     <button onClick={logout} className="rounded-xl px-4 py-3 text-left text-sm font-bold text-danger-600 hover:bg-paper">Sair</button>
   </div></div> : null;
 
@@ -541,10 +560,7 @@ export default function V1PreviewApp() {
   const consultantSummary = (() => { const latest = new Map<string, HealthEventV1>(); vitalEvents.forEach((event) => { const type = String(event.payload?.vitalType ?? 'vital'); if (!latest.has(type)) latest.set(type, event); }); return { latestVitals: [...latest.values()], recentClinical: clinicalEvents.slice(0, 5), insurance: insuranceEvents[0] }; })();
   const consultantView = <div className="space-y-5">{consultantChat}<Card><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Consultor MyDoctor</p><h2 className="mt-1 font-display text-2xl font-bold text-ink">Prepare sua próxima consulta</h2><p className="mt-2 text-sm leading-6 text-mute">Organiza o que já existe no prontuário para facilitar a conversa com o profissional de saúde. Não faz diagnóstico.</p></Card><Card><h3 className="font-display text-xl font-bold text-ink">Resumo de {activeProfile?.name ?? 'perfil'}</h3>{!activeProfile ? <p className="mt-3 text-sm text-mute">Escolha um perfil.</p> : <div className="mt-4 space-y-4"><div><p className="text-xs font-bold uppercase text-mute">Últimos sinais vitais</p>{consultantSummary.latestVitals.length === 0 ? <p className="text-sm text-mute">Nenhum sinal vital registrado.</p> : consultantSummary.latestVitals.map((event) => <p key={event.id} className="text-sm text-ink">• {event.title}</p>)}</div><div><p className="text-xs font-bold uppercase text-mute">Convênio</p><p className="text-sm text-ink">{consultantSummary.insurance?.title ?? 'Nenhum convênio cadastrado.'}</p></div><div><p className="text-xs font-bold uppercase text-mute">Histórico familiar</p><p className="whitespace-pre-wrap text-sm text-ink">{familyHistoryEvent?.payload?.text ? 'Histórico familiar disponível para consulta pelo consultor.' : 'Nenhum histórico familiar registrado.'}</p></div><div><p className="text-xs font-bold uppercase text-mute">Eventos recentes</p>{consultantSummary.recentClinical.length === 0 ? <p className="text-sm text-mute">Nenhum evento clínico registrado.</p> : consultantSummary.recentClinical.map((event) => <p key={event.id} className="text-sm text-ink">• {event.title}</p>)}</div></div>}</Card></div>;
 
-  const activeView = view === 'medications' ? (activeProfile ? <MedicationAgenda key={activeProfile.id} api={api} profile={activeProfile} /> : <Card>Escolha um perfil.</Card>) : view === 'welcome' ? welcomeView : view === 'profiles' ? profilesView : view === 'vitals' ? vitalsView : view === 'diary' ? diaryView : view === 'family-history' ? familyHistoryView : view === 'insurance' ? insuranceView : view === 'consultant' ? consultantView : recordView;
+  const activeView = view === 'account' ? <AccountProfilePanel api={api} onProfessional={() => onNavigate?.('professional')} onSaved={async account => { setUser(account); await loadProfiles(api); }} onContinue={() => go('welcome')} /> : view === 'medications' ? (activeProfile ? <MedicationAgenda key={activeProfile.id} api={api} profile={activeProfile} /> : <Card>Escolha um perfil.</Card>) : view === 'welcome' ? welcomeView : view === 'profiles' ? profilesView : view === 'vitals' ? vitalsView : view === 'diary' ? diaryView : view === 'family-history' ? familyHistoryView : view === 'insurance' ? insuranceView : view === 'consultant' ? consultantView : recordView;
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><h1 className="break-words font-display text-2xl font-bold text-ink sm:text-3xl">Sua saúde e seu bem-estar. No seu controle.</h1><p className="mt-1 text-sm text-mute">MyDoctor reúne sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
-
-
-

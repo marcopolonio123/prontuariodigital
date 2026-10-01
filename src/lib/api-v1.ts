@@ -23,7 +23,9 @@ export function subscribeV1SessionToken(listener: (token: string) => void) {
 }
 
 export interface LoginStartResponse { challengeId: string; channel: MfaChannel; destinationMasked: string; expiresAt: string; developmentCode?: string; }
-export interface V1User { id: string; name: string; email: string; phone?: string | null; }
+export interface AccountProfileV1 extends V1User { birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
+export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
+export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
 export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; }
@@ -123,11 +125,28 @@ export interface AdminProfessionalV1 {
   id: string; name: string; email: string; profession: string; specialty: string | null;
   verificationStatus: string; active: boolean; updatedAt: string;
   registrations: Array<{ id: string; council: string; registration: string; region: string | null; status: string }>;
+  documents: VerificationDocumentV1[];
   history: Array<{ id: string; decision: string; status: string; actorName: string; note: string; evidence: string | null; createdAt: string }>;
 }
 export class MyDoctorV1Api {
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
+  getAccount() { return this.req<AccountProfileV1>('/account'); }
+  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
+  listVerificationDocuments() { return this.req<VerificationDocumentV1[]>('/professional/documents'); }
+  async uploadVerificationDocument(kind: string, file: File) {
+    if (file.size > 3 * 1024 * 1024) throw new Error('Cada documento pode ter até 3 MB.');
+    const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(file); });
+    return this.req<VerificationDocumentV1>('/professional/documents', { method: 'POST', body: JSON.stringify({ kind, filename: file.name, mimeType: file.type, data }) });
+  }
+  removeVerificationDocument(id: string) { return this.req<{ ok: boolean }>(`/professional/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  async openVerificationDocument(id: string, admin = false) {
+    const response = await fetch(this.url(`${admin ? '/admin' : '/professional'}/documents/${encodeURIComponent(id)}/download`), { headers: { Authorization: `Bearer ${this.token}` } });
+    if (!response.ok) throw new Error('Não foi possível abrir o documento.');
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
   listAdminProfessionals() { return this.req<AdminProfessionalV1[]>('/admin/professionals'); }
   decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; expectedUpdatedAt: string }) {
@@ -146,7 +165,7 @@ export class MyDoctorV1Api {
     return (await response.json()) as T;
   }
 
-  register(input: { name: string; email: string; password: string; phone?: string }) { return this.req<RegisterResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) }); }
+  register(input: { name: string; email: string; password: string; phone?: string; isHealthProfessional?: boolean }) { return this.req<RegisterResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) }); }
   startPasswordLogin(input: { email: string; password: string; channel: MfaChannel }) { return this.req<LoginStartResponse>('/auth/login/start', { method: 'POST', body: JSON.stringify(input) }); }
   verifyPasswordLogin(input: { challengeId: string; code: string }) { return this.req<LoginVerifyResponse>('/auth/login/verify', { method: 'POST', body: JSON.stringify(input) }); }
   getProfessionalProfile() { return this.req<ProfessionalProfileV1 | null>('/professional/profile'); }
@@ -233,8 +252,3 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
-
-
-
-
-
