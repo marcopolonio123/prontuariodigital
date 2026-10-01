@@ -48,7 +48,7 @@ try {
   assert.equal(row.documents.some(doc => doc.id === 'account:' + identity.body.id), true);
   const decision = { decision: 'approve', note: 'Teste de validação', evidence: 'Conferência simulada de identidade e conselho', checkedIdentityAndCouncil: true, registrationId: row.registrations[0].id, expectedUpdatedAt: row.updatedAt };
   assert.equal((await call(`/admin/professionals/${row.id}/decision`, admin.token, decision)).status, 200);
-  const replaced = await call('/account/document', owner.token, { ...identityInput, kind: 'Passaporte', expectedId: identity.body.id }); assert.equal(replaced.status, 201);
+  const replaced = await call('/account/document', owner.token, { ...identityInput, kind: 'Certidão de nascimento', expectedId: identity.body.id }); assert.equal(replaced.status, 201); assert.equal((await call('/account/document', owner.token)).body.kind, 'Certidão de nascimento');
   assert.equal((await call(`/account/documents/${identity.body.id}/download`, owner.token)).status, 404);
   assert.equal((await call('/professional/profile', owner.token)).body.verificationStatus, 'pending');
   uploaded = await call('/professional/documents', owner.token, { ...input, kind: 'council', filename: 'conselho.pdf' }); assert.equal(uploaded.status, 201);
