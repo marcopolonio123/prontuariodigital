@@ -11,13 +11,16 @@ const dom = new JSDOM('<div id="root"></div>', { url: 'https://mydoctor.test/' }
 for (const key of ['window', 'document', 'navigator', 'MutationObserver', 'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'Event', 'CustomEvent']) Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true });
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 window.sessionStorage.setItem('mydoctor.v1.sessionToken', 'test-session');
+window.localStorage.setItem('mydoctor.v1.activeProfileId', 'marco-clinical-patient');
+const event = (id, patientId, type, title, status = 'final') => ({ id, patientId, type, title, status, occurredAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), payload: {} });
+const healthEvents = [event('own', 'p1', 'consultation', 'Atendimento próprio'), event('foreign', 'marco-clinical-patient', 'consultation', 'Registro de outra conta'), event('family', 'p1', 'family_history', 'family_history'), event('diary', 'p1', 'wellbeing_diary', 'wellbeing_diary'), event('pending', 'p1', 'consultation', 'Atendimento pendente', 'pending_patient_confirmation')];
 let account = { id: 'u1', name: 'Pessoa teste', email: 'teste@mydoctor.test', phone: '', birthDate: '1980-01-01', sex: '', city: '', state: '', completed: true, isHealthProfessional: true, postalCode: '', street: '', neighborhood: '', country: 'Brasil', number: '42', complement: 'Casa' };
 let requests = [];
 globalThis.fetch = async (url, init = {}) => {
   if (String(url).includes('/api/v1/address/cep/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
   if (path === '/account' && init.method === 'PUT') account = { ...account, ...JSON.parse(init.body) };
-  const data = path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
+  const data = path === '/patients/p1/events' ? healthEvents : path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
   return { ok: true, status: 200, json: async () => data };
 };
 const outfile = '.navigation-test.cjs';
@@ -31,6 +34,11 @@ async function menu() { const button = document.querySelector('button[aria-label
 try {
   await settle(() => root.render(React.createElement(Shell))); await settle();
   assert.match(document.body.textContent, /Olá, Pessoa/);
+  assert.equal(window.localStorage.getItem('mydoctor.v1.activeProfileId'), 'p1', 'Paciente lembrado de outra conta foi selecionado');
+  await menu(); await click('Prontuário');
+  assert.match(document.body.textContent, /Atendimento próprio/);
+  assert.doesNotMatch(document.body.textContent, /Registro de outra conta|family_history|wellbeing_diary|Atendimento pendente/);
+  await menu(); await click('Início');
   const restoreRequests = requests.filter(path => path === '/account').length;
   await menu();
   const lockedClinicar = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Clinicar'));
@@ -120,6 +128,7 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 
 
