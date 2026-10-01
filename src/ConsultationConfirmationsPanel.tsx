@@ -19,7 +19,7 @@ export default function ConsultationConfirmationsPanel({ api, onDecision }: { ap
   const decide = async (item: IncomingConsultationV1, decision: 'confirm' | 'reject') => {
     setBusyId(item.id); setMessage('');
     try {
-      await api.decideConsultation(item.id, decision);
+      await api.decideConsultation(item.id, decision, item.updatedAt);
       onDecision?.();
       setMessage(decision === 'confirm' ? 'Atendimento confirmado e incluído no prontuário.' : 'Atendimento recusado e não incluído no prontuário.');
       await load(false);
@@ -67,5 +67,6 @@ export default function ConsultationConfirmationsPanel({ api, onDecision }: { ap
     {message && <p className="rounded-xl border border-line bg-card p-4 text-sm text-mute">{message}</p>}
   </div>;
 }
+
 
 
