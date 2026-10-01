@@ -2,6 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { formatCpf, formatCep, formatRg, validCpf, rgError, BRAZIL_UFS } from '../server/src/document-validation';
 import type { AccountProfileV1, MyDoctorV1Api, VerificationDocumentV1 } from './lib/api-v1';
 const field = 'mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm';
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0,15);
+  if (!digits) return value.trim().startsWith('+') ? '+' : '';
+  const international = value.trim().startsWith('+');
+  const national = !international && (digits.length === 10 || digits.length === 11);
+  const number = national ? '55' + digits : digits;
+  if (!(national || (international && number.startsWith('55')))) return international ? '+' + number : number;
+  const local = number.slice(2); const ddd = local.slice(0,2); const subscriber = local.slice(2);
+  const split = subscriber.length > 8 ? 5 : 4;
+  return '+55' + (ddd ? ' (' + ddd + (ddd.length === 2 ? ')' : '') : '') + (subscriber ? ' ' + subscriber.slice(0,split) + (subscriber.length > split ? '-' + subscriber.slice(split) : '') : '');
+}
 const question = 'Você é um profissional da saúde e deseja clinicar pelo APP? (Médico, fisioterapeuta, nutricionista...)';
 function under18(birthDate: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return false;
@@ -21,7 +32,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
   const [cepMessage, setCepMessage] = useState('');
   const [touched, setTouched] = useState<{ cpf?: boolean; rg?: boolean; postalCode?: boolean }>({});
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  useEffect(() => { let current = true; Promise.all([api.getAccount(), api.getIdentityDocument()]).then(([item, doc]) => { if (current) { lastCep.current = item.street && item.city && item.state ? (item.postalCode ?? '').replace(/\D/g, '') : ''; setData(item); setDocument(doc); if (doc) setKind(doc.kind); } }).catch(error => { if (current) setMessage(error.message); }); return () => { current = false; }; }, [api]);
+  useEffect(() => { let current = true; Promise.all([api.getAccount(), api.getIdentityDocument()]).then(([item, doc]) => { if (current) { lastCep.current = item.street && item.city && item.state ? (item.postalCode ?? '').replace(/\D/g, '') : ''; const rawSex = (item.sex ?? '').trim().toLowerCase(); const sex = ({ feminino: 'female', f: 'female', masculino: 'male', m: 'male', outro: 'other', 'não informado': '', 'nao informado': '' } as Record<string, string>)[rawSex] ?? rawSex; setData({ ...item, sex, state: (item.state ?? '').trim().toUpperCase() }); setDocument(doc); if (doc) setKind(doc.kind); } }).catch(error => { if (current) setMessage(error.message); }); return () => { current = false; }; }, [api]);
   useEffect(() => {
     const cep = (data?.postalCode ?? '').replace(/\D/g, '');
     if (!data || !['brasil', 'brazil', 'br'].includes((data.country || 'Brasil').trim().toLowerCase()) || cep.length !== 8) { setCepLoading(false); setCepMessage(''); return; }
@@ -63,7 +74,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     if (data.rgType === 'CIN' && data.rg && data.cpf && data.rg.replace(/\D/g,'') !== data.cpf.replace(/\D/g,'')) return setMessage('Os dois campos de CPF devem conter o mesmo número.');
     setBusy(true); setMessage('');
     try {
-      const saved = await api.saveAccount({ ...data, phone: data.phone ?? '' }); setData(saved);
+      const saved = await api.saveAccount({ ...data, phone: (data.phone ?? '').trim().replace(/[().\s-]/g, '') }); setData(saved);
       if (file) { const doc = await api.saveIdentityDocument(kind, file, document?.id ?? null); setDocument(doc); setFile(null); }
       await onSaved(saved); setMessage('Cadastro salvo.');
       if (saved.isHealthProfessional) onProfessional();
@@ -95,9 +106,9 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
   };
   function text(label: string, key: 'name' | 'phone' | 'cpf' | 'rg' | 'postalCode' | 'street' | 'number' | 'complement' | 'neighborhood' | 'city' | 'country', maxLength: number, autoComplete?: string, layout = '') {
     if (!data) return null;
-    const mask = (value: string) => key === 'cpf' ? formatCpf(value) : key === 'postalCode' ? formatCep(value) : key === 'rg' ? formatRg(value, data.rgUf ?? '', data.rgType ?? 'RG') : value;
+    const mask = (value: string) => key === 'phone' ? formatPhone(value) : key === 'cpf' ? formatCpf(value) : key === 'postalCode' ? formatCep(value) : key === 'rg' ? formatRg(value, data.rgUf ?? '', data.rgType ?? 'RG') : value;
     const issue = key === 'cpf' || key === 'rg' || key === 'postalCode' ? (touched[key] ? errors[key] : '') : '';
-    return <label className={`block min-w-0 text-xs font-bold ${layout}`}>{label}<input id={`account-${key}`} required={key === 'name'} minLength={key === 'name' ? 2 : undefined} maxLength={maxLength} autoComplete={autoComplete} type={key === 'phone' ? 'tel' : 'text'} inputMode={['cpf', 'postalCode'].includes(key) || (key === 'rg' && data.rgType === 'CIN') ? 'numeric' : undefined} value={mask(data[key] ?? '')} onBlur={() => { if (key === 'cpf' || key === 'rg' || key === 'postalCode') setTouched(previous => ({ ...previous, [key]: true })); }} onChange={e => setData({ ...data, [key]: mask(e.target.value) })} aria-invalid={Boolean(issue)} aria-describedby={issue ? `error-${key}` : undefined} className={`${field} ${issue ? 'border-danger-500' : ''}`} />{issue && <span id={`error-${key}`} role="alert" className="mt-1 block font-normal text-danger-600">{issue}</span>}</label>;
+    return <label className={`block min-w-0 text-xs font-bold ${layout}`}>{label}<input id={`account-${key}`} required={key === 'name'} minLength={key === 'name' ? 2 : undefined} maxLength={maxLength} autoComplete={autoComplete} placeholder={key === 'phone' ? '+55 (11) 99999-9999' : undefined} type={key === 'phone' ? 'tel' : 'text'} inputMode={['cpf', 'postalCode'].includes(key) || (key === 'rg' && data.rgType === 'CIN') ? 'numeric' : undefined} value={mask(data[key] ?? '')} onBlur={() => { if (key === 'cpf' || key === 'rg' || key === 'postalCode') setTouched(previous => ({ ...previous, [key]: true })); }} onChange={e => setData({ ...data, [key]: mask(e.target.value) })} aria-invalid={Boolean(issue)} aria-describedby={issue ? `error-${key}` : undefined} className={`${field} ${issue ? 'border-danger-500' : ''}`} />{issue && <span id={`error-${key}`} role="alert" className="mt-1 block font-normal text-danger-600">{issue}</span>}</label>;
   }
   return <section className="rounded-xl border border-line bg-card p-4 shadow-lift">
     <h2 className="text-xl font-bold">Meu cadastro</h2><p className="mt-1 text-sm text-mute">{data?.completed ? 'Confira e atualize seus dados pessoais.' : 'Complete seus dados após o primeiro acesso. Você poderá editá-los aqui depois.'}</p>
@@ -111,7 +122,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
         <legend className="mb-2 text-sm font-bold">Dados pessoais</legend>
         {text('Nome completo *', 'name', 150, 'name')}<label className="text-xs font-bold">E-mail de acesso<input readOnly value={data.email} className={field} /></label>
         <label className="text-xs font-bold">Data de nascimento *<input required type="date" min="1900-01-01" max={new Date().toISOString().slice(0,10)} value={data.birthDate} onChange={e => setData({ ...data, birthDate: e.target.value })} className={field} /></label>
-        {text('Celular', 'phone', 25, 'tel')}
+        {text('Celular (país + DDD + número)', 'phone', 25, 'tel')}
         <label className="text-xs font-bold">Sexo<select value={data.sex} onChange={e => setData({ ...data, sex: e.target.value })} className={field}><option value="">Não informado</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option><option value="unknown">Prefiro não informar</option></select></label>
       </fieldset>
       <fieldset disabled={busy} className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-12">
@@ -147,4 +158,5 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     </form> : <p className="mt-3 text-sm">Carregando cadastro...</p>}
   </section>;
 }
+
 
