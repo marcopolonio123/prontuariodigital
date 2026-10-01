@@ -18,6 +18,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build:web
+      - name: Navigation regression test
+        run: |
+          npm install --no-save --ignore-scripts --package-lock=false jsdom@26
+          node scripts/navigation-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
@@ -71,6 +75,4 @@ jobs:
           node scripts/consultant-smoke.mjs
           node scripts/medication-smoke.mjs
           node scripts/professional-admin-smoke.mjs
-
-
-
+          node scripts/account-documents-smoke.mjs
