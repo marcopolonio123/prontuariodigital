@@ -63,7 +63,16 @@ try {
   assert.equal((await call('/access-requests/' + access.body.id + '/decision', patient.token, { decision: 'approve', duration: 'until', validUntil: '2000-01-01T00:00:00Z' })).status, 400);
   const permission = await call('/access-requests/' + access.body.id + '/decision', patient.token, { decision: 'approve', duration: 'indefinite' });
   assert.equal(permission.status, 200);
-  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200);
+  const personalProfiles = await call('/profiles', professional.token);
+  assert.equal(personalProfiles.status, 200);
+  assert.equal(personalProfiles.body.some(item => item.id === patient.patientId), false, 'Paciente autorizado para Clinicar apareceu nos perfis pessoais');
+  assert.equal(personalProfiles.body.some(item => item.id === professional.patientId), true, 'Prontuário pessoal do profissional desapareceu');
+  const legacyPersonal = await fetch('http://127.0.0.1:8793/api/patients', { headers: { authorization: 'Bearer ' + professional.token } });
+  assert.equal(legacyPersonal.status, 200);
+  assert.equal((await legacyPersonal.json()).some(item => item.id === patient.patientId), false, 'Paciente clínico vazou para ficha pessoal legada');
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token, { type: 'family_history', title: 'Histórico indevido', occurredAt: new Date().toISOString(), payload: { text: 'não deve salvar' } })).status, 403, 'Profissional alterou histórico fora de Clinicar');
+  assert.equal((await call('/patients/' + patient.patientId + '/medications', professional.token)).status, 403, 'Agenda pessoal acessível por consentimento clínico');
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
   assert.equal((await call('/professional/access-requests', professional.token, { patientId: patient.patientId })).status, 409, 'Solicitação duplicada durante autorização ativa');
   assert.equal(permission.body.validUntil, null);
   assert.equal(permission.body.grantId, legacyGrant.id, 'Autorização antiga não foi renovada');
@@ -79,6 +88,9 @@ try {
   assert.equal(consultation.body.occurredAt, '2026-10-01T20:30:00.000Z');
   assert.equal(consultation.body.payload.specialty, 'Teste');
   assert.equal(consultation.body.payload.symptoms, 'Queixa teste');
+  const form = new FormData(); form.append('category', 'report'); form.append('files', new Blob(['%PDF-1.4\nTeste de isolamento\n%%EOF'], { type: 'application/pdf' }), 'isolamento.pdf');
+  const attachment = await fetch(base + '/patients/' + patient.patientId + '/events/' + consultation.body.id + '/documents', { method: 'POST', headers: { authorization: 'Bearer ' + professional.token }, body: form });
+  assert.equal(attachment.status, 201, 'Anexo do próprio atendimento profissional foi bloqueado');
   let summary = await call(summaryPath, professional.token);
   assert.equal(summary.status, 200);
   assert.deepEqual(summary.body.record.allergies, ['Penicilina']);
@@ -105,7 +117,7 @@ try {
   assert.equal(timedGrant.validUntil, until);
   assert.equal(timedGrant.grantId, legacyGrant.id);
   assert.equal((await db.accessGrant.findUnique({ where: { id: legacyGrant.id } })).revokedAt, null);
-  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200);
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
   await db.accessGrant.update({ where: { id: timedGrant.grantId }, data: { validUntil: new Date(Date.now() - 1000) } });
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
   assert.equal((await call('/professional/consultations', professional.token, { accessRequestId: timed.body.id, title: 'Teste', occurredAt: new Date().toISOString() })).status, 403);
@@ -115,11 +127,13 @@ try {
   assert.equal((await call('/access-requests/' + renewed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'indefinite' })).status, 200);
   assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === timed.body.id).status, 'revoked');
   assert.equal((await call('/access-requests/' + timed.body.id + '/revoke', patient.token, {})).status, 200);
-  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 200, 'Revogar solicitação antiga afetou a nova autorização');
+  assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'Área pessoal admitiu autorização profissional');
+  assert.equal((await call(summaryPath, professional.token)).status, 200, 'Revogar solicitação antiga afetou Clinicar com autorização renovada');
   row = await reviewRow();
   assert.equal((await call(path, admin.token, { ...input, decision: 'suspend', expectedUpdatedAt: row.updatedAt })).status, 200);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 403);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'suspensão manteve acesso');
+  assert.equal((await call(summaryPath, professional.token)).status, 403, 'Suspensão manteve Clinicar acessível');
   const selfReactivate = await call('/professional/profile', professional.token, profileData, 'PUT');
   assert.equal(selfReactivate.body.verificationStatus, 'suspended');
   assert.equal(selfReactivate.body.active, false);
@@ -144,6 +158,7 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
 
