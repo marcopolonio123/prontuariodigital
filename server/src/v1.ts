@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 import { consultantPolicy, getConsultantUsage, reserveConsultantResponse, completeConsultantResponse, releaseConsultantResponse } from './consultant-usage.js';
+import { isUnder18 } from './identity-policy.js';
 import { sendLoginVerificationEmail } from './email.js';
 
 const router = Router();
@@ -312,14 +313,16 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   if (name.length < 2 || name.length > 150 || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== birthDate || date > new Date() || date.getUTCFullYear() < 1900 || !['', 'female', 'male', 'other', 'unknown'].includes(sex) || city.length > 100 || (state && !/^[A-Z]{2}$/.test(state)) || (phone && !/^\+?[\d ()-]{8,25}$/.test(phone))) return fail(res, 400, 'Confira nome, data de nascimento, celular e UF.');
   try {
     const result = await prisma.$transaction(async tx => {
-      const old = await tx.user.findUniqueOrThrow({ where: { id: req.userId! } });
+      const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
+      const identity = await tx.userIdentityDocument.findUnique({ where: { userId: old.id }, select: { kind: true } });
+      if (identity?.kind === 'Certidão de nascimento' && !isUnder18(birthDate)) throw new Error('AGE');
       const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...address, cpf, rg, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
       const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
       const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
       else await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });
-      if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || ((old.accountData as any)?.rg ?? '') !== rg) {
+      if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || ((old.accountData as any)?.rg ?? '') !== rg || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
         if (practitioner) {
           await tx.practitioner.update({ where: { id: practitioner.id }, data: { name, verificationStatus: practitioner.verificationStatus === 'suspended' ? 'suspended' : 'pending', verifiedAt: null } });
@@ -330,7 +333,7 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       return accountView(user, { ...data, ...(user.accountData as object) });
     });
     res.json(result);
-  } catch (error: any) { fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
+  } catch (error: any) { if (error?.message === 'AGE') return fail(res, 400, 'Remova ou substitua a certidão de nascimento antes de informar uma idade de 18 anos ou mais.'); fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
 });
 
 /** Perfil profissional opcional da mesma conta. A conta continua sendo paciente normalmente. */
