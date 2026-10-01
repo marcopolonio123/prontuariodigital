@@ -32,7 +32,10 @@ try {
   await settle(() => root.render(React.createElement(Shell))); await settle();
   assert.match(document.body.textContent, /Olá, Pessoa/);
   const restoreRequests = requests.filter(path => path === '/account').length;
-  await menu(); await click('Meu Diário');
+  await menu();
+  const lockedClinicar = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Clinicar'));
+  assert.equal(lockedClinicar?.disabled, true, 'Clinicar disponível para perfil sem validação');
+  await click('Meu Diário');
   assert.match(document.body.textContent, /Meu Diário/); assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
   await menu(); await click('Histórico familiar');
   assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
@@ -93,12 +96,30 @@ try {
   assert.equal(account.cpf, '529.982.247-25');
   assert.equal(account.rg, '11.966.756-3');
   assert.equal(account.postalCode, '99999-999');
-  await menu(); await click('Sair');
+  await menu();
+  assert.equal([...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Clinicar')), false, 'Clinicar visível para conta não profissional');
+  await click('Sair');
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
   await click('Clique aqui para se cadastrar');
   assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
+  await build({ entryPoints: ['src/AccessRequestsPanel.tsx'], outfile: '.consent-test.cjs', bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react'] });
+  const ConsentPanel = require('../.consent-test.cjs').default;
+  let consent = { id:'request', patientId:'patient', patientName:'Paciente teste', practitionerName:'Médico teste', requesterName:'Médico teste', status:'pending', requestedAt:new Date().toISOString(), registrations:[], requestedPermission:'read_write_consultation', requestedScope:['record'] };
+  let decisionArgs; let revoked = false;
+  const consentApi = { listIncomingAccessRequests:async()=>[consent], decideAccessRequest:async(...args)=>{ decisionArgs=args; consent={...consent,status:'approved',grantValidUntil:args[4]??null}; return {status:'approved'}; }, revokePatientAccess:async()=>{revoked=true;consent={...consent,status:'revoked'};return {status:'revoked'};} };
+  await settle(()=>root.render(React.createElement(ConsentPanel,{api:consentApi})));
+  assert.ok([...document.querySelectorAll('button')].some(button=>button.textContent==='Autorizar acesso'));
+  const untilInput = document.querySelector('input[type="datetime-local"]');
+  await settle(()=>Simulate.change(untilInput,{target:{value:'2000-01-01T00:00'}}));
+  await click('Autorizar acesso');assert.match(document.querySelector('[role=alert]').textContent,/futuro/);assert.equal(decisionArgs,undefined);
+  await settle(()=>Simulate.change(document.querySelector('select'),{target:{value:'indefinite'}}));
+  await click('Autorizar acesso');assert.equal(decisionArgs[3],'indefinite');assert.equal(decisionArgs[4],undefined);
+  assert.match(document.body.textContent,/Tempo indeterminado/);
+  window.confirm=()=>true;await click('Revogar acesso');assert.equal(revoked,true);assert.match(document.body.textContent,/Revogado/);
+  await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 
