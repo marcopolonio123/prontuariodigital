@@ -89,12 +89,15 @@ function randomCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
-async function visiblePatientIds(userId: string): Promise<Set<string>> {
+async function visiblePatientIds(userId: string, includeProfessional = false): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
     prisma.patient.findMany({ where: { ownerUserId: userId, archived: false }, select: { id: true } }),
     prisma.accessGrant.findMany({
       where: {
         accountId: userId,
+        ...(includeProfessional ? {} : { permission: { not: 'read_write_consultation' } }),
+        validFrom: { lte: new Date() },
+        patient: { archived: false },
         revokedAt: null,
         OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
       },
@@ -517,6 +520,9 @@ router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
     prisma.accessGrant.findMany({
       where: {
         accountId: userId,
+        // O consentimento profissional pertence exclusivamente à área Clinicar.
+        permission: { not: 'read_write_consultation' },
+        validFrom: { lte: new Date() },
         revokedAt: null,
         OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
       },
@@ -864,7 +870,7 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
 
 /** Documentos clínicos privados vinculados ao atendimento. */
 router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!, true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const docs = await prisma.clinicalDocument.findMany({
     where: { patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' } },
@@ -874,10 +880,12 @@ router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: A
 });
 
 router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array('files', 10), async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!, true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!event) return fail(res, 404, 'Atendimento não encontrado.');
+  const personal = await visiblePatientIds(req.userId!);
+  if (!personal.has(req.params.patientId) && (event.authoredByUserId !== req.userId || event.status !== 'pending_patient_confirmation')) return fail(res, 403, 'Em Clinicar, anexos só podem ser enviados ao seu atendimento pendente de confirmação.');
   const category = String(req.body?.category ?? '');
   if (!documentCategories.has(category)) return fail(res, 400, 'Categoria de documento inválida.');
   const files = (req.files ?? []) as Express.Multer.File[];
@@ -909,7 +917,7 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
 });
 
 router.get('/patients/:patientId/events/:eventId/documents/:documentId/download', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!, true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const doc = await prisma.clinicalDocument.findFirst({ where: {
     id: req.params.documentId, patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' },
@@ -940,4 +948,5 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
