@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 import { consultantPolicy, getConsultantUsage, reserveConsultantResponse, completeConsultantResponse, releaseConsultantResponse } from './consultant-usage.js';
+import { validCpf, normalizeCpf, normalizeRg, rgError, BRAZIL_UFS } from './document-validation.js';
 import { isUnder18 } from './identity-policy.js';
 import { sendLoginVerificationEmail } from './email.js';
 
@@ -277,7 +278,7 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
 
 function accountView(user: { id: string; name: string; email: string; phone: string | null }, data: any) {
   return { id: user.id, name: user.name, email: user.email, phone: user.phone,
-    avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
+    rgUf: data?.rgUf ?? '', rgType: data?.rgType ?? 'RG', avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
     birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
 router.get('/address/cep/:cep', auth, async (req: AuthedRequest, res: Response) => {
@@ -308,15 +309,16 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   const name = String(body.name ?? '').trim(); const phone = String(body.phone ?? '').trim() || null;
   const birthDate = String(body.birthDate ?? ''); const sex = String(body.sex ?? '');
   const city = String(body.city ?? '').trim(); const state = String(body.state ?? '').toUpperCase();
-  const cpfRaw = String(body.cpf ?? '').trim(); const cpf = cpfRaw.replace(/[.\s-]/g, '');
-  const rg = String(body.rg ?? '').trim();
+  const cpf = normalizeCpf(String(body.cpf ?? ''));
+  const rg = normalizeRg(String(body.rg ?? ''));
+  const rgType = String(body.rgType ?? 'RG').toUpperCase(); const rgUf = String(body.rgUf ?? '').trim().toUpperCase();
+  if (!['RG','CIN'].includes(rgType) || (rgUf && !BRAZIL_UFS.includes(rgUf))) return fail(res, 400, 'Confira o tipo e a UF emissora do documento.');
+  const rgValidation = rgError(String(body.rg ?? ''), rgUf, rgType);
+  if (rgValidation) return fail(res, 400, rgValidation);
   const postalCode = String(body.postalCode ?? '').trim().replace(/[\s-]/g, '');
   const address = { postalCode, street: String(body.street ?? '').trim(), number: String(body.number ?? '').trim(), complement: String(body.complement ?? '').trim(), neighborhood: String(body.neighborhood ?? '').trim(), country: String(body.country ?? 'Brasil').trim() || 'Brasil' };
-  const validCpf = !cpf || (/^\d{11}$/.test(cpf) && !/^(\d)\1{10}$/.test(cpf) && [9, 10].every(length => {
-    const sum = cpf.slice(0, length).split('').reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
-    const check = (sum * 10) % 11 % 10; return check === Number(cpf[length]);
-  }));
-  if (!validCpf) return fail(res, 400, 'Confira o CPF informado.');
+  if (cpf && !validCpf(cpf)) return fail(res, 400, 'CPF inválido: confira os 11 números e os dois dígitos verificadores.');
+  if (rg && rgType === 'CIN' && cpf && rg !== cpf) return fail(res, 400, 'O número da CIN deve ser igual ao CPF informado.');
   if (rg.length > 30 || (postalCode && !/^\d{8}$/.test(postalCode)) || address.street.length > 180 || address.number.length > 20 || address.complement.length > 100 || address.neighborhood.length > 100 || address.country.length > 80) return fail(res, 400, 'Confira RG, CEP e endereço.');
   const avatar = String(body.avatarDataUrl ?? '');
   if (avatar && (avatar.length > 256 * 1024 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar))) return fail(res, 400, 'Selecione uma foto ou avatar válido.');
@@ -328,13 +330,13 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
       const identity = await tx.userIdentityDocument.findUnique({ where: { userId: old.id }, select: { kind: true } });
       if (identity?.kind === 'Certidão de nascimento' && !isUnder18(birthDate)) throw new Error('AGE');
-      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...address, cpf, rg, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
+      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...address, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
       const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
       const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
       else await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });
-      if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || ((old.accountData as any)?.rg ?? '') !== rg || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
+      if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || normalizeRg(String((old.accountData as any)?.rg ?? '')) !== rg || ((old.accountData as any)?.rgUf ?? '') !== (rgType === 'CIN' ? '' : rgUf) || ((old.accountData as any)?.rgType ?? 'RG') !== rgType || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
         if (practitioner) {
           await tx.practitioner.update({ where: { id: practitioner.id }, data: { name, verificationStatus: practitioner.verificationStatus === 'suspended' ? 'suspended' : 'pending', verifiedAt: null } });
