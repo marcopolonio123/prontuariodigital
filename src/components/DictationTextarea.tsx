@@ -46,12 +46,22 @@ export default function DictationTextarea({ value, onChange, rows = 5, placehold
     recognitionRef.current = recognition; setHint(''); setListening(true); recognition.start();
   };
 
+  const clear = () => {
+    const recognition = recognitionRef.current;
+    if (recognition) { recognition.onresult = null; recognition.onerror = null; recognition.onend = null; recognition.stop(); recognitionRef.current = null; }
+    setListening(false); setHint(''); onChange('');
+  };
+
   return <div data-mydoctor-record-dictation="true">
     <div className="flex min-w-0 items-start gap-2">
       <div className="min-w-0 flex-1"><textarea value={value} onChange={(e) => onChange(e.target.value)} rows={rows} placeholder={placeholder} className={className} /></div>
-      <button type="button" aria-pressed={listening} onClick={listening ? stop : start} className={`mt-1 min-h-11 shrink-0 rounded-lg border px-3 py-2 text-xs font-bold ${listening ? 'border-danger-500 bg-danger-50 text-danger-700' : 'border-moss-500 bg-white text-moss-800'}`}>{listening ? '■ Parar' : '🎙️ Ditar'}</button>
+      <div className="mt-1 flex shrink-0 flex-col gap-1">
+      <button type="button" aria-pressed={listening} onClick={listening ? stop : start} className={`min-h-11 shrink-0 rounded-lg border px-3 py-2 text-xs font-bold ${listening ? 'border-danger-500 bg-danger-50 text-danger-700' : 'border-moss-500 bg-white text-moss-800'}`}>{listening ? '■ Parar' : '🎙️ Ditar'}</button>
+      <button type="button" onClick={clear} className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold text-mute">Limpar</button>
+      </div>
     </div>
     {listening && <p role="status" className="mt-1 text-xs font-semibold text-moss-700">Ouvindo em português...</p>}
     {hint && <p role="status" className="mt-1 text-xs text-mute">{hint}</p>}
   </div>;
 }
+
