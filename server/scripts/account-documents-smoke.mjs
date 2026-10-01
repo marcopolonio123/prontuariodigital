@@ -8,6 +8,14 @@ assert.equal(isUnder18('2008-10-02', new Date('2026-10-01T15:00:00Z')), true);
 assert.equal(isUnder18('2027-01-01', new Date('2026-10-01T15:00:00Z')), false);
 const base = 'http://127.0.0.1:8794/api/v1';
 const users = [];
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  if (String(url).startsWith('https://viacep.com.br/')) {
+    if (String(url).includes('00000000')) throw new Error('Falha simulada');
+    return new Response(JSON.stringify(String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' }), { headers: { 'content-type': 'application/json' } });
+  }
+  return originalFetch(url, init);
+};
 async function call(path, token, body, method = body ? 'POST' : 'GET') {
   const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   return { status: response.status, body: await response.json() };
@@ -22,6 +30,11 @@ async function account(professional = false) {
 try {
   const owner = await account(true); const other = await account(); const admin = await account(); process.env.MYDOCTOR_ADMIN_EMAILS = admin.email;
   assert.equal((await call('/account')).status, 401);
+  assert.equal((await call('/address/cep/01001000')).status, 401);
+  assert.equal((await call('/address/cep/abc', owner.token)).status, 400);
+  assert.equal((await call('/address/cep/01001000', owner.token)).body.logradouro, 'Praça da Sé');
+  assert.equal((await call('/address/cep/99999999', owner.token)).body.erro, true);
+  assert.equal((await call('/address/cep/00000000', owner.token)).status, 503);
   let initial = await call('/account', owner.token); assert.equal(initial.body.isHealthProfessional, true); assert.equal(initial.body.completed, false);
   const data = { name: 'Nome atualizado', birthDate: '1980-03-12', sex: 'female', city: 'São Paulo', state: 'SP', phone: '', isHealthProfessional: true, cpf: '529.982.247-25', rg: '12.345.678-X', postalCode: '01310-100', street: 'Avenida teste', number: '120', complement: 'Apto 4', neighborhood: 'Bairro teste', country: 'Brasil', avatarDataUrl: 'data:image/jpeg;base64,' + Buffer.from([255,216,255,224,0,0,255,217]).toString('base64') };
   assert.equal((await call('/account', owner.token, { ...data, birthDate: '2026-02-31' }, 'PUT')).status, 400);
