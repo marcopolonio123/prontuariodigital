@@ -18,6 +18,7 @@ type ShellView = 'administration' | 'app' | 'professional' | 'clinicar' | 'acces
 
 export default function V1ProfessionalShell() {
   const [view, setView] = useState<ShellView>('app');
+  const [recordRefresh, setRecordRefresh] = useState(0);
   const [token, setToken] = useState(readV1SessionToken());
   const [canClinicar, setCanClinicar] = useState(false);
   const [checkingClinicar, setCheckingClinicar] = useState(true);
@@ -42,7 +43,7 @@ export default function V1ProfessionalShell() {
 
   return <>
     <RecordDictationEnhancer />
-    <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp canAdmin={canAdmin} onNavigate={setView} /></div>
+    <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp recordRefresh={recordRefresh} canAdmin={canAdmin} onNavigate={setView} /></div>
     {view !== 'app' && <main className="min-h-screen bg-paper px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -54,9 +55,10 @@ export default function V1ProfessionalShell() {
           : view === 'professional' ? <ProfessionalProfilePanel api={api} />
           : view === 'clinicar' ? (checkingClinicar ? <p role="status">Verificando habilitação profissional...</p> : !canClinicar ? <section className="rounded-xl border border-line bg-card p-5">Clinicar será liberado após a aprovação do seu perfil profissional.</section> : <div className="space-y-5"><ClinicarPanel api={api} onOpenProfessional={() => setView('professional')} /><ProfessionalConsultationWorkspace api={api} /></div>)
           : view === 'access-requests' ? <AccessRequestsPanel api={api} />
-          : <ConsultationConfirmationsPanel api={api} />}
+          : <ConsultationConfirmationsPanel api={api} onDecision={() => setRecordRefresh(value => value + 1)} />}
       </div>
     </main>}
   </>;
 }
+
 

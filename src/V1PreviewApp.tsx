@@ -103,7 +103,7 @@ function localDateTimeInputValue(date = new Date()) {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmin?: boolean; onNavigate?: (view: 'app' | 'professional' | 'clinicar' | 'access-requests' | 'consultation-confirmations' | 'administration') => void }) {
+export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefresh = 0 }: { recordRefresh?: number; canAdmin?: boolean; onNavigate?: (view: 'app' | 'professional' | 'clinicar' | 'access-requests' | 'consultation-confirmations' | 'administration') => void }) {
   const [apiUrl] = useState(defaultV1ApiUrl());
   const api = useMemo(() => new MyDoctorV1Api(apiUrl), [apiUrl]);
   const [token, setToken] = useState(readV1SessionToken);
@@ -262,6 +262,11 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
     return () => { current = false; };
   }, [api]);
 
+  useEffect(() => {
+    if (!recordRefresh || !activeProfile || !readV1SessionToken()) return;
+    void loadEvents(activeProfile, api).catch(error => setMessage(error instanceof Error ? error.message : 'Não foi possível atualizar o prontuário.'));
+  }, [recordRefresh]);
+
   const createAccount = () => run(async () => {
     if (!registerName.trim()) throw new Error('Informe seu nome.');
     if (!email.trim()) throw new Error('Informe seu e-mail.');
@@ -295,7 +300,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
     setMessage('Você saiu com segurança.');
   };
 
-  const go = (next: AppView) => { setView(next); setMenuOpen(false); setMessage(''); };
+  const go = (next: AppView) => { setView(next); setMenuOpen(false); setMessage(''); if (next === 'record' && activeProfile) void run(() => loadEvents(activeProfile, api)); };
   const chooseProfile = (profile: PatientProfile) => run(async () => {
     activeProfileIdRef.current = profile.id;
     setActiveProfile(profile);
@@ -599,5 +604,6 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><h1 className="break-words font-display text-2xl font-bold text-ink sm:text-3xl">Sua saúde e seu bem-estar. No seu controle.</h1><p className="mt-1 text-sm text-mute">MyDoctor reúne sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
+
 
 

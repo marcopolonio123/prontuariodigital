@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { IncomingConsultationV1, MyDoctorV1Api } from './lib/api-v1';
 
-export default function ConsultationConfirmationsPanel({ api }: { api: MyDoctorV1Api }) {
+export default function ConsultationConfirmationsPanel({ api, onDecision }: { api: MyDoctorV1Api; onDecision?: () => void }) {
   const [items, setItems] = useState<IncomingConsultationV1[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [message, setMessage] = useState('');
 
-  const load = async () => {
-    setLoading(true); setMessage('');
+  const load = async (resetMessage = true) => {
+    setLoading(true); if (resetMessage) setMessage('');
     try { setItems(await api.listIncomingConsultations()); }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível carregar os atendimentos.'); }
     finally { setLoading(false); }
@@ -20,8 +20,9 @@ export default function ConsultationConfirmationsPanel({ api }: { api: MyDoctorV
     setBusyId(item.id); setMessage('');
     try {
       await api.decideConsultation(item.id, decision);
+      onDecision?.();
       setMessage(decision === 'confirm' ? 'Atendimento confirmado e incluído no prontuário.' : 'Atendimento recusado e não incluído no prontuário.');
-      await load();
+      await load(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Não foi possível registrar sua decisão.');
     } finally { setBusyId(''); }
@@ -66,4 +67,5 @@ export default function ConsultationConfirmationsPanel({ api }: { api: MyDoctorV
     {message && <p className="rounded-xl border border-line bg-card p-4 text-sm text-mute">{message}</p>}
   </div>;
 }
+
 
