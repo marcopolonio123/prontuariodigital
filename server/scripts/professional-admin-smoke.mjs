@@ -69,10 +69,32 @@ try {
   assert.equal(permission.body.grantId, legacyGrant.id, 'Autorização antiga não foi renovada');
   assert.equal(await db.accessGrant.count({ where: { accountId: professional.id, patientId: patient.patientId } }), 1);
   assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === access.body.id).status, 'approved');
+  await db.patient.update({ where: { id: patient.patientId }, data: { data: { allergies: ['Penicilina'], intolerances: ['Lactose'], cpf: 'private-value', address: 'private-address' } } });
+  const summaryPath = '/professional/patients/' + patient.patientId + '/summary';
+  assert.equal((await call(summaryPath, patient.token)).status, 403);
+  assert.equal((await call('/professional/patients/' + admin.patientId + '/summary', professional.token)).status, 403);
+  const occurredAt = '2026-10-01T17:30:00-03:00';
+  const consultation = await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Consulta completa', type: 'therapy', occurredAt, symptoms: 'Queixa teste', diagnosis: 'Hipótese teste', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste' });
+  assert.equal(consultation.status, 201);
+  assert.equal(consultation.body.occurredAt, '2026-10-01T20:30:00.000Z');
+  assert.equal(consultation.body.payload.specialty, 'Teste');
+  assert.equal(consultation.body.payload.symptoms, 'Queixa teste');
+  let summary = await call(summaryPath, professional.token);
+  assert.equal(summary.status, 200);
+  assert.deepEqual(summary.body.record.allergies, ['Penicilina']);
+  assert.equal(summary.body.record.cpf, undefined);
+  assert.equal(summary.body.record.address, undefined);
+  assert.equal(summary.body.events.some(e => e.id === consultation.body.id), false, 'Registro pendente exibido como definitivo');
+  assert.equal((await call('/consultations/incoming', patient.token)).body.find(e => e.id === consultation.body.id).clinical.diagnosis, 'Hipótese teste');
+  assert.equal((await call('/consultations/' + consultation.body.id + '/decision', patient.token, { decision: 'confirm' })).status, 200);
+  summary = await call(summaryPath, professional.token);
+  assert.equal(summary.body.events.find(e => e.id === consultation.body.id).payload.prescriptions, 'Prescrição teste');
+  assert.equal(summary.body.events.find(e => e.id === consultation.body.id).provenance, undefined);
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', admin.token, {})).status, 403);
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', patient.token, {})).status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
   assert.equal((await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Teste', occurredAt: new Date().toISOString() })).status, 403);
+  assert.equal((await call(summaryPath, professional.token)).status, 403, 'Revogação manteve resumo acessível');
   const timed = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
   const until = new Date(Date.now() + 3600000).toISOString();
   const decisions = await Promise.all([call('/access-requests/' + timed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'until', validUntil: until }), call('/access-requests/' + timed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'until', validUntil: until })]);
@@ -88,6 +110,7 @@ try {
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
   assert.equal((await call('/professional/consultations', professional.token, { accessRequestId: timed.body.id, title: 'Teste', occurredAt: new Date().toISOString() })).status, 403);
   assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === timed.body.id).status, 'expired');
+  assert.equal((await call(summaryPath, professional.token)).status, 403, 'Expiração manteve resumo acessível');
   const renewed = await call('/professional/access-requests', professional.token, { patientId: patient.patientId });
   assert.equal((await call('/access-requests/' + renewed.body.id + '/decision', patient.token, { decision: 'approve', duration: 'indefinite' })).status, 200);
   assert.equal((await call('/access-requests/incoming', patient.token)).body.find(item => item.id === timed.body.id).status, 'revoked');
@@ -121,5 +144,6 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
