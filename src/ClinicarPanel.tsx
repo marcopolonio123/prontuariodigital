@@ -63,8 +63,10 @@ export default function ClinicarPanel({ api, onOpenProfessional }: { api: MyDoct
     } finally { setBusy(false); }
   };
 
+  const patientHasActiveAccess = Boolean(patient && requests.some(item => item.patientId === patient.patientId && item.status === 'approved' && !item.grantRevokedAt && (!item.grantValidUntil || new Date(item.grantValidUntil).getTime() > Date.now())));
+
   const requestAccess = async () => {
-    if (!patient) return;
+    if (!patient || patientHasActiveAccess) return;
     setBusy(true); setMessage('');
     try {
       const created = await api.requestPatientAccess(patient.patientId);
@@ -99,7 +101,7 @@ export default function ClinicarPanel({ api, onOpenProfessional }: { api: MyDoct
       <h3 className="mt-1 font-display text-xl font-bold text-ink">Localizar paciente MyDoctor</h3>
       <p className="mt-2 text-sm text-mute">Use somente o e-mail informado pelo próprio paciente. A busca não permite pesquisar por nome, evitando exposição da base de usuários.</p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row"><input type="email" value={patientEmail} onChange={(e) => { setPatientEmail(e.target.value); setPatient(null); }} placeholder="email@paciente.com" className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-3 text-sm outline-none focus:border-moss-500" /><button type="button" disabled={busy} onClick={() => void findPatient()} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Consultando...' : 'Localizar paciente'}</button></div>
-      {patient && <div className="mt-4 rounded-xl border border-moss-500 bg-moss-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Paciente localizado</p><h4 className="mt-1 font-bold text-ink">{patient.name}</h4><p className="mt-1 text-sm text-mute">Nenhum dado clínico foi aberto. Envie a solicitação para o paciente decidir.</p><button type="button" disabled={busy} onClick={() => void requestAccess()} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Solicitar acesso ao prontuário</button></div>}
+      {patient && <div className="mt-4 rounded-xl border border-moss-500 bg-moss-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Paciente localizado</p><h4 className="mt-1 font-bold text-ink">{patient.name}</h4><p className="mt-1 text-sm text-mute">{patientHasActiveAccess ? 'Você já possui autorização ativa. Use o prontuário autorizado abaixo.' : 'Nenhum dado clínico foi aberto. Envie a solicitação para o paciente decidir.'}</p><button type="button" disabled={busy || patientHasActiveAccess} onClick={() => void requestAccess()} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Solicitar acesso ao prontuário</button></div>}
     </section>}
 
     {verified && <section className="rounded-2xl border border-line bg-card p-5 shadow-lift">
@@ -108,3 +110,4 @@ export default function ClinicarPanel({ api, onOpenProfessional }: { api: MyDoct
     </section>}
   </div>;
 }
+
