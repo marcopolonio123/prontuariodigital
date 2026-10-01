@@ -19,6 +19,8 @@ model User {
   phone           String?                 @unique
   passwordHash    String
   role            String                  @default("titular") // titular | responsavel | profissional
+  accountData     Json                    @default("{}")
+  identityDocument UserIdentityDocument?
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
   createdAt       DateTime                @default(now())
@@ -499,4 +501,18 @@ model ProfessionalVerificationDocument {
   content Bytes
   createdAt DateTime @default(now())
   @@index([practitionerId, createdAt])
+}
+
+
+model UserIdentityDocument {
+  id String @id @default(uuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind String
+  filename String
+  mimeType String
+  sizeBytes Int
+  sha256 String
+  content Bytes
+  createdAt DateTime @default(now())
 }
