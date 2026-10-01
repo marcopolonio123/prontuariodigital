@@ -23,7 +23,7 @@ export function subscribeV1SessionToken(listener: (token: string) => void) {
 }
 
 export interface LoginStartResponse { challengeId: string; channel: MfaChannel; destinationMasked: string; expiresAt: string; developmentCode?: string; }
-export interface AccountProfileV1 extends V1User { birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
+export interface AccountProfileV1 extends V1User { avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
 export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
@@ -132,16 +132,24 @@ export class MyDoctorV1Api {
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
   getAccount() { return this.req<AccountProfileV1>('/account'); }
-  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
+  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
+  getIdentityDocument() { return this.req<VerificationDocumentV1 | null>('/account/document'); }
+  async saveIdentityDocument(kind: string, file: File, expectedId: string | null) {
+    if (file.size > 3 * 1024 * 1024) throw new Error('Cada documento pode ter até 3 MB.');
+    const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(file); });
+    return this.req<VerificationDocumentV1>('/account/document', { method: 'POST', body: JSON.stringify({ kind, filename: file.name, mimeType: file.type, data, expectedId }) });
+  }
+  removeIdentityDocument(id: string) { return this.req<{ ok: boolean }>(`/account/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   listVerificationDocuments() { return this.req<VerificationDocumentV1[]>('/professional/documents'); }
   async uploadVerificationDocument(kind: string, file: File) {
     if (file.size > 3 * 1024 * 1024) throw new Error('Cada documento pode ter até 3 MB.');
     const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(file); });
     return this.req<VerificationDocumentV1>('/professional/documents', { method: 'POST', body: JSON.stringify({ kind, filename: file.name, mimeType: file.type, data }) });
   }
-  removeVerificationDocument(id: string) { return this.req<{ ok: boolean }>(`/professional/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  removeVerificationDocument(id: string) { if (id.startsWith('account:')) return this.removeIdentityDocument(id.slice(8)); return this.req<{ ok: boolean }>(`/professional/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   async openVerificationDocument(id: string, admin = false) {
-    const response = await fetch(this.url(`${admin ? '/admin' : '/professional'}/documents/${encodeURIComponent(id)}/download`), { headers: { Authorization: `Bearer ${this.token}` } });
+    const path = id.startsWith('account:') ? `${admin ? '/admin/account' : '/account'}/documents/${encodeURIComponent(id.slice(8))}/download` : `${admin ? '/admin' : '/professional'}/documents/${encodeURIComponent(id)}/download`;
+    const response = await fetch(this.url(path), { headers: { Authorization: `Bearer ${this.token}` } });
     if (!response.ok) throw new Error('Não foi possível abrir o documento.');
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.click();
