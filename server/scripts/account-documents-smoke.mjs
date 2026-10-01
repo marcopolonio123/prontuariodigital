@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 process.env.PORT = '8794'; process.env.MYDOCTOR_ADMIN_EMAILS = '';
 await import('../dist/index.js');
 const { prisma: db } = await import('../dist/db.js');
+const { isUnder18 } = await import('../dist/identity-policy.js');
+assert.equal(isUnder18('2008-10-01', new Date('2026-10-01T15:00:00Z')), false);
+assert.equal(isUnder18('2008-10-02', new Date('2026-10-01T15:00:00Z')), true);
+assert.equal(isUnder18('2027-01-01', new Date('2026-10-01T15:00:00Z')), false);
 const base = 'http://127.0.0.1:8794/api/v1';
 const users = [];
 async function call(path, token, body, method = body ? 'POST' : 'GET') {
@@ -48,7 +52,11 @@ try {
   assert.equal(row.documents.some(doc => doc.id === 'account:' + identity.body.id), true);
   const decision = { decision: 'approve', note: 'Teste de validação', evidence: 'Conferência simulada de identidade e conselho', checkedIdentityAndCouncil: true, registrationId: row.registrations[0].id, expectedUpdatedAt: row.updatedAt };
   assert.equal((await call(`/admin/professionals/${row.id}/decision`, admin.token, decision)).status, 200);
+  assert.equal((await call('/account/document', owner.token, { ...identityInput, kind: 'Certidão de nascimento', expectedId: identity.body.id })).status, 400, 'Adulto enviou certidão de nascimento');
+  data.birthDate = '2012-03-12';
+  assert.equal((await call('/account', owner.token, data, 'PUT')).status, 200);
   const replaced = await call('/account/document', owner.token, { ...identityInput, kind: 'Certidão de nascimento', expectedId: identity.body.id }); assert.equal(replaced.status, 201); assert.equal((await call('/account/document', owner.token)).body.kind, 'Certidão de nascimento');
+  assert.equal((await call('/account', owner.token, { ...data, birthDate: '1980-03-12' }, 'PUT')).status, 400, 'Adulto manteve certidão ao alterar a idade');
   assert.equal((await call(`/account/documents/${identity.body.id}/download`, owner.token)).status, 404);
   assert.equal((await call('/professional/profile', owner.token)).body.verificationStatus, 'pending');
   uploaded = await call('/professional/documents', owner.token, { ...input, kind: 'council', filename: 'conselho.pdf' }); assert.equal(uploaded.status, 201);
