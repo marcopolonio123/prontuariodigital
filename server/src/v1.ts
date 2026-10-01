@@ -872,6 +872,11 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
 router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!, true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const personal = await visiblePatientIds(req.userId!);
+  if (!personal.has(req.params.patientId)) {
+    const readable = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, OR: [{ status: { in: ['final', 'amended'] } }, { status: 'pending_patient_confirmation', authoredByUserId: req.userId! }] }, select: { id: true } });
+    if (!readable) return fail(res, 403, 'Este atendimento não está disponível para consulta profissional.');
+  }
   const docs = await prisma.clinicalDocument.findMany({
     where: { patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' } },
     orderBy: { createdAt: 'asc' },
@@ -919,6 +924,11 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
 router.get('/patients/:patientId/events/:eventId/documents/:documentId/download', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!, true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const personal = await visiblePatientIds(req.userId!);
+  if (!personal.has(req.params.patientId)) {
+    const readable = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, OR: [{ status: { in: ['final', 'amended'] } }, { status: 'pending_patient_confirmation', authoredByUserId: req.userId! }] }, select: { id: true } });
+    if (!readable) return fail(res, 403, 'Este atendimento não está disponível para consulta profissional.');
+  }
   const doc = await prisma.clinicalDocument.findFirst({ where: {
     id: req.params.documentId, patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' },
   }});
