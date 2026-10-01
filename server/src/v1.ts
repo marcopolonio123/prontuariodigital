@@ -107,6 +107,10 @@ async function visiblePatientIds(userId: string, includeProfessional = false): P
   return new Set([...owned.map((p) => p.id), ...grants.map((g) => g.patientId)]);
 }
 
+async function ownedProfessionalEvent(req: AuthedRequest) {
+  return prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, authoredByUserId: req.userId!, practitioner: { userId: req.userId!, active: true, verificationStatus: 'verified' }, status: { in: ['draft', 'pending_patient_confirmation', 'final', 'rejected_by_patient', 'amended', 'cancelled'] } } });
+}
+
 /** Cadastro nativo da API V1. Cria a conta e o prontuário pessoal no mesmo commit transacional. */
 router.post('/auth/register', async (req: Request, res: Response) => {
   const body = req.body ?? {};
@@ -601,7 +605,7 @@ router.get('/patients/:patientId/events', auth, async (req: AuthedRequest, res: 
 
   await purgeExpiredDiary(req.params.patientId);
   const events = await prisma.healthEvent.findMany({
-    where: { patientId: req.params.patientId },
+    where: { patientId: req.params.patientId, status: { not: 'draft' } },
     include: { practitioner: true, organization: true, location: true },
     orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
     take: 200,
@@ -672,6 +676,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if (current.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
   if (current.status === 'cancelled') return fail(res, 409, 'Reative o registro antes de editá-lo.');
   const body = req.body ?? {};
   const isDiary = current.type === 'wellbeing_diary';
@@ -847,6 +852,7 @@ router.post('/patients/:patientId/events/:eventId/inactivate', auth, async (req:
   if (!reason) return fail(res, 400, 'Informe o motivo da inativação.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if (current.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
   const updated = await prisma.healthEvent.update({ where: { id: current.id }, data: {
     status: 'cancelled',
     provenance: { source: 'mydoctor_manual', action: 'inactivated', actorUserId: req.userId!, inactivatedAt: new Date().toISOString(), reason, previousStatus: current.status },
@@ -859,6 +865,7 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if (current.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
   if (current.status !== 'cancelled') return fail(res, 409, 'O registro não está inativo.');
   const previousProvenance = current.provenance;
   const updated = await prisma.healthEvent.update({ where: { id: current.id }, data: {
@@ -871,9 +878,12 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
 /** Documentos clínicos privados vinculados ao atendimento. */
 router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!, true);
-  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const ownEvent = await ownedProfessionalEvent(req);
+  if (!ids.has(req.params.patientId) && !ownEvent) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const personal = await visiblePatientIds(req.userId!);
-  if (!personal.has(req.params.patientId)) {
+  const target = ownEvent ?? await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId }, select: { status: true } });
+  if (target?.status === 'draft' && !ownEvent) return fail(res, 403, 'Este atendimento ainda não foi enviado pelo profissional.');
+  if (!personal.has(req.params.patientId) && !ownEvent) {
     const readable = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, OR: [{ status: { in: ['final', 'amended'] } }, { status: 'pending_patient_confirmation', authoredByUserId: req.userId! }] }, select: { id: true } });
     if (!readable) return fail(res, 403, 'Este atendimento não está disponível para consulta profissional.');
   }
@@ -886,11 +896,14 @@ router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: A
 
 router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array('files', 10), async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!, true);
-  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const ownEvent = await ownedProfessionalEvent(req);
+  if (!ids.has(req.params.patientId) && !ownEvent) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!event) return fail(res, 404, 'Atendimento não encontrado.');
+  if (event.status === 'draft' && !ownEvent) return fail(res, 403, 'Este atendimento ainda não foi enviado pelo profissional.');
   const personal = await visiblePatientIds(req.userId!);
-  if (!personal.has(req.params.patientId) && (event.authoredByUserId !== req.userId || event.status !== 'pending_patient_confirmation')) return fail(res, 403, 'Em Clinicar, anexos só podem ser enviados ao seu atendimento pendente de confirmação.');
+  if (event.authoredByUserId === req.userId && event.practitionerId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status)) return fail(res, 403, 'Este atendimento já foi aprovado e está disponível somente para consulta.');
+  if (!personal.has(req.params.patientId) && (event.authoredByUserId !== req.userId || !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status))) return fail(res, 403, 'Em Clinicar, anexos só podem ser enviados ao seu atendimento ainda não aprovado.');
   const category = String(req.body?.category ?? '');
   if (!documentCategories.has(category)) return fail(res, 400, 'Categoria de documento inválida.');
   const files = (req.files ?? []) as Express.Multer.File[];
@@ -906,15 +919,22 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
     await fs.writeFile(absolutePath, file.buffer, { flag: 'wx' });
     const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
     try {
-      const doc = await prisma.clinicalDocument.create({ data: {
+      const doc = await prisma.$transaction(async tx => {
+        if (!personal.has(req.params.patientId)) {
+          const locked = await tx.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: ['draft', 'pending_patient_confirmation', 'rejected_by_patient'] } }, data: { updatedAt: new Date() } });
+          if (!locked.count) throw new Error('APPROVED_MEDICAL_EVENT');
+        }
+        return tx.clinicalDocument.create({ data: {
         id, patientId: req.params.patientId, eventId: req.params.eventId, type: category,
         originalFilename: file.originalname, mimeType: file.mimetype, objectKey, sha256, sizeBytes: file.size,
         status: 'uploaded', metadata: { storageProvider: 'local_private', ocrStatus: 'not_requested' },
       }});
+      });
       const { objectKey: _objectKey, ...safeDoc } = doc;
       created.push(safeDoc);
     } catch (error) {
       await fs.unlink(absolutePath).catch((_unlinkError: unknown): void => {});
+      if (error instanceof Error && error.message === 'APPROVED_MEDICAL_EVENT') return fail(res, 409, 'O atendimento foi aprovado e não pode receber alterações.');
       throw error;
     }
   }
@@ -923,9 +943,12 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
 
 router.get('/patients/:patientId/events/:eventId/documents/:documentId/download', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!, true);
-  if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const ownEvent = await ownedProfessionalEvent(req);
+  if (!ids.has(req.params.patientId) && !ownEvent) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const personal = await visiblePatientIds(req.userId!);
-  if (!personal.has(req.params.patientId)) {
+  const target = ownEvent ?? await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId }, select: { status: true } });
+  if (target?.status === 'draft' && !ownEvent) return fail(res, 403, 'Este atendimento ainda não foi enviado pelo profissional.');
+  if (!personal.has(req.params.patientId) && !ownEvent) {
     const readable = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, OR: [{ status: { in: ['final', 'amended'] } }, { status: 'pending_patient_confirmation', authoredByUserId: req.userId! }] }, select: { id: true } });
     if (!readable) return fail(res, 403, 'Este atendimento não está disponível para consulta profissional.');
   }
@@ -943,6 +966,8 @@ router.get('/patients/:patientId/events/:eventId/documents/:documentId/download'
 router.post('/patients/:patientId/events/:eventId/documents/:documentId/inactivate', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
+  const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
+  if (event?.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
   const doc = await prisma.clinicalDocument.findFirst({ where: { id: req.params.documentId, patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' } } });
   if (!doc) return fail(res, 404, 'Documento não encontrado.');
   const updated = await prisma.clinicalDocument.update({ where: { id: doc.id }, data: {
@@ -958,5 +983,6 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
