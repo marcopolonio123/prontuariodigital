@@ -53,7 +53,7 @@ router.get('/account/document', requireOwner, async (req: OwnerRequest, res: Res
 });
 router.post('/account/document', requireOwner, async (req: OwnerRequest, res: Response) => {
   const kind = req.body?.kind; const file = validatedUpload(req.body);
-  if (!['CNH', 'RG', 'Passaporte'].includes(kind) || !file) return res.status(400).json({ error: 'Selecione CNH, RG ou passaporte e um PDF ou imagem de até 3 MB.' });
+  if (!['CNH', 'RG', 'Passaporte', 'Certidão de nascimento'].includes(kind) || !file) return res.status(400).json({ error: 'Selecione CNH, RG, passaporte ou certidão de nascimento e um PDF ou imagem de até 3 MB.' });
   try {
     const result = await prisma.$transaction(async tx => {
       await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
