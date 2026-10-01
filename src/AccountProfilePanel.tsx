@@ -10,7 +10,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
   const [cepLoading, setCepLoading] = useState(false);
   const [cepMessage, setCepMessage] = useState('');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  useEffect(() => { let current = true; Promise.all([api.getAccount(), api.getIdentityDocument()]).then(([item, doc]) => { if (current) { lastCep.current = (item.postalCode ?? '').replace(/\D/g, ''); setData(item); setDocument(doc); if (doc) setKind(doc.kind); } }).catch(error => { if (current) setMessage(error.message); }); return () => { current = false; }; }, [api]);
+  useEffect(() => { let current = true; Promise.all([api.getAccount(), api.getIdentityDocument()]).then(([item, doc]) => { if (current) { lastCep.current = item.street && item.city && item.state ? (item.postalCode ?? '').replace(/\D/g, '') : ''; setData(item); setDocument(doc); if (doc) setKind(doc.kind); } }).catch(error => { if (current) setMessage(error.message); }); return () => { current = false; }; }, [api]);
   useEffect(() => {
     const cep = (data?.postalCode ?? '').replace(/\D/g, '');
     if (!data || !['brasil', 'brazil', 'br'].includes((data.country || 'Brasil').trim().toLowerCase()) || cep.length !== 8) { setCepLoading(false); setCepMessage(''); return; }
