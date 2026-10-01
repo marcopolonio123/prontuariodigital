@@ -48,6 +48,12 @@ try {
   assert.match(document.body.textContent, /CPF \(opcional\)/);
   assert.match(document.body.textContent, /RG \(opcional\)/);
   assert.equal(requests.filter(path => path === '/account').length, restoreRequests + 1, 'Navegação reinicia sessão');
+  assert.equal([...document.querySelectorAll('option')].some(option => option.textContent === 'Certidão de nascimento'), false);
+  const birthInput = document.querySelector('input[type="date"]');
+  await settle(() => Simulate.change(birthInput, { target: { value: '2012-03-12' } }));
+  assert.equal([...document.querySelectorAll('option')].some(option => option.textContent === 'Certidão de nascimento'), true);
+  await settle(() => Simulate.change(birthInput, { target: { value: '1980-01-01' } }));
+  assert.equal([...document.querySelectorAll('option')].some(option => option.textContent === 'Certidão de nascimento'), false);
   const cepInput = document.querySelector('input[autocomplete="postal-code"]');
   await settle(() => Simulate.change(cepInput, { target: { value: '01001-000' } }));
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
