@@ -31,9 +31,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     const debounce = setTimeout(async () => {
       timeout = setTimeout(() => controller.abort(), 8000);
       try {
-        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
-        if (!response.ok) throw new Error('Busca indisponível');
-        const address = await response.json() as { erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string };
+        const address = await api.lookupAddress(cep, controller.signal);
         if (!current) return;
         if (address.erro) { setCepMessage('CEP não encontrado. Confira o número ou preencha o endereço manualmente.'); return; }
         if (!address.localidade || !address.uf || !/^[A-Z]{2}$/.test(address.uf) || (address.cep ?? '').replace(/\D/g, '') !== cep) throw new Error('Resposta inválida');
