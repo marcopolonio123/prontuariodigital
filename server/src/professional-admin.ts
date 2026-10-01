@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 
@@ -25,12 +26,70 @@ router.get('/admin/session', async (req: AdminRequest, res: Response) => {
   try { res.json({ authorized: (await administrator(req)).authorized }); }
   catch { res.status(401).json({ error: 'Entre na sua conta para continuar.' }); }
 });
+const documentSelect = { id: true, kind: true, filename: true, mimeType: true, sizeBytes: true, createdAt: true } as const;
+interface OwnerRequest extends Request { userId?: string; }
+function requireOwner(req: OwnerRequest, res: Response, next: NextFunction) {
+  try { req.userId = (jwt.verify((req.headers.authorization ?? '').replace(/^Bearer /, ''), process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me') as { uid: string }).uid; next(); }
+  catch { res.status(401).json({ error: 'Entre na sua conta para continuar.' }); }
+}
+async function invalidate(tx: any, practitioner: any) {
+  const changed = await tx.practitioner.updateMany({ where: { id: practitioner.id, updatedAt: practitioner.updatedAt }, data: { updatedAt: new Date(), verificationStatus: practitioner.verificationStatus === 'suspended' ? 'suspended' : 'pending', verifiedAt: null } });
+  if (!changed.count) throw new Error('STALE');
+  await tx.accessGrant.updateMany({ where: { practitionerId: practitioner.id, revokedAt: null }, data: { revokedAt: new Date() } });
+  await tx.accessRequest.updateMany({ where: { practitionerId: practitioner.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
+}
+router.get('/professional/documents', requireOwner, async (req: OwnerRequest, res: Response) => {
+  try { res.json(await prisma.professionalVerificationDocument.findMany({ where: { practitioner: { userId: req.userId! } }, select: documentSelect, orderBy: { createdAt: 'desc' } })); }
+  catch { res.status(503).json({ error: 'Não foi possível carregar os documentos.' }); }
+});
+router.post('/professional/documents', requireOwner, async (req: OwnerRequest, res: Response) => {
+  const { kind, mimeType, data } = req.body ?? {};
+  const filename = String(req.body?.filename ?? '').replace(/[\\/\r\n\x00-\x1f]/g, '_').slice(0, 180);
+  if (!['identity', 'council'].includes(kind) || !filename || typeof data !== 'string' || data.length > 4 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return res.status(400).json({ error: 'Selecione identidade ou conselho e um PDF ou imagem de até 3 MB.' });
+  const content = Buffer.from(data, 'base64');
+  const magic = mimeType === 'application/pdf' ? content.subarray(0, 5).toString() === '%PDF-' : mimeType === 'image/jpeg' ? content[0] === 255 && content[1] === 216 && content[2] === 255 : mimeType === 'image/png' ? content.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : mimeType === 'image/webp' ? content.subarray(0,4).toString() === 'RIFF' && content.subarray(8,12).toString() === 'WEBP' : false;
+  if (!magic || content.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'Arquivo inválido. Use PDF, JPG, PNG ou WEBP de até 3 MB.' });
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const practitioner = await tx.practitioner.findUnique({ where: { userId: req.userId! } });
+      if (!practitioner) throw new Error('PROFILE');
+      await invalidate(tx, practitioner);
+      if (await tx.professionalVerificationDocument.count({ where: { practitionerId: practitioner.id } }) >= 6) throw new Error('LIMIT');
+      return tx.professionalVerificationDocument.create({ data: { practitionerId: practitioner.id, kind, filename, mimeType, sizeBytes: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex'), content }, select: documentSelect });
+    });
+    res.status(201).json(result);
+  } catch (error) { const code = error instanceof Error ? error.message : ''; res.status(code === 'STALE' ? 409 : ['PROFILE','LIMIT'].includes(code) ? 400 : 503).json({ error: code === 'PROFILE' ? 'Salve os dados profissionais antes de anexar documentos.' : code === 'LIMIT' ? 'Limite de 6 documentos. Remova um antes de enviar outro.' : code === 'STALE' ? 'O cadastro mudou. Atualize e tente novamente.' : 'Não foi possível enviar o documento.' }); }
+});
+router.delete('/professional/documents/:id', requireOwner, async (req: OwnerRequest, res: Response) => {
+  try {
+    await prisma.$transaction(async tx => {
+      const doc = await tx.professionalVerificationDocument.findFirst({ where: { id: req.params.id, practitioner: { userId: req.userId! } }, include: { practitioner: true } });
+      if (!doc) throw new Error('NOT_FOUND');
+      await invalidate(tx, doc.practitioner);
+      await tx.professionalVerificationDocument.delete({ where: { id: doc.id } });
+    });
+    res.json({ ok: true });
+  } catch (error) { res.status(error instanceof Error && error.message === 'NOT_FOUND' ? 404 : 409).json({ error: 'Documento não encontrado ou cadastro alterado. Atualize a página.' }); }
+});
+async function downloadDocument(req: OwnerRequest, res: Response, admin: boolean) {
+  try {
+    const doc = await prisma.professionalVerificationDocument.findFirst({ where: { id: req.params.id, ...(admin ? {} : { practitioner: { userId: req.userId! } }) } });
+    if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
+    res.setHeader('Cache-Control', 'private, no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);
+    res.type(doc.mimeType).send(Buffer.from(doc.content));
+  } catch { res.status(503).json({ error: 'Não foi possível abrir o documento.' }); }
+}
+router.get('/professional/documents/:id/download', requireOwner, (req: OwnerRequest, res: Response) => { void downloadDocument(req, res, false); });
+router.get('/admin/documents/:id/download', requireAdmin, (req: AdminRequest, res: Response) => { void downloadDocument(req, res, true); });
+
 router.get('/admin/professionals', requireAdmin, async (_req: AdminRequest, res: Response) => {
   try {
     const professionals = await prisma.practitioner.findMany({ where: { userId: { not: null } }, orderBy: { updatedAt: 'desc' }, take: 200,
-      include: { user: { select: { email: true } }, registrations: { include: { authority: true } }, verificationDecisions: { orderBy: { createdAt: 'desc' }, take: 10 } } });
+      include: { user: { select: { email: true } }, registrations: { include: { authority: true } }, verificationDocuments: { select: documentSelect, orderBy: { createdAt: 'desc' } }, verificationDecisions: { orderBy: { createdAt: 'desc' }, take: 10 } } });
     res.json(professionals.map(item => ({ id: item.id, name: item.name, email: item.user?.email, profession: item.profession, specialty: item.specialty,
       verificationStatus: item.verificationStatus, active: item.active, updatedAt: item.updatedAt.toISOString(),
+      documents: item.verificationDocuments,
       registrations: item.registrations.map(reg => ({ id: reg.id, council: reg.authority.code, registration: reg.registration, region: reg.region, status: reg.status })),
       history: item.verificationDecisions.map(decision => ({ id: decision.id, decision: decision.decision, status: decision.status, actorName: decision.actorName, note: decision.note, evidence: decision.evidence, createdAt: decision.createdAt.toISOString() })) })));
   } catch { res.status(503).json({ error: 'A análise de profissionais está indisponível. Tente novamente.' }); }
