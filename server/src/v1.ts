@@ -136,6 +136,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
             name,
             relationshipToOwner: 'self',
             createdByUserId: created.id,
+            isHealthProfessional: body.isHealthProfessional === true,
           },
         },
       });
@@ -271,6 +272,51 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
       phone: challenge.user.phone,
     },
   });
+});
+
+function accountView(user: { id: string; name: string; email: string; phone: string | null }, data: any) {
+  return { id: user.id, name: user.name, email: user.email, phone: user.phone,
+    birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
+}
+router.get('/account', auth, async (req: AuthedRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true, email: true, phone: true } });
+    if (!user) return fail(res, 401, 'Entre novamente.');
+    const patients = await prisma.patient.findMany({ where: { ownerUserId: user.id, archived: false }, select: { data: true } });
+    const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
+    const practitioner = await prisma.practitioner.findUnique({ where: { userId: user.id }, select: { id: true } });
+    const data = { ...((self?.data as object) ?? {}) };
+    res.json({ ...accountView(user, data), isHealthProfessional: typeof (data as any).isHealthProfessional === 'boolean' ? (data as any).isHealthProfessional : Boolean(practitioner) });
+  } catch { fail(res, 503, 'Não foi possível carregar seu cadastro.'); }
+});
+router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
+  const body = req.body ?? {};
+  const name = String(body.name ?? '').trim(); const phone = String(body.phone ?? '').trim() || null;
+  const birthDate = String(body.birthDate ?? ''); const sex = String(body.sex ?? '');
+  const city = String(body.city ?? '').trim(); const state = String(body.state ?? '').toUpperCase();
+  const date = new Date(birthDate + 'T00:00:00Z');
+  if (name.length < 2 || name.length > 150 || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== birthDate || date > new Date() || date.getUTCFullYear() < 1900 || !['', 'female', 'male', 'other', 'unknown'].includes(sex) || city.length > 100 || (state && !/^[A-Z]{2}$/.test(state)) || (phone && !/^\+?[\d ()-]{8,25}$/.test(phone))) return fail(res, 400, 'Confira nome, data de nascimento, celular e UF.');
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const old = await tx.user.findUniqueOrThrow({ where: { id: req.userId! } });
+      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true } });
+      const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
+      const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
+      const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
+      if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
+      else await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });
+      if (old.name !== name) {
+        const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
+        if (practitioner) {
+          await tx.practitioner.update({ where: { id: practitioner.id }, data: { name, verificationStatus: practitioner.verificationStatus === 'suspended' ? 'suspended' : 'pending', verifiedAt: null } });
+          await tx.accessGrant.updateMany({ where: { practitionerId: practitioner.id, revokedAt: null }, data: { revokedAt: new Date() } });
+          await tx.accessRequest.updateMany({ where: { practitionerId: practitioner.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
+        }
+      }
+      return accountView(user, data);
+    });
+    res.json(result);
+  } catch (error: any) { fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
 });
 
 /** Perfil profissional opcional da mesma conta. A conta continua sendo paciente normalmente. */
@@ -856,9 +902,3 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
-
-
-
-
-
-
