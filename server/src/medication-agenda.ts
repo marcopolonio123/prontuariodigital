@@ -29,7 +29,7 @@ async function accessible(patientId: string, userId: string) {
   if (!patient || patient.archived) return null;
   if (patient.ownerUserId === userId) return patient;
   const now = new Date();
-  const grants = await prisma.accessGrant.findMany({ where: { patientId, accountId: userId, revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] }, select: { scope: true } });
+  const grants = await prisma.accessGrant.findMany({ where: { patientId, accountId: userId, permission: { not: 'read_write_consultation' }, revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] }, select: { scope: true } });
   return grants.some(grant => grantAllowsMedication(grant.scope)) ? patient : null;
 }
 router.get('/patients/:patientId/medications', auth, async (req: AuthedRequest, res: Response) => {
@@ -81,5 +81,6 @@ router.delete('/patients/:patientId/medications/:scheduleId', auth, async (req: 
   return result.count ? res.json({ ok: true }) : res.status(404).json({ error: 'Agenda não encontrada.' });
 });
 export default router;
+
 
 
