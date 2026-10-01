@@ -24,8 +24,8 @@ export function formatRg(value: string, uf: string, type: string) {
 export function rgError(value: string, uf: string, type: string) {
   const rg = normalizeRg(value);
   if (!rg) return '';
-  if (!['RG','CIN'].includes(type)) return 'Selecione RG estadual ou CIN.';
-  if (type === 'CIN') return validCpf(value) ? '' : 'CIN inválida: confira os 11 números e os dígitos verificadores do CPF.';
+  if (!['RG','CIN'].includes(type)) return 'Selecione RG estadual ou CPF.';
+  if (type === 'CIN') return validCpf(value) ? '' : 'CPF inválido: confira os 11 números e os dígitos verificadores do CPF.';
   if (!BRAZIL_UFS.includes(uf)) return 'Informe a UF emissora do RG.';
   if (uf !== 'SP') return /^[A-Z0-9]{5,20}$/.test(rg) && /\d/.test(rg) && !/^(\d)\1+$/.test(rg) ? '' : 'Confira o formato do RG conforme o documento emitido.';
   if (!/^\d{8}[\dX]$/.test(rg) || /^(\d)\1{8}$/.test(rg)) return 'RG-SP deve ter 8 números e um dígito verificador (número ou X).';
@@ -33,3 +33,4 @@ export function rgError(value: string, uf: string, type: string) {
   const check = (11 - sum % 11) % 11;
   return rg[8] === (check === 10 ? 'X' : String(check)) ? '' : 'Dígito verificador do RG-SP inválido. Confira o documento.';
 }
+

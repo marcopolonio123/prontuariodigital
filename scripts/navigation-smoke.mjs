@@ -16,6 +16,7 @@ let requests = [];
 globalThis.fetch = async (url, init = {}) => {
   if (String(url).includes('/api/v1/address/cep/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
+  if (path === '/account' && init.method === 'PUT') account = { ...account, ...JSON.parse(init.body) };
   const data = path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
   return { ok: true, status: 200, json: async () => data };
 };
@@ -82,6 +83,12 @@ try {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
   assert.match(document.body.textContent, /CEP não encontrado/);
   assert.equal(document.querySelector('input[autocomplete="address-line1"]').value, 'Praça da Sé');
+  await settle(() => Simulate.change(document.querySelector('input[type=checkbox]'), { target: { checked: false } }));
+  await click('Salvar cadastro');
+  assert.match(document.body.textContent, /Cadastro salvo/);
+  assert.equal(account.cpf, '529.982.247-25');
+  assert.equal(account.rg, '11.966.756-3');
+  assert.equal(account.postalCode, '99999-999');
   await menu(); await click('Sair');
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
@@ -89,3 +96,4 @@ try {
   assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
