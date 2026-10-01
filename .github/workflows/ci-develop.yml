@@ -22,6 +22,7 @@ jobs:
         run: |
           npm install --no-save --ignore-scripts --package-lock=false jsdom@26
           node scripts/navigation-smoke.mjs
+          node scripts/professional-encounter-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
