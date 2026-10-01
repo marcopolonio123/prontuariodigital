@@ -186,25 +186,36 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
     if (!verified.count) throw new Error('UNVERIFIED');
     const claimed = await tx.accessRequest.updateMany({ where: { id: request.id, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, data: { status: 'approved', decidedAt: now, decidedByUserId: req.userId!, decisionNote: note } });
     if (!claimed.count) throw new Error('DECIDED');
+    const existing = await tx.accessGrant.findFirst({
+      where: { accountId: request.requesterUserId, patientId: request.patientId },
+      orderBy: { createdAt: 'desc' },
+    });
+    // Historical deployments may enforce one grant per account/patient pair.
+    // Renew that row instead of inserting a duplicate; retain the request audit trail.
     await tx.accessGrant.updateMany({
-      where: { accountId: request.requesterUserId, patientId: request.patientId, revokedAt: null },
+      where: { accountId: request.requesterUserId, patientId: request.patientId, revokedAt: null, ...(existing ? { id: { not: existing.id } } : {}) },
       data: { revokedAt: now },
     });
-    const grant = await tx.accessGrant.create({
-      data: {
-        accountId: request.requesterUserId,
-        patientId: request.patientId,
-        grantedByUserId: req.userId!,
-        grantedByName: request.patient.name,
-        practitionerId: request.practitionerId,
-        sourceRequestId: request.id,
-        level: 'completo',
-        scope: request.requestedScope,
-        permission: request.requestedPermission,
-        validFrom: now,
-        validUntil,
-      },
-    });
+    if (existing?.sourceRequestId && existing.sourceRequestId !== request.id) {
+      await tx.accessRequest.updateMany({ where: { id: existing.sourceRequestId, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
+    }
+    const grantData = {
+      accountId: request.requesterUserId,
+      patientId: request.patientId,
+      grantedByUserId: req.userId!,
+      grantedByName: request.patient.name,
+      practitionerId: request.practitionerId,
+      sourceRequestId: request.id,
+      level: 'completo',
+      scope: request.requestedScope,
+      permission: request.requestedPermission,
+      validFrom: now,
+      validUntil,
+      revokedAt: null,
+    };
+    const grant = existing
+      ? await tx.accessGrant.update({ where: { id: existing.id }, data: grantData })
+      : await tx.accessGrant.create({ data: grantData });
     return grant;
   }, { maxWait: 10000, timeout: 20000 });
 
@@ -215,7 +226,7 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
     if (code === 'DECIDED') return fail(res, 409, 'Esta solicitação já foi decidida ou expirou. Atualize a lista.');
     const databaseCode = String((error as { code?: string })?.code ?? 'UNKNOWN');
     // Only error identifiers in logs/response: do not print patient data or query parameters.
-    console.error('MyDoctor: falha na autorização do prontuário', { code: databaseCode });
+    console.error('MyDoctor: falha na autorização do prontuário', { code: databaseCode, target: (error as { meta?: { target?: unknown } })?.meta?.target });
     const reason = databaseCode === 'P2028' || databaseCode === 'P1008' || databaseCode === 'P2024' ? 'O banco excedeu o tempo de resposta.' : databaseCode === 'P2022' || databaseCode === 'P2021' ? 'A estrutura do banco precisa ser atualizada.' : databaseCode === 'P2002' ? 'Existe um conflito com uma autorização anterior.' : databaseCode === 'P2003' ? 'Um vínculo necessário para a autorização está inconsistente.' : databaseCode === 'P2034' ? 'Houve um conflito entre operações simultâneas.' : 'O servidor não conseguiu concluir a gravação.';
     return fail(res, 503, `Não foi possível autorizar. ${reason} Código: ${databaseCode}. Nenhuma nova autorização foi confirmada.`);
   }
@@ -239,5 +250,6 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
 
