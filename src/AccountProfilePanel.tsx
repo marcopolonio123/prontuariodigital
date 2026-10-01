@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AccountProfileV1, MyDoctorV1Api, VerificationDocumentV1 } from './lib/api-v1';
 const field = 'mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm';
 const question = 'Você é um profissional da saúde e deseja clinicar pelo APP? (Médico, fisioterapeuta, nutricionista...)';
@@ -6,10 +6,45 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
   const [data, setData] = useState<AccountProfileV1 | null>(null);
   const [document, setDocument] = useState<VerificationDocumentV1 | null>(null);
   const [kind, setKind] = useState('CNH'); const [file, setFile] = useState<File | null>(null);
+  const lastCep = useRef('');
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepMessage, setCepMessage] = useState('');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
-  useEffect(() => { let current = true; Promise.all([api.getAccount(), api.getIdentityDocument()]).then(([item, doc]) => { if (current) { setData(item); setDocument(doc); if (doc) setKind(doc.kind); } }).catch(error => { if (current) setMessage(error.message); }); return () => { current = false; }; }, [api]);
+  useEffect(() => { let current = true; Promise.all([api.getAccount(), api.getIdentityDocument()]).then(([item, doc]) => { if (current) { lastCep.current = (item.postalCode ?? '').replace(/\D/g, ''); setData(item); setDocument(doc); if (doc) setKind(doc.kind); } }).catch(error => { if (current) setMessage(error.message); }); return () => { current = false; }; }, [api]);
+  useEffect(() => {
+    const cep = (data?.postalCode ?? '').replace(/\D/g, '');
+    if (!data || !['brasil', 'brazil', 'br'].includes((data.country || 'Brasil').trim().toLowerCase()) || cep.length !== 8) { setCepLoading(false); setCepMessage(''); return; }
+    if (cep === lastCep.current) { setCepLoading(false); return; }
+    let current = true; const controller = new AbortController();
+    setCepLoading(true); setCepMessage('Buscando endereço...');
+    const before = { street: data.street, neighborhood: data.neighborhood, city: data.city, state: data.state };
+    let timeout: ReturnType<typeof setTimeout>;
+    const debounce = setTimeout(async () => {
+      timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (!response.ok) throw new Error('Busca indisponível');
+        const address = await response.json() as { erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string };
+        if (!current) return;
+        if (address.erro) { setCepMessage('CEP não encontrado. Confira o número ou preencha o endereço manualmente.'); return; }
+        if (!address.localidade || !address.uf || !/^[A-Z]{2}$/.test(address.uf) || (address.cep ?? '').replace(/\D/g, '') !== cep) throw new Error('Resposta inválida');
+        setData(previous => {
+          if (!previous || previous.postalCode.replace(/\D/g, '') !== cep) return previous;
+          return { ...previous,
+            street: previous.street === before.street ? (address.logradouro ?? '').slice(0,180) : previous.street,
+            neighborhood: previous.neighborhood === before.neighborhood ? (address.bairro ?? '').slice(0,100) : previous.neighborhood,
+            city: previous.city === before.city ? address.localidade!.slice(0,100) : previous.city,
+            state: previous.state === before.state ? address.uf! : previous.state };
+        });
+        lastCep.current = cep;
+        setCepMessage(address.logradouro ? 'Endereço preenchido. Informe número e complemento e confira os dados.' : 'Cidade e UF preenchidas. Informe rua, bairro e número.');
+      } catch { if (current) setCepMessage('Não foi possível consultar o CEP. Você pode preencher o endereço manualmente.'); }
+      finally { clearTimeout(timeout); if (current) setCepLoading(false); }
+    }, 350);
+    return () => { current = false; clearTimeout(debounce); clearTimeout(timeout); controller.abort(); };
+  }, [data?.postalCode, data?.country]);
   async function save() {
-    if (!data || busy) return; setBusy(true); setMessage('');
+    if (!data || busy || cepLoading) return; setBusy(true); setMessage('');
     try {
       const saved = await api.saveAccount({ ...data, phone: data.phone ?? '' }); setData(saved);
       if (file) { const doc = await api.saveIdentityDocument(kind, file, document?.id ?? null); setDocument(doc); setFile(null); }
@@ -57,7 +92,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
       </fieldset>
       <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <legend className="mb-2 text-sm font-bold">Endereço completo</legend>
-        {text('CEP', 'postalCode', 9, 'postal-code')}{text('Rua / Avenida', 'street', 180, 'address-line1')}{text('Número', 'number', 20)}{text('Complemento', 'complement', 100, 'address-line2')}{text('Bairro', 'neighborhood', 100)}{text('Cidade', 'city', 100, 'address-level2')}
+        <div>{text('CEP', 'postalCode', 9, 'postal-code')}<p aria-live="polite" className="mt-1 text-xs font-normal text-mute">{cepMessage || 'Digite 8 números para preencher o endereço.'}</p></div>{text('Rua / Avenida', 'street', 180, 'address-line1')}{text('Número', 'number', 20)}{text('Complemento', 'complement', 100, 'address-line2')}{text('Bairro', 'neighborhood', 100)}{text('Cidade', 'city', 100, 'address-level2')}
         <label className="text-xs font-bold">UF<select value={data.state} onChange={e => setData({ ...data, state: e.target.value })} className={field}><option value="">Selecione</option>{'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ').map(uf => <option key={uf}>{uf}</option>)}</select></label>{text('País', 'country', 80, 'country-name')}
       </fieldset>
       <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -70,7 +105,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
       </fieldset>
       <label className="flex items-start gap-2 text-sm"><input disabled={busy} type="checkbox" checked={data.isHealthProfessional} onChange={e => setData({ ...data, isHealthProfessional: e.target.checked })} style={{ width: 16, height: 16, maxWidth: 16, flex: '0 0 16px', marginTop: 2 }} />{question}</label>
       {data.isHealthProfessional && <p className="text-xs text-mute">Ao salvar, você seguirá para os dados profissionais e o comprovante do conselho. Clinicar depende da aprovação do administrador.</p>}
-      <div className="flex flex-wrap items-center gap-2"><button disabled={busy} type="submit" className="rounded-lg bg-pine-900 px-4 py-2 text-sm font-bold text-white">{busy ? 'Salvando...' : 'Salvar cadastro'}</button><button disabled={busy} type="button" onClick={onContinue} className="rounded-lg border border-line px-4 py-2 text-sm">Ir para o início</button></div>
+      <div className="flex flex-wrap items-center gap-2"><button disabled={busy || cepLoading} type="submit" className="rounded-lg bg-pine-900 px-4 py-2 text-sm font-bold text-white">{busy ? 'Salvando...' : 'Salvar cadastro'}</button><button disabled={busy} type="button" onClick={onContinue} className="rounded-lg border border-line px-4 py-2 text-sm">Ir para o início</button></div>
     </form> : <p className="mt-3 text-sm">Carregando cadastro...</p>}
   </section>;
 }
