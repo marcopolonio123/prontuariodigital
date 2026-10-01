@@ -2,8 +2,20 @@ import assert from 'node:assert/strict';
 process.env.PORT = '8794'; process.env.MYDOCTOR_ADMIN_EMAILS = '';
 await import('../dist/index.js');
 const { prisma: db } = await import('../dist/db.js');
+const { isUnder18 } = await import('../dist/identity-policy.js');
+assert.equal(isUnder18('2008-10-01', new Date('2026-10-01T15:00:00Z')), false);
+assert.equal(isUnder18('2008-10-02', new Date('2026-10-01T15:00:00Z')), true);
+assert.equal(isUnder18('2027-01-01', new Date('2026-10-01T15:00:00Z')), false);
 const base = 'http://127.0.0.1:8794/api/v1';
 const users = [];
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  if (String(url).startsWith('https://viacep.com.br/')) {
+    if (String(url).includes('00000000')) throw new Error('Falha simulada');
+    return new Response(JSON.stringify(String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' }), { headers: { 'content-type': 'application/json' } });
+  }
+  return originalFetch(url, init);
+};
 async function call(path, token, body, method = body ? 'POST' : 'GET') {
   const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   return { status: response.status, body: await response.json() };
@@ -18,6 +30,11 @@ async function account(professional = false) {
 try {
   const owner = await account(true); const other = await account(); const admin = await account(); process.env.MYDOCTOR_ADMIN_EMAILS = admin.email;
   assert.equal((await call('/account')).status, 401);
+  assert.equal((await call('/address/cep/01001000')).status, 401);
+  assert.equal((await call('/address/cep/abc', owner.token)).status, 400);
+  assert.equal((await call('/address/cep/01001000', owner.token)).body.logradouro, 'Praça da Sé');
+  assert.equal((await call('/address/cep/99999999', owner.token)).body.erro, true);
+  assert.equal((await call('/address/cep/00000000', owner.token)).status, 503);
   let initial = await call('/account', owner.token); assert.equal(initial.body.isHealthProfessional, true); assert.equal(initial.body.completed, false);
   const data = { name: 'Nome atualizado', birthDate: '1980-03-12', sex: 'female', city: 'São Paulo', state: 'SP', phone: '', isHealthProfessional: true, cpf: '529.982.247-25', rg: '12.345.678-X', postalCode: '01310-100', street: 'Avenida teste', number: '120', complement: 'Apto 4', neighborhood: 'Bairro teste', country: 'Brasil', avatarDataUrl: 'data:image/jpeg;base64,' + Buffer.from([255,216,255,224,0,0,255,217]).toString('base64') };
   assert.equal((await call('/account', owner.token, { ...data, birthDate: '2026-02-31' }, 'PUT')).status, 400);
@@ -48,7 +65,11 @@ try {
   assert.equal(row.documents.some(doc => doc.id === 'account:' + identity.body.id), true);
   const decision = { decision: 'approve', note: 'Teste de validação', evidence: 'Conferência simulada de identidade e conselho', checkedIdentityAndCouncil: true, registrationId: row.registrations[0].id, expectedUpdatedAt: row.updatedAt };
   assert.equal((await call(`/admin/professionals/${row.id}/decision`, admin.token, decision)).status, 200);
-  const replaced = await call('/account/document', owner.token, { ...identityInput, kind: 'Passaporte', expectedId: identity.body.id }); assert.equal(replaced.status, 201);
+  assert.equal((await call('/account/document', owner.token, { ...identityInput, kind: 'Certidão de nascimento', expectedId: identity.body.id })).status, 400, 'Adulto enviou certidão de nascimento');
+  data.birthDate = '2012-03-12';
+  assert.equal((await call('/account', owner.token, data, 'PUT')).status, 200);
+  const replaced = await call('/account/document', owner.token, { ...identityInput, kind: 'Certidão de nascimento', expectedId: identity.body.id }); assert.equal(replaced.status, 201); assert.equal((await call('/account/document', owner.token)).body.kind, 'Certidão de nascimento');
+  assert.equal((await call('/account', owner.token, { ...data, birthDate: '1980-03-12' }, 'PUT')).status, 400, 'Adulto manteve certidão ao alterar a idade');
   assert.equal((await call(`/account/documents/${identity.body.id}/download`, owner.token)).status, 404);
   assert.equal((await call('/professional/profile', owner.token)).body.verificationStatus, 'pending');
   uploaded = await call('/professional/documents', owner.token, { ...input, kind: 'council', filename: 'conselho.pdf' }); assert.equal(uploaded.status, 201);

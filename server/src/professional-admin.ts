@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
+import { isUnder18 } from './identity-policy.js';
 
 interface AdminRequest extends Request { actor?: { id: string; name: string }; }
 const router = Router();
@@ -53,10 +54,11 @@ router.get('/account/document', requireOwner, async (req: OwnerRequest, res: Res
 });
 router.post('/account/document', requireOwner, async (req: OwnerRequest, res: Response) => {
   const kind = req.body?.kind; const file = validatedUpload(req.body);
-  if (!['CNH', 'RG', 'Passaporte'].includes(kind) || !file) return res.status(400).json({ error: 'Selecione CNH, RG ou passaporte e um PDF ou imagem de até 3 MB.' });
+  if (!['CNH', 'RG', 'Passaporte', 'Certidão de nascimento'].includes(kind) || !file) return res.status(400).json({ error: 'Selecione CNH, RG, passaporte ou certidão de nascimento e um PDF ou imagem de até 3 MB.' });
   try {
     const result = await prisma.$transaction(async tx => {
-      await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
+      const user = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() }, select: { accountData: true } });
+      if (kind === 'Certidão de nascimento' && !isUnder18((user.accountData as any)?.birthDate ?? '')) throw new Error('AGE');
       const old = await tx.userIdentityDocument.findUnique({ where: { userId: req.userId! } });
       if ((old?.id ?? null) !== (req.body?.expectedId ?? null)) throw new Error('STALE');
       const professional = await tx.practitioner.findUnique({ where: { userId: req.userId! } });
@@ -65,7 +67,7 @@ router.post('/account/document', requireOwner, async (req: OwnerRequest, res: Re
       return tx.userIdentityDocument.create({ data: { userId: req.userId!, kind, ...file }, select: documentSelect });
     });
     res.status(201).json(result);
-  } catch (error) { res.status(error instanceof Error && error.message === 'STALE' ? 409 : 503).json({ error: 'Não foi possível salvar o documento. Atualize o cadastro e tente novamente.' }); }
+  } catch (error) { const code = error instanceof Error ? error.message : ''; res.status(code === 'AGE' ? 400 : code === 'STALE' ? 409 : 503).json({ error: code === 'AGE' ? 'Certidão de nascimento é permitida somente para menores de 18 anos. Confira a data de nascimento.' : 'Não foi possível salvar o documento. Atualize o cadastro e tente novamente.' }); }
 });
 router.delete('/account/documents/:id', requireOwner, async (req: OwnerRequest, res: Response) => {
   try {

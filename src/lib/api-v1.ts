@@ -131,6 +131,7 @@ export interface AdminProfessionalV1 {
 export class MyDoctorV1Api {
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
+  lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
   saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
   getIdentityDocument() { return this.req<VerificationDocumentV1 | null>('/account/document'); }
