@@ -54,13 +54,13 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
   }, [data?.postalCode, data?.country]);
   useEffect(() => { if (kind === 'Certidão de nascimento' && !under18(data?.birthDate ?? '')) { setKind('CNH'); setFile(null); } }, [data?.birthDate, kind]);
   async function save() {
-    if (!data || busy || cepLoading) return;
+    if (!data || busy) return;
     setTouched({ cpf: true, rg: true, postalCode: true });
     const cpfIssue = data.cpf && !validCpf(data.cpf) ? 'CPF inválido. Confira os dígitos verificadores.' : '';
     const rgIssue = rgError(data.rg ?? '', data.rgUf ?? '', data.rgType ?? 'RG');
     const cepIssue = data.postalCode && data.postalCode.replace(/\D/g,'').length !== 8 ? 'CEP deve ter 8 números.' : '';
-    if (cpfIssue || rgIssue || cepIssue) return setMessage(cpfIssue || rgIssue || cepIssue);
-    if (data.rgType === 'CIN' && data.rg && data.cpf && data.rg.replace(/\D/g,'') !== data.cpf.replace(/\D/g,'')) return setMessage('O número da CIN deve ser igual ao CPF informado.');
+    if (cpfIssue || rgIssue || cepIssue) { setMessage(cpfIssue || rgIssue || cepIssue); window.document.getElementById(cpfIssue ? 'account-cpf' : rgIssue ? 'account-rg' : 'account-postalCode')?.focus(); return; }
+    if (data.rgType === 'CIN' && data.rg && data.cpf && data.rg.replace(/\D/g,'') !== data.cpf.replace(/\D/g,'')) return setMessage('Os dois campos de CPF devem conter o mesmo número.');
     setBusy(true); setMessage('');
     try {
       const saved = await api.saveAccount({ ...data, phone: data.phone ?? '' }); setData(saved);
@@ -97,12 +97,12 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     if (!data) return null;
     const mask = (value: string) => key === 'cpf' ? formatCpf(value) : key === 'postalCode' ? formatCep(value) : key === 'rg' ? formatRg(value, data.rgUf ?? '', data.rgType ?? 'RG') : value;
     const issue = key === 'cpf' || key === 'rg' || key === 'postalCode' ? (touched[key] ? errors[key] : '') : '';
-    return <label className={`min-w-0 text-xs font-bold ${layout}`}>{label}<input id={`account-${key}`} required={key === 'name'} minLength={key === 'name' ? 2 : undefined} maxLength={maxLength} autoComplete={autoComplete} type={key === 'phone' ? 'tel' : 'text'} inputMode={['cpf', 'postalCode'].includes(key) || (key === 'rg' && data.rgType === 'CIN') ? 'numeric' : undefined} value={mask(data[key] ?? '')} onBlur={() => { if (key === 'cpf' || key === 'rg' || key === 'postalCode') setTouched(previous => ({ ...previous, [key]: true })); }} onChange={e => setData({ ...data, [key]: mask(e.target.value) })} aria-invalid={Boolean(issue)} aria-describedby={issue ? `error-${key}` : undefined} className={`${field} ${issue ? 'border-danger-500' : ''}`} />{issue && <span id={`error-${key}`} role="alert" className="mt-1 block font-normal text-danger-600">{issue}</span>}</label>;
+    return <label className={`block min-w-0 text-xs font-bold ${layout}`}>{label}<input id={`account-${key}`} required={key === 'name'} minLength={key === 'name' ? 2 : undefined} maxLength={maxLength} autoComplete={autoComplete} type={key === 'phone' ? 'tel' : 'text'} inputMode={['cpf', 'postalCode'].includes(key) || (key === 'rg' && data.rgType === 'CIN') ? 'numeric' : undefined} value={mask(data[key] ?? '')} onBlur={() => { if (key === 'cpf' || key === 'rg' || key === 'postalCode') setTouched(previous => ({ ...previous, [key]: true })); }} onChange={e => setData({ ...data, [key]: mask(e.target.value) })} aria-invalid={Boolean(issue)} aria-describedby={issue ? `error-${key}` : undefined} className={`${field} ${issue ? 'border-danger-500' : ''}`} />{issue && <span id={`error-${key}`} role="alert" className="mt-1 block font-normal text-danger-600">{issue}</span>}</label>;
   }
   return <section className="rounded-xl border border-line bg-card p-4 shadow-lift">
     <h2 className="text-xl font-bold">Meu cadastro</h2><p className="mt-1 text-sm text-mute">{data?.completed ? 'Confira e atualize seus dados pessoais.' : 'Complete seus dados após o primeiro acesso. Você poderá editá-los aqui depois.'}</p>
     {message && <p role="status" className="mt-3 rounded-lg bg-paper p-3 text-sm">{message}</p>}
-    {data ? <form className="mt-4 space-y-4" onSubmit={e => { e.preventDefault(); void save(); }}>
+    {data ? <form className="mt-4 space-y-4" onInvalid={e => { const input = e.target as HTMLInputElement; setMessage(input.validity.valueMissing ? 'Preencha os campos obrigatórios: nome completo e data de nascimento.' : 'Confira o campo destacado antes de salvar.'); }} onSubmit={e => { e.preventDefault(); void save(); }}>
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-white p-3">
         {data.avatarDataUrl ? <img src={data.avatarDataUrl} alt="Sua foto ou avatar" className="h-20 w-20 rounded-full border border-line object-cover" /> : <span className="flex h-20 w-20 items-center justify-center rounded-full bg-moss-50 text-2xl font-bold text-moss-800" aria-label="Sem foto de perfil">{data.name.trim().slice(0,1).toUpperCase() || '?'}</span>}
         <div className="min-w-0"><label className="block text-xs font-bold">Foto ou avatar<input disabled={busy} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void selectAvatar(e.target.files?.[0]); e.target.value = ''; }} className="mt-2 block w-full min-w-0 text-xs" /></label><p className="mt-1 text-xs text-mute">JPG, PNG ou WEBP, até 10 MB. A imagem será ajustada para o perfil.</p>{data.avatarDataUrl && <button disabled={busy} type="button" onClick={() => setData({ ...data, avatarDataUrl: '' })} className="mt-2 text-xs text-danger-600">Remover foto / avatar</button>}</div>
@@ -116,7 +116,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
       </fieldset>
       <fieldset disabled={busy} className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-12">
         <legend className="mb-2 text-sm font-bold">Endereço completo</legend>
-        <div className="min-w-0 sm:col-span-2">{text('CEP', 'postalCode', 9, 'postal-code')}</div>
+        {text('CEP', 'postalCode', 9, 'postal-code', 'sm:col-span-2')}
         {text('Rua / Avenida', 'street', 180, 'address-line1', 'col-span-2 sm:col-span-8')}
         {text('Número', 'number', 20, undefined, 'sm:col-span-2')}
         <p aria-live="polite" className="-mt-1 text-xs font-normal text-mute col-span-2 sm:col-span-12">{cepMessage || 'Digite o CEP para preencher o endereço; informe número e complemento.'}</p>
@@ -130,11 +130,11 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
         <legend className="mb-2 text-sm font-bold">Identificação</legend>
         <div className="grid min-w-0 grid-cols-2 gap-3 sm:col-span-2 lg:grid-cols-12">
           {text('CPF (opcional)', 'cpf', 14, undefined, 'col-span-2 lg:col-span-3')}
-          <label className="min-w-0 text-xs font-bold col-span-2 lg:col-span-4">Identidade<select value={data.rgType ?? 'RG'} onChange={e => { setData({ ...data, rgType: e.target.value as 'RG' | 'CIN' }); setTouched(previous => ({ ...previous, rg: false })); }} className={field}><option value="RG">RG estadual</option><option value="CIN">CIN (número do CPF)</option></select></label>
-          {text(data.rgType === 'CIN' ? 'Número da CIN (opcional)' : 'RG (opcional)', 'rg', data.rgType === 'CIN' ? 14 : 30, undefined, 'lg:col-span-3')}
+          <label className="min-w-0 text-xs font-bold col-span-2 lg:col-span-4">Identidade<select value={data.rgType ?? 'RG'} onChange={e => { setData({ ...data, rgType: e.target.value as 'RG' | 'CIN' }); setTouched(previous => ({ ...previous, rg: false })); }} className={field}><option value="RG">RG estadual</option><option value="CIN">CPF</option></select></label>
+          {text(data.rgType === 'CIN' ? 'CPF da identidade (opcional)' : 'RG (opcional)', 'rg', data.rgType === 'CIN' ? 14 : 30, undefined, 'lg:col-span-3')}
           {data.rgType !== 'CIN' && <label className="min-w-0 text-xs font-bold lg:col-span-2">UF emissora<select value={data.rgUf ?? ''} onChange={e => setData({ ...data, rgUf: e.target.value })} className={field}><option value="">Selecione</option>{BRAZIL_UFS.map(uf => <option key={uf}>{uf}</option>)}</select></label>}
         </div>
-        <p className="text-xs text-mute sm:col-span-2">{data.rgType === 'CIN' ? 'A CIN usa o mesmo número do CPF; os dígitos verificadores serão conferidos.' : data.rgUf === 'SP' ? 'RG-SP: informe os 8 números e o dígito verificador, incluindo X quando constar no documento.' : data.rgUf ? 'Nesta UF, conferimos o formato. A conferência do RG deve ser feita pelo documento; o dígito não é validado automaticamente.' : 'Informe a UF que emitiu o RG, mesmo que seja diferente da UF do seu endereço.'}</p>
+        <p className="text-xs text-mute sm:col-span-2">{data.rgType === 'CIN' ? 'Informe o CPF que consta na identidade; os dígitos verificadores serão conferidos.' : data.rgUf === 'SP' ? 'RG-SP: informe os 8 números e o dígito verificador, incluindo X quando constar no documento.' : data.rgUf ? 'Nesta UF, conferimos o formato. A conferência do RG deve ser feita pelo documento; o dígito não é validado automaticamente.' : 'Informe a UF que emitiu o RG, mesmo que seja diferente da UF do seu endereço.'}</p>
         <p className="text-xs text-mute sm:col-span-2">Você também pode guardar um documento de identificação. Certidão de nascimento é permitida apenas para menores de 18 anos. Se solicitar acesso profissional, o administrador poderá consultá-lo na validação.</p>
         <label className="text-xs font-bold">Tipo de documento<select value={kind} onChange={e => setKind(e.target.value)} className={field}><option>CNH</option><option>RG</option><option>Passaporte</option>{under18(data.birthDate) && <option>Certidão de nascimento</option>}</select></label>
         <label className="min-w-0 text-xs font-bold">Anexar documento (opcional)<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e => setFile(e.target.files?.[0] ?? null)} className={field} /><span className="mt-1 block font-normal text-mute">PDF ou imagem, até 3 MB. {file && `Selecionado: ${file.name}`}</span></label>
@@ -142,7 +142,9 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
       </fieldset>
       <label className="flex items-start gap-2 text-sm"><input disabled={busy} type="checkbox" checked={data.isHealthProfessional} onChange={e => setData({ ...data, isHealthProfessional: e.target.checked })} style={{ width: 16, height: 16, maxWidth: 16, flex: '0 0 16px', marginTop: 2 }} />{question}</label>
       {data.isHealthProfessional && <p className="text-xs text-mute">Ao salvar, você seguirá para os dados profissionais e o comprovante do conselho. Clinicar depende da aprovação do administrador.</p>}
-      <div className="flex flex-wrap items-center gap-2"><button disabled={busy || cepLoading} type="submit" className="rounded-lg bg-pine-900 px-4 py-2 text-sm font-bold text-white">{busy ? 'Salvando...' : 'Salvar cadastro'}</button><button disabled={busy} type="button" onClick={onContinue} className="rounded-lg border border-line px-4 py-2 text-sm">Ir para o início</button></div>
+      {message && <p role="status" className="rounded-lg bg-paper p-3 text-sm">{message}</p>}
+      <div className="flex flex-wrap items-center gap-2"><button disabled={busy} type="submit" className="rounded-lg bg-pine-900 px-4 py-2 text-sm font-bold text-white">{busy ? 'Salvando...' : 'Salvar cadastro'}</button><button disabled={busy} type="button" onClick={onContinue} className="rounded-lg border border-line px-4 py-2 text-sm">Ir para o início</button></div>
     </form> : <p className="mt-3 text-sm">Carregando cadastro...</p>}
   </section>;
 }
+
