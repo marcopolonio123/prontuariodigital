@@ -205,17 +205,19 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
         validUntil,
       },
     });
-    const approved = await tx.accessRequest.update({
-      where: { id: request.id },
-      data: { status: 'approved', decidedAt: now, decidedByUserId: req.userId!, decisionNote: note },
-    });
-    return { grant, approved };
-  });
+    return grant;
+  }, { maxWait: 10000, timeout: 20000 });
 
-  return res.json({ id: result.approved.id, status: result.approved.status, decidedAt: result.approved.decidedAt?.toISOString() ?? null, grantId: result.grant.id, validUntil: result.grant.validUntil?.toISOString() ?? null });
+  return res.json({ id: request.id, status: 'approved', decidedAt: now.toISOString(), grantId: result.id, validUntil: result.validUntil?.toISOString() ?? null });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
-    return fail(res, code === 'UNVERIFIED' ? 403 : code === 'DECIDED' ? 409 : 503, code === 'UNVERIFIED' ? 'Este profissional não possui validação ativa. Não é possível autorizar o acesso.' : code === 'DECIDED' ? 'Esta solicitação já foi decidida. Atualize a lista.' : 'Não foi possível autorizar. Atualize a lista para conferir o status antes de tentar novamente.');
+    if (code === 'UNVERIFIED') return fail(res, 403, 'Este profissional não possui validação ativa. Não é possível autorizar o acesso.');
+    if (code === 'DECIDED') return fail(res, 409, 'Esta solicitação já foi decidida ou expirou. Atualize a lista.');
+    const databaseCode = String((error as { code?: string })?.code ?? 'UNKNOWN');
+    // Only error identifiers in logs/response: do not print patient data or query parameters.
+    console.error('MyDoctor: falha na autorização do prontuário', { code: databaseCode });
+    const reason = databaseCode === 'P2028' || databaseCode === 'P1008' || databaseCode === 'P2024' ? 'O banco excedeu o tempo de resposta.' : databaseCode === 'P2022' || databaseCode === 'P2021' ? 'A estrutura do banco precisa ser atualizada.' : databaseCode === 'P2002' ? 'Existe um conflito com uma autorização anterior.' : databaseCode === 'P2003' ? 'Um vínculo necessário para a autorização está inconsistente.' : databaseCode === 'P2034' ? 'Houve um conflito entre operações simultâneas.' : 'O servidor não conseguiu concluir a gravação.';
+    return fail(res, 503, `Não foi possível autorizar. ${reason} Código: ${databaseCode}. Nenhuma nova autorização foi confirmada.`);
   }
 });
 
@@ -237,4 +239,5 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
