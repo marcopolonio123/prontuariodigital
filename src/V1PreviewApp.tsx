@@ -254,11 +254,11 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
     let current = true;
     api.setToken(savedToken);
     void api.getAccount().then(async account => {
-      if (!current) return;
+      if (!current || readV1SessionToken() !== savedToken) return;
       setUser(account); setToken(savedToken);
       await loadProfiles(api);
-      if (current && !account.completed) setView('account');
-    }).catch(error => { if (current) { api.setToken(''); setToken(''); setMessage(error instanceof Error ? error.message : 'Entre novamente.'); } });
+      if (current && readV1SessionToken() === savedToken && !account.completed) setView('account');
+    }).catch(error => { if (current && readV1SessionToken() === savedToken) { api.setToken(''); setToken(''); setMessage(error instanceof Error ? error.message : 'Entre novamente.'); } });
     return () => { current = false; };
   }, [api]);
 
