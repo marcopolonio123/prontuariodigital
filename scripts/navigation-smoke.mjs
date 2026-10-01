@@ -14,7 +14,7 @@ window.sessionStorage.setItem('mydoctor.v1.sessionToken', 'test-session');
 let account = { id: 'u1', name: 'Pessoa teste', email: 'teste@mydoctor.test', phone: '', birthDate: '1980-01-01', sex: '', city: '', state: '', completed: true, isHealthProfessional: true, postalCode: '', street: '', neighborhood: '', country: 'Brasil', number: '42', complement: 'Casa' };
 let requests = [];
 globalThis.fetch = async (url, init = {}) => {
-  if (String(url).startsWith('https://viacep.com.br/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
+  if (String(url).includes('/api/v1/address/cep/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
   const data = path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
   return { ok: true, status: 200, json: async () => data };
