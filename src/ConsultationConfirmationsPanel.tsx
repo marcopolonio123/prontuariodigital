@@ -51,8 +51,10 @@ export default function ConsultationConfirmationsPanel({ api }: { api: MyDoctorV
           <div className="mt-4 rounded-xl bg-paper p-3 text-sm text-mute">
             <p><strong className="text-ink">Data/Hora:</strong> {new Date(item.occurredAt).toLocaleString('pt-BR')}</p>
             {item.organizationName && <p className="mt-1"><strong className="text-ink">Local:</strong> {item.organizationName}</p>}
+            {[['symptoms','Sintomas / Queixa principal'],['diagnosis','Diagnóstico / Hipótese'],['exams','Exames'],['prescriptions','Receitas / Prescrições']].map(([key,label]) => item.clinical?.[key] ? <p key={key} className="mt-2 whitespace-pre-wrap break-words"><strong className="text-ink">{label}:</strong> {item.clinical[key]}</p> : null)}
             {item.notes && <p className="mt-1"><strong className="text-ink">Atendimento:</strong> {item.notes}</p>}
           </div>
+          {item.documents?.map(doc => <button key={doc.id} type="button" className="mt-2 block text-sm font-bold text-moss-700 underline" onClick={() => void api.openHealthEventDocument(item.patientId, item.id, doc.id, doc.originalFilename).catch(error => setMessage(error instanceof Error ? error.message : 'Não foi possível abrir o anexo.'))}>{doc.originalFilename}</button>)}
           <div className="mt-4 flex flex-wrap gap-3">
             <button type="button" disabled={busyId === item.id} onClick={() => void decide(item, 'confirm')} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Confirmar e incluir no prontuário</button>
             <button type="button" disabled={busyId === item.id} onClick={() => void decide(item, 'reject')} className="rounded-xl border border-line px-4 py-3 text-sm font-bold text-danger-600 disabled:opacity-50">Recusar registro</button>
@@ -64,3 +66,4 @@ export default function ConsultationConfirmationsPanel({ api }: { api: MyDoctorV
     {message && <p className="rounded-xl border border-line bg-card p-4 text-sm text-mute">{message}</p>}
   </div>;
 }
+

@@ -78,6 +78,8 @@ export interface ProfessionalConsultationV1 {
 }
 
 export interface IncomingConsultationV1 {
+  documents?: Array<{ id: string; originalFilename: string }>;
+  clinical?: Record<string, string>;
   id: string;
   patientId: string;
   patientName: string;
@@ -93,6 +95,11 @@ export interface IncomingConsultationV1 {
   createdAt: string;
 }
 
+export interface ClinicalSummaryV1 {
+  record: Record<string, unknown>;
+  events: Array<HealthEventV1 & { documents: Array<{ id: string; type: string; originalFilename: string }> }>;
+  schedules: Array<{ id: string; name: string; dose: string; weekdays: number[]; times: string[]; timezone: string; continuousUse: boolean; startsOn: string; endsOn: string | null; createdAt: string }>;
+}
 export interface HealthEventV1 {
   id: string; patientId: string; type: string; status: string; title: string; occurredAt: string; endedAt?: string | null; timezone: string;
   practitionerNameSnapshot?: string | null; professionSnapshot?: string | null; councilSnapshot?: string | null; registrationSnapshot?: string | null;
@@ -191,7 +198,8 @@ export class MyDoctorV1Api {
 
   listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
   revokePatientAccess(id: string) { return this.req<{ status: string }>(`/access-requests/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); }
-  createProfessionalConsultation(input: { accessRequestId: string; title: string; occurredAt: string; organizationName?: string; notes?: string }) {
+  getClinicalSummary(patientId: string) { return this.req<ClinicalSummaryV1>(`/professional/patients/${encodeURIComponent(patientId)}/summary`); }
+  createProfessionalConsultation(input: { accessRequestId: string; title: string; occurredAt: string; timezone?: string; type?: string; organizationName?: string; symptoms?: string; diagnosis?: string; exams?: string; prescriptions?: string; notes?: string }) {
     return this.req<HealthEventV1>('/professional/consultations', { method: 'POST', body: JSON.stringify(input) });
   }
   listIncomingConsultations() { return this.req<IncomingConsultationV1[]>('/consultations/incoming'); }
@@ -265,4 +273,5 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 
