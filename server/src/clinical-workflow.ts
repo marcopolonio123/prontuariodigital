@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
+import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
@@ -31,6 +32,36 @@ async function verifiedPractitioner(userId: string) {
  // Evitamos duas rotas concorrentes para o mesmo recurso, que tornavam a releitura
  // apos novo login dependente da ordem de registro dos routers.
 
+router.get('/professional/patients/:patientId/summary', auth, async (req: AuthedRequest, res: Response) => {
+  const practitioner = await verifiedPractitioner(req.userId!);
+  if (!practitioner) return fail(res, 403, 'Clinicar exige perfil profissional verificado e ativo.');
+  const now = new Date();
+  const grant = await prisma.accessGrant.findFirst({ where: {
+    accountId: req.userId!, practitionerId: practitioner.id, patientId: req.params.patientId,
+    patient: { archived: false }, permission: 'read_write_consultation', revokedAt: null, validFrom: { lte: now },
+    OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+  } });
+  if (!grant) return fail(res, 403, 'Não há autorização ativa para este prontuário.');
+  await purgeExpiredDiary(req.params.patientId);
+  const [patient, events, schedules] = await Promise.all([
+    prisma.patient.findUnique({ where: { id: req.params.patientId }, select: { data: true } }),
+    prisma.healthEvent.findMany({ where: { patientId: req.params.patientId, status: { in: ['final', 'amended'] } },
+      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }], select: {
+        id: true, patientId: true, type: true, status: true, title: true, occurredAt: true, timezone: true,
+        practitionerNameSnapshot: true, professionSnapshot: true, councilSnapshot: true,
+        registrationSnapshot: true, registrationRegionSnapshot: true, organizationNameSnapshot: true,
+        payload: true, createdAt: true, updatedAt: true,
+        documents: { where: { status: { not: 'deleted' } }, select: { id: true, type: true, originalFilename: true } },
+      } }),
+    prisma.medicationSchedule.findMany({ where: { patientId: req.params.patientId, active: true }, orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, dose: true, weekdays: true, times: true, timezone: true, continuousUse: true, startsOn: true, endsOn: true, createdAt: true } }),
+  ]);
+  const data = patient?.data && typeof patient.data === 'object' && !Array.isArray(patient.data) ? patient.data as Record<string, unknown> : {};
+  const record = Object.fromEntries(['birthDate', 'sex', 'allergies', 'intolerances', 'conditions', 'medications', 'specialCare', 'emergencyNotes'].map(key => [key, data[key] ?? null]));
+  res.json({ record, schedules, events: events.map(event => event.type === 'wellbeing_diary'
+    ? { ...event, payload: { entries: retainedDiaryEntries(event.payload).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) } } : event) });
+});
+
 router.post('/professional/consultations', auth, async (req: AuthedRequest, res: Response) => {
   const practitioner = await verifiedPractitioner(req.userId!);
   if (!practitioner) return fail(res, 403, 'Clinicar exige perfil profissional verificado e ativo.');
@@ -39,6 +70,8 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
   const accessRequestId = String(body.accessRequestId ?? '').trim();
   const title = String(body.title ?? '').trim();
   const occurredAt = new Date(body.occurredAt ?? Date.now());
+  const type = String(body.type ?? 'consultation');
+  if (!['consultation', 'exam', 'hospitalization', 'procedure', 'therapy', 'vaccine', 'prescription', 'other'].includes(type)) return fail(res, 400, 'Tipo de atendimento inválido.');
   if (!accessRequestId) return fail(res, 400, 'Informe a autorização do paciente.');
   if (!title || Number.isNaN(occurredAt.getTime())) return fail(res, 400, 'Informe descrição e data/hora válidas.');
 
@@ -63,7 +96,7 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
   const event = await prisma.healthEvent.create({
     data: {
       patientId: accessRequest.patientId,
-      type: 'consultation',
+      type,
       status: 'pending_patient_confirmation',
       title,
       occurredAt,
@@ -79,6 +112,11 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
       organizationNameSnapshot: String(body.organizationName ?? '').trim() || null,
       payload: {
         notes: String(body.notes ?? '').trim(),
+        symptoms: String(body.symptoms ?? '').trim(),
+        diagnosis: String(body.diagnosis ?? '').trim(),
+        exams: String(body.exams ?? '').trim(),
+        prescriptions: String(body.prescriptions ?? '').trim(),
+        specialty: practitioner.specialty ?? null,
         accessRequestId,
         confirmationRequired: true,
       },
@@ -97,7 +135,7 @@ router.get('/professional/consultations', auth, async (req: AuthedRequest, res: 
   const practitioner = await verifiedPractitioner(req.userId!);
   if (!practitioner) return fail(res, 403, 'Clinicar exige perfil profissional verificado e ativo.');
   const items = await prisma.healthEvent.findMany({
-    where: { practitionerId: practitioner.id, authoredByUserId: req.userId!, type: 'consultation' },
+    where: { practitionerId: practitioner.id, authoredByUserId: req.userId!, status: { in: ['pending_patient_confirmation', 'final', 'rejected_by_patient'] } },
     include: { patient: { select: { id: true, name: true } } },
     orderBy: { createdAt: 'desc' },
     take: 100,
@@ -116,7 +154,6 @@ router.get('/professional/consultations', auth, async (req: AuthedRequest, res: 
 router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Response) => {
   const items = await prisma.healthEvent.findMany({
     where: {
-      type: 'consultation',
       status: 'pending_patient_confirmation',
       patient: { ownerUserId: req.userId!, archived: false },
     },
@@ -135,6 +172,7 @@ router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Resp
     council: item.councilSnapshot,
     registration: item.registrationSnapshot,
     region: item.registrationRegionSnapshot,
+    clinical: Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions'].map(key => [key, typeof item.payload === 'object' && item.payload && !Array.isArray(item.payload) ? String((item.payload as Record<string, unknown>)[key] ?? '') : ''])),
     notes: typeof item.payload === 'object' && item.payload && !Array.isArray(item.payload) ? String((item.payload as Record<string, unknown>).notes ?? '') : '',
     createdAt: item.createdAt.toISOString(),
   })));
@@ -165,3 +203,4 @@ router.post('/consultations/:id/decision', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
