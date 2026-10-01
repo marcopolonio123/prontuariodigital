@@ -23,7 +23,7 @@ export function subscribeV1SessionToken(listener: (token: string) => void) {
 }
 
 export interface LoginStartResponse { challengeId: string; channel: MfaChannel; destinationMasked: string; expiresAt: string; developmentCode?: string; }
-export interface AccountProfileV1 extends V1User { avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
+export interface AccountProfileV1 extends V1User { rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
 export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
@@ -133,7 +133,7 @@ export class MyDoctorV1Api {
 
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
-  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
+  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
   getIdentityDocument() { return this.req<VerificationDocumentV1 | null>('/account/document'); }
   async saveIdentityDocument(kind: string, file: File, expectedId: string | null) {
     if (file.size > 3 * 1024 * 1024) throw new Error('Cada documento pode ter até 3 MB.');
