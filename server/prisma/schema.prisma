@@ -215,6 +215,7 @@ model Practitioner {
   @@index([name])
   @@index([profession, specialty])
   verificationDecisions ProfessionalVerificationDecision[]
+  verificationDocuments ProfessionalVerificationDocument[]
 
   @@index([verificationStatus, active])
 }
@@ -481,6 +482,21 @@ model ProfessionalVerificationDecision {
   note String
   evidence String?
   registrationSnapshot Json
+  createdAt DateTime @default(now())
+  @@index([practitionerId, createdAt])
+}
+
+
+model ProfessionalVerificationDocument {
+  id String @id @default(uuid())
+  practitionerId String
+  practitioner Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  kind String
+  filename String
+  mimeType String
+  sizeBytes Int
+  sha256 String
+  content Bytes
   createdAt DateTime @default(now())
   @@index([practitionerId, createdAt])
 }
