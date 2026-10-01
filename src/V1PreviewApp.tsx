@@ -212,14 +212,25 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
     finally { setBusy(false); }
   };
 
+  const dataRequestRef = useRef(0);
+  const profileRequestRef = useRef(0);
+  const documentRequestRef = useRef(0);
   const loadEvents = async (profile: PatientProfile, client = api) => {
+    const request = ++dataRequestRef.current;
+    const session = readV1SessionToken();
+    setEvents([]); setFamilyHistoryText(''); setEditingFamilyHistory(false);
     const items = await client.listHealthEvents(profile.id);
-    setEvents(items);
+    if (request !== dataRequestRef.current || session !== readV1SessionToken() || activeProfileIdRef.current !== profile.id) return;
+    const patientEvents = items.filter(item => item.patientId === profile.id);
+    setEvents(patientEvents);
     setEditingFamilyHistory(false);
-    setFamilyHistoryText(String(items.find((event) => event.type === 'family_history')?.payload?.text ?? ''));
+    setFamilyHistoryText(String(patientEvents.find((event) => event.type === 'family_history')?.payload?.text ?? ''));
   };
   const loadProfiles = async (client = api, preferredProfileId?: string | null) => {
+    const request = ++profileRequestRef.current;
+    const session = readV1SessionToken();
     const items = await client.listProfiles();
+    if (request !== profileRequestRef.current || session !== readV1SessionToken()) return;
     setProfiles(items);
     const rememberedProfileId = preferredProfileId
       ?? activeProfile?.id
@@ -228,6 +239,8 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
       ?? items.find((item) => item.relationship === 'self')
       ?? items[0]
       ?? null;
+    ++dataRequestRef.current; setEvents([]); setFamilyHistoryText('');
+    activeProfileIdRef.current = selected?.id ?? null;
     setActiveProfile(selected);
     if (selected) {
       window.localStorage.setItem('mydoctor.v1.activeProfileId', selected.id);
@@ -274,6 +287,8 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
   });
 
   const logout = () => {
+    ++dataRequestRef.current; ++profileRequestRef.current; activeProfileIdRef.current = null;
+    window.localStorage.removeItem('mydoctor.v1.activeProfileId');
     api.setToken(''); setUser(null); setToken(''); setChallenge(null); setCode(''); setShowPassword(false);
     setProfiles([]); setActiveProfile(null); setEvents([]); setFamilyHistoryText(''); setView('welcome'); setMenuOpen(false); setAuthView('login');
     setShowProfileForm(false); setShowRecordForm(false); setShowVitalForm(false); setShowInsuranceForm(false);
@@ -282,7 +297,9 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
 
   const go = (next: AppView) => { setView(next); setMenuOpen(false); setMessage(''); };
   const chooseProfile = (profile: PatientProfile) => run(async () => {
+    activeProfileIdRef.current = profile.id;
     setActiveProfile(profile);
+    resetRecordForm(); setShowRecordForm(false); setSavedDocuments([]);
     window.localStorage.setItem('mydoctor.v1.activeProfileId', profile.id);
     await loadEvents(profile);
   });
@@ -310,10 +327,12 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
     const saved = editingEventId
       ? await api.updateHealthEvent(activeProfile.id, editingEventId, input)
       : await api.createHealthEvent(activeProfile.id, input);
-    setEvents((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+
     if (reportFiles.length) await api.uploadHealthEventDocuments(activeProfile.id, saved.id, 'report', reportFiles);
     if (prescriptionFiles.length) await api.uploadHealthEventDocuments(activeProfile.id, saved.id, 'prescription', prescriptionFiles);
     if (examFiles.length) await api.uploadHealthEventDocuments(activeProfile.id, saved.id, 'exam', examFiles);
+    if (activeProfileIdRef.current !== saved.patientId) return;
+    setEvents((current) => [saved, ...current.filter((item) => item.id !== saved.id && item.patientId === saved.patientId)]);
     setReportFiles([]); setPrescriptionFiles([]); setExamFiles([]);
     setEventTitle(''); setSymptoms(''); setDiagnosis(''); setExamsText(''); setPrescriptions(''); setNotes(''); const wasEditing = Boolean(editingEventId);
     setEditingEventId(null);
@@ -323,6 +342,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
   });
 
   const resetRecordForm = () => {
+    ++documentRequestRef.current;
     setEditingEventId(null);
     setEventType('consultation'); setEventTitle(''); setEventDate(localDateTimeInputValue());
     setOrganizationName(''); setPractitionerName(''); setProfession(''); setCouncil('CRM'); setRegistration(''); setRegistrationRegion('');
@@ -331,7 +351,10 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
   };
 
   const startEditEvent = (event: HealthEventV1) => {
-    if (activeProfile) void run(async () => setSavedDocuments(await api.listHealthEventDocuments(activeProfile.id, event.id)));
+    if (!activeProfile || event.patientId !== activeProfile.id) return;
+    const profileId = activeProfile.id, request = ++documentRequestRef.current, session = readV1SessionToken();
+    setSavedDocuments([]);
+    void run(async () => { const docs = await api.listHealthEventDocuments(profileId, event.id); if (request === documentRequestRef.current && profileId === activeProfileIdRef.current && session === readV1SessionToken()) setSavedDocuments(docs); });
     setEditingEventId(event.id);
     setEventType(event.type);
     setEventTitle(event.title);
@@ -371,10 +394,16 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
     });
   };
 
+  useEffect(() => {
+    resetRecordForm(); setShowRecordForm(false); setShowVitalForm(false);
+    setDiaryText(''); setShowDiaryForm(false); setShowInsuranceForm(false);
+    setInsuranceFront(null); setInsuranceBack(null); setMessage('');
+  }, [activeProfile?.id]);
+
   const selectedVital = VITAL_TYPES.find(([type]) => type === vitalType) ?? VITAL_TYPES[0];
   const vitalEvents = events.filter((event) => event.type === 'vital');
   const insuranceEvents = events.filter((event) => event.type === 'insurance');
-  const allClinicalEvents = events.filter((event) => event.type !== 'vital' && event.type !== 'insurance');
+  const allClinicalEvents = events.filter((event) => event.patientId === activeProfile?.id && EVENT_TYPES.some(([type]) => type === event.type) && ['final', 'amended', 'cancelled'].includes(event.status));
   const clinicalEvents = allClinicalEvents.filter((event) => showInactiveRecords ? event.status === 'cancelled' : event.status !== 'cancelled');
   const vitalPayload = (event: HealthEventV1) => event.payload as Record<string, unknown>;
 
@@ -570,4 +599,5 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate }: { canAdmi
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><h1 className="break-words font-display text-2xl font-bold text-ink sm:text-3xl">Sua saúde e seu bem-estar. No seu controle.</h1><p className="mt-1 text-sm text-mute">MyDoctor reúne sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
+
 
