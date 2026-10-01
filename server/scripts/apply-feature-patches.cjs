@@ -23,13 +23,15 @@ async function main() {
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'MedicationSchedule' AND column_name = 'continuousUse') AS schedule_mode_ready,
       to_regclass('"MedicationReminderDelivery"') IS NOT NULL AS delivery_ready,
       to_regclass('"ProfessionalVerificationDecision"') IS NOT NULL AS admin_ready,
-      to_regclass('"ProfessionalVerificationDocument"') IS NOT NULL AS documents_ready`);
+      to_regclass('"ProfessionalVerificationDocument"') IS NOT NULL AS documents_ready,
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'User' AND column_name = 'accountData') AS account_ready,
+      to_regclass('"UserIdentityDocument"') IS NOT NULL AS identity_ready`);
     if (Object.values(ready.rows[0]).every(value => value === true)) {
       await client.query('COMMIT');
       console.info('MyDoctor: schema dos recursos já preparado.');
       return;
     }
-    for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql', 'professional-documents.sql']) {
+    for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql', 'professional-documents.sql', 'account-details.sql']) {
       await client.query(fs.readFileSync(path.join(__dirname, '..', 'prisma', filename), 'utf8'));
     }
     await client.query('COMMIT');
