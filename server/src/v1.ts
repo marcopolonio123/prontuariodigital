@@ -280,6 +280,18 @@ function accountView(user: { id: string; name: string; email: string; phone: str
     avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
     birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
+router.get('/address/cep/:cep', auth, async (req: AuthedRequest, res: Response) => {
+  const cep = req.params.cep;
+  if (!/^\d{8}$/.test(cep)) return fail(res, 400, 'Informe um CEP com 8 números.');
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: AbortSignal.timeout(7000) });
+    if (!response.ok) return fail(res, 503, 'Consulta de CEP indisponível. Preencha o endereço manualmente.');
+    const address = await response.json() as Record<string, unknown>;
+    if (address.erro) return res.json({ erro: true });
+    if (typeof address.localidade !== 'string' || typeof address.uf !== 'string' || !/^[A-Z]{2}$/.test(address.uf) || String(address.cep ?? '').replace(/\D/g, '') !== cep) return fail(res, 503, 'Consulta de CEP indisponível.');
+    res.json({ cep: address.cep, logradouro: String(address.logradouro ?? '').slice(0,180), bairro: String(address.bairro ?? '').slice(0,100), localidade: address.localidade.slice(0,100), uf: address.uf });
+  } catch { fail(res, 503, 'Consulta de CEP indisponível. Preencha o endereço manualmente.'); }
+});
 router.get('/account', auth, async (req: AuthedRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
