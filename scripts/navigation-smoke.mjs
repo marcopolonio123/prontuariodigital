@@ -14,7 +14,7 @@ let account = { id: 'u1', name: 'Pessoa teste', email: 'teste@mydoctor.test', ph
 let requests = [];
 globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
-  const data = path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : path === '/professional/profile' ? null : [];
+  const data = path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
   return { ok: true, status: 200, json: async () => data };
 };
 const outfile = '.navigation-test.cjs';
@@ -39,12 +39,17 @@ try {
   await click('← Voltar ao MyDoctor');
   assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
   await menu(); await click('Meu cadastro');
-  assert.match(document.body.textContent, /Você é profissional de saúde/);
+  assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
+  assert.equal([...document.querySelectorAll('button')].filter(button => /^Salvar/.test(button.textContent.trim())).length, 1, 'Mais de um botão para salvar');
+  assert.match(document.body.textContent, /Endereço completo/);
+  assert.match(document.body.textContent, /Foto ou avatar/);
+  assert.match(document.body.textContent, /CPF \(opcional\)/);
+  assert.match(document.body.textContent, /RG \(opcional\)/);
   assert.equal(requests.filter(path => path === '/account').length, restoreRequests + 1, 'Navegação reinicia sessão');
   await menu(); await click('Sair');
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
   await click('Clique aqui para se cadastrar');
-  assert.match(document.body.textContent, /Você é profissional de saúde/);
+  assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
