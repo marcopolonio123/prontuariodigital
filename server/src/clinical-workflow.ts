@@ -57,7 +57,7 @@ router.get('/professional/patients/:patientId/summary', auth, async (req: Authed
       select: { id: true, name: true, dose: true, weekdays: true, times: true, timezone: true, continuousUse: true, startsOn: true, endsOn: true, createdAt: true } }),
   ]);
   const data = patient?.data && typeof patient.data === 'object' && !Array.isArray(patient.data) ? patient.data as Record<string, unknown> : {};
-  const record = Object.fromEntries(['birthDate', 'sex', 'allergies', 'intolerances', 'conditions', 'medications', 'specialCare', 'emergencyNotes'].map(key => [key, data[key] ?? null]));
+  const record = Object.fromEntries(['birthDate', 'sex', 'bloodType', 'allergies', 'intolerances', 'conditions', 'medications', 'specialCare', 'emergencyNotes'].map(key => [key, data[key] ?? null]));
   res.json({ record, schedules, events: events.map(event => event.type === 'wellbeing_diary'
     ? { ...event, payload: { entries: retainedDiaryEntries(event.payload).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) } } : event) });
 });
@@ -157,7 +157,7 @@ router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Resp
       status: 'pending_patient_confirmation',
       patient: { ownerUserId: req.userId!, archived: false },
     },
-    include: { patient: { select: { id: true, name: true } }, practitioner: { include: { registrations: { include: { authority: true } } } } },
+    include: { documents: { where: { status: { not: 'deleted' } }, select: { id: true, originalFilename: true } }, patient: { select: { id: true, name: true } }, practitioner: { include: { registrations: { include: { authority: true } } } } },
     orderBy: { createdAt: 'desc' },
   });
   return res.json(items.map((item) => ({
@@ -172,6 +172,7 @@ router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Resp
     council: item.councilSnapshot,
     registration: item.registrationSnapshot,
     region: item.registrationRegionSnapshot,
+    documents: item.documents,
     clinical: Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions'].map(key => [key, typeof item.payload === 'object' && item.payload && !Array.isArray(item.payload) ? String((item.payload as Record<string, unknown>)[key] ?? '') : ''])),
     notes: typeof item.payload === 'object' && item.payload && !Array.isArray(item.payload) ? String((item.payload as Record<string, unknown>).notes ?? '') : '',
     createdAt: item.createdAt.toISOString(),
