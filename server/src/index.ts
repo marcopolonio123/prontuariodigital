@@ -44,7 +44,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-01-consent-renew-existing', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-01-personal-clinical-isolation', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body ?? {};
@@ -65,7 +65,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 async function visiblePatientIds(userId: string): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
     prisma.patient.findMany({ where: { ownerUserId: userId }, select: { id: true } }),
-    prisma.accessGrant.findMany({ where: { accountId: userId, revokedAt: null, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, select: { patientId: true } }),
+    prisma.accessGrant.findMany({ where: { accountId: userId, permission: { not: 'read_write_consultation' }, validFrom: { lte: new Date() }, revokedAt: null, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, select: { patientId: true } }),
   ]);
   return new Set([...owned, ...grants].map((x) => ('patientId' in x ? x.patientId : x.id)));
 }
@@ -141,6 +141,7 @@ app.listen(PORT, '0.0.0.0', () => {
   // derrubar o query engine e interromper login/prontuário.
   console.log('My Doctor: migração de schema em runtime desativada.');
 });
+
 
 
 
