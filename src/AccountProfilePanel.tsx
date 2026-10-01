@@ -50,7 +50,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     }, 350);
     return () => { current = false; clearTimeout(debounce); clearTimeout(timeout); controller.abort(); };
   }, [data?.postalCode, data?.country]);
-  useEffect(() => { if (kind === 'Certidão de nascimento' && !under18(data?.birthDate ?? '')) setKind('CNH'); }, [data?.birthDate, kind]);
+  useEffect(() => { if (kind === 'Certidão de nascimento' && !under18(data?.birthDate ?? '')) { setKind('CNH'); setFile(null); } }, [data?.birthDate, kind]);
   async function save() {
     if (!data || busy || cepLoading) return; setBusy(true); setMessage('');
     try {
