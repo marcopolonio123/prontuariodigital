@@ -33,7 +33,7 @@ export default function AccessRequestsPanel({ api }: { api: MyDoctorV1Api }) {
     setBusyId(item.id); setMessage(''); setErrors(previous => ({ ...previous, [item.id]: '' }));
     try {
       await api.decideAccessRequest(item.id, decision, undefined, decision === 'approve' ? selected.duration : undefined, decision === 'approve' && selected.duration === 'until' ? end.toISOString() : undefined);
-      setMessage(decision === 'reject' ? 'Solicitação recusada.' : selected.duration === 'indefinite' ? 'Acesso autorizado por tempo indeterminado. Você pode revogá-lo a qualquer momento.' : `Acesso autorizado até ${end.toLocaleString('pt-BR')}.`);
+      setMessage(decision === 'reject' ? 'Solicitação recusada.' : '');
       await load();
     } catch (error) { setErrors(previous => ({ ...previous, [item.id]: error instanceof Error ? error.message : 'Não foi possível registrar sua decisão.' })); }
     finally { setBusyId(''); }
