@@ -7,6 +7,8 @@ assert.equal(validCpf('529.982.247-25'), true);
 assert.equal(validCpf('529.982.247-26'), false);
 assert.equal(validCpf('111.111.111-11'), false);
 assert.equal(rgError('11.966.756-3', 'SP', 'RG'), '');
+assert.equal(rgError('12.030.001-1', 'SP', 'RG'), '');
+assert.notEqual(rgError('12.030.001-2', 'SP', 'RG'), '');
 assert.equal(rgError('00.000.005-X', 'SP', 'RG'), '');
 assert.notEqual(rgError('00.000.005-0', 'SP', 'RG'), '');
 assert.notEqual(rgError('00.000.000-0', 'SP', 'RG'), '');
@@ -50,6 +52,11 @@ try {
   assert.equal((await call('/address/cep/00000000', owner.token)).status, 503);
   let initial = await call('/account', owner.token); assert.equal(initial.body.isHealthProfessional, true); assert.equal(initial.body.completed, false);
   const data = { name: 'Nome atualizado', birthDate: '1980-03-12', sex: 'female', city: 'São Paulo', state: 'SP', phone: '', isHealthProfessional: true, cpf: '529.982.247-25', rg: '11.966.756-3', rgUf: 'SP', rgType: 'RG', postalCode: '01310-100', street: 'Avenida teste', number: '120', complement: 'Apto 4', neighborhood: 'Bairro teste', country: 'Brasil', avatarDataUrl: 'data:image/jpeg;base64,' + Buffer.from([255,216,255,224,0,0,255,217]).toString('base64') };
+  const legacy = await call('/account', owner.token, { ...data, phone: '+55 (11) 98765.4321', sex: 'Feminino', state: ' sp ' }, 'PUT');
+  assert.equal(legacy.status, 200); assert.equal(legacy.body.phone, '+5511987654321'); assert.equal(legacy.body.sex, 'female'); assert.equal(legacy.body.state, 'SP');
+  for (const [patch, message] of [[{ name: 'A' }, /Nome completo/], [{ birthDate: '2026-02-31' }, /Data de nascimento/], [{ phone: 'abc12345678' }, /Celular inválido/], [{ sex: 'invalid' }, /Sexo:/], [{ state: 'XX' }, /UF do endereço/]]) {
+    const invalid = await call('/account', owner.token, { ...data, ...patch }, 'PUT'); assert.equal(invalid.status, 400); assert.match(invalid.body.error, message);
+  }
   assert.equal((await call('/account', owner.token, { ...data, birthDate: '2026-02-31' }, 'PUT')).status, 400);
   assert.equal((await call('/account', owner.token, { ...data, cpf: '111.111.111-11' }, 'PUT')).status, 400);
   assert.equal((await call('/account', owner.token, { ...data, avatarDataUrl: 'https://example.com/photo.jpg' }, 'PUT')).status, 400);
@@ -109,3 +116,4 @@ try {
   await db.practitioner.deleteMany({ where: { userId: { in: users } } }); await db.user.deleteMany({ where: { id: { in: users } } }); await db.$disconnect();
 }
 process.exit(0);
+

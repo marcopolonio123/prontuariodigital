@@ -306,9 +306,11 @@ router.get('/account', auth, async (req: AuthedRequest, res: Response) => {
 });
 router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   const body = req.body ?? {};
-  const name = String(body.name ?? '').trim(); const phone = String(body.phone ?? '').trim() || null;
-  const birthDate = String(body.birthDate ?? ''); const sex = String(body.sex ?? '');
-  const city = String(body.city ?? '').trim(); const state = String(body.state ?? '').toUpperCase();
+  const name = String(body.name ?? '').trim(); const phone = String(body.phone ?? '').trim().replace(/[().\s-]/g, '') || null;
+  const birthDate = String(body.birthDate ?? '').trim();
+  const rawSex = String(body.sex ?? '').trim().toLowerCase();
+  const sex = ({ feminino: 'female', f: 'female', masculino: 'male', m: 'male', outro: 'other', 'não informado': '', 'nao informado': '' } as Record<string, string>)[rawSex] ?? rawSex;
+  const city = String(body.city ?? '').trim(); const state = String(body.state ?? '').trim().toUpperCase();
   const cpf = normalizeCpf(String(body.cpf ?? ''));
   const rg = normalizeRg(String(body.rg ?? ''));
   const rgType = String(body.rgType ?? 'RG').toUpperCase(); const rgUf = String(body.rgUf ?? '').trim().toUpperCase();
@@ -318,13 +320,18 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   const postalCode = String(body.postalCode ?? '').trim().replace(/[\s-]/g, '');
   const address = { postalCode, street: String(body.street ?? '').trim(), number: String(body.number ?? '').trim(), complement: String(body.complement ?? '').trim(), neighborhood: String(body.neighborhood ?? '').trim(), country: String(body.country ?? 'Brasil').trim() || 'Brasil' };
   if (cpf && !validCpf(cpf)) return fail(res, 400, 'CPF inválido: confira os 11 números e os dois dígitos verificadores.');
-  if (rg && rgType === 'CIN' && cpf && rg !== cpf) return fail(res, 400, 'O número da CIN deve ser igual ao CPF informado.');
+  if (rg && rgType === 'CIN' && cpf && rg !== cpf) return fail(res, 400, 'Os dois campos de CPF devem conter o mesmo número.');
   if (rg.length > 30 || (postalCode && !/^\d{8}$/.test(postalCode)) || address.street.length > 180 || address.number.length > 20 || address.complement.length > 100 || address.neighborhood.length > 100 || address.country.length > 80) return fail(res, 400, 'Confira RG, CEP e endereço.');
   const avatar = String(body.avatarDataUrl ?? '');
   if (avatar && (avatar.length > 256 * 1024 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar))) return fail(res, 400, 'Selecione uma foto ou avatar válido.');
   if (avatar) { const bytes = Buffer.from(avatar.split(',')[1], 'base64'); if (bytes[0] !== 255 || bytes[1] !== 216 || bytes[2] !== 255) return fail(res, 400, 'Imagem de perfil inválida.'); }
   const date = new Date(birthDate + 'T00:00:00Z');
-  if (name.length < 2 || name.length > 150 || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== birthDate || date > new Date() || date.getUTCFullYear() < 1900 || !['', 'female', 'male', 'other', 'unknown'].includes(sex) || city.length > 100 || (state && !/^[A-Z]{2}$/.test(state)) || (phone && !/^\+?[\d ()-]{8,25}$/.test(phone))) return fail(res, 400, 'Confira nome, data de nascimento, celular e UF.');
+  if (name.length < 2 || name.length > 150) return fail(res, 400, 'Nome completo: informe entre 2 e 150 caracteres.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== birthDate || date > new Date() || date.getUTCFullYear() < 1900) return fail(res, 400, 'Data de nascimento inválida: informe uma data real, de 1900 até hoje.');
+  if (!['', 'female', 'male', 'other', 'unknown'].includes(sex)) return fail(res, 400, 'Sexo: selecione uma das opções disponíveis.');
+  if (city.length > 100) return fail(res, 400, 'Cidade: use no máximo 100 caracteres.');
+  if (state && !BRAZIL_UFS.includes(state)) return fail(res, 400, 'UF do endereço: selecione um estado na lista.');
+  if (phone && !/^\+?\d{8,15}$/.test(phone)) return fail(res, 400, 'Celular inválido: informe DDD e número, com código do país opcional.');
   try {
     const result = await prisma.$transaction(async tx => {
       const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
@@ -933,3 +940,4 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+

@@ -44,7 +44,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-01-document-masks-layout', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-01-account-validation-phone', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body ?? {};
@@ -141,3 +141,4 @@ app.listen(PORT, '0.0.0.0', () => {
   // derrubar o query engine e interromper login/prontuário.
   console.log('My Doctor: migração de schema em runtime desativada.');
 });
+
