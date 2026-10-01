@@ -85,26 +85,23 @@ router.post('/professional/access-requests', auth, async (req: AuthedRequest, re
   if (!patient || patient.archived) return fail(res, 404, 'Paciente não encontrado.');
   if (patient.ownerUserId === req.userId) return fail(res, 400, 'Use seu prontuário pessoal para registrar seus próprios atendimentos.');
 
-  const now = new Date();
-  const existing = await prisma.accessRequest.findFirst({
-    where: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-    orderBy: { requestedAt: 'desc' },
-  });
-  if (existing) return res.status(200).json({ id: existing.id, patientId, patientName: patient.name, status: existing.status, requestedAt: existing.requestedAt.toISOString(), expiresAt: existing.expiresAt?.toISOString() ?? null });
-
-  const created = await prisma.accessRequest.create({
-    data: {
-      requesterUserId: req.userId!,
-      practitionerId: practitioner.id,
-      patientId,
-      requestedScope: ['record', 'documents', 'vitals', 'insurance'],
-      requestedPermission: 'read_write_consultation',
-      status: 'pending',
-      expiresAt: new Date(now.getTime() + REQUEST_TTL_HOURS * 60 * 60 * 1000),
-    },
-  });
-
-  return res.status(201).json({ id: created.id, patientId, patientName: patient.name, status: created.status, requestedAt: created.requestedAt.toISOString(), expiresAt: created.expiresAt?.toISOString() ?? null });
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const locked = await tx.practitioner.updateMany({ where: { id: practitioner.id, active: true, verificationStatus: 'verified' }, data: { updatedAt: new Date() } });
+      if (!locked.count) throw new Error('UNVERIFIED');
+      const now = new Date();
+      const active = await tx.accessGrant.findFirst({ where: { accountId: req.userId!, patientId, practitionerId: practitioner.id, permission: 'read_write_consultation', revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] } });
+      if (active) throw new Error('ACTIVE');
+      const existing = await tx.accessRequest.findFirst({ where: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, orderBy: { requestedAt: 'desc' } });
+      if (existing) return { row: existing, created: false };
+      const row = await tx.accessRequest.create({ data: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, requestedScope: ['record', 'documents', 'vitals', 'insurance'], requestedPermission: 'read_write_consultation', status: 'pending', expiresAt: new Date(now.getTime() + REQUEST_TTL_HOURS * 60 * 60 * 1000) } });
+      return { row, created: true };
+    }, { maxWait: 10000, timeout: 20000 });
+    return res.status(result.created ? 201 : 200).json({ id: result.row.id, patientId, patientName: patient.name, status: result.row.status, requestedAt: result.row.requestedAt.toISOString(), expiresAt: result.row.expiresAt?.toISOString() ?? null });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    return fail(res, code === 'ACTIVE' ? 409 : code === 'UNVERIFIED' ? 403 : 503, code === 'ACTIVE' ? 'Você já possui autorização ativa para este paciente. Use o acesso existente; solicite novamente somente após vencimento ou revogação.' : code === 'UNVERIFIED' ? 'Clinicar está disponível somente para profissional verificado.' : 'Não foi possível solicitar acesso. Atualize a lista e tente novamente.');
+  }
 });
 
 router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Response) => {
@@ -186,25 +183,36 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
     if (!verified.count) throw new Error('UNVERIFIED');
     const claimed = await tx.accessRequest.updateMany({ where: { id: request.id, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, data: { status: 'approved', decidedAt: now, decidedByUserId: req.userId!, decisionNote: note } });
     if (!claimed.count) throw new Error('DECIDED');
+    const existing = await tx.accessGrant.findFirst({
+      where: { accountId: request.requesterUserId, patientId: request.patientId },
+      orderBy: { createdAt: 'desc' },
+    });
+    // Historical deployments may enforce one grant per account/patient pair.
+    // Renew that row instead of inserting a duplicate; retain the request audit trail.
     await tx.accessGrant.updateMany({
-      where: { accountId: request.requesterUserId, patientId: request.patientId, revokedAt: null },
+      where: { accountId: request.requesterUserId, patientId: request.patientId, revokedAt: null, ...(existing ? { id: { not: existing.id } } : {}) },
       data: { revokedAt: now },
     });
-    const grant = await tx.accessGrant.create({
-      data: {
-        accountId: request.requesterUserId,
-        patientId: request.patientId,
-        grantedByUserId: req.userId!,
-        grantedByName: request.patient.name,
-        practitionerId: request.practitionerId,
-        sourceRequestId: request.id,
-        level: 'completo',
-        scope: request.requestedScope,
-        permission: request.requestedPermission,
-        validFrom: now,
-        validUntil,
-      },
-    });
+    if (existing?.sourceRequestId && existing.sourceRequestId !== request.id) {
+      await tx.accessRequest.updateMany({ where: { id: existing.sourceRequestId, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
+    }
+    const grantData = {
+      accountId: request.requesterUserId,
+      patientId: request.patientId,
+      grantedByUserId: req.userId!,
+      grantedByName: request.patient.name,
+      practitionerId: request.practitionerId,
+      sourceRequestId: request.id,
+      level: 'completo',
+      scope: request.requestedScope,
+      permission: request.requestedPermission,
+      validFrom: now,
+      validUntil,
+      revokedAt: null as Date | null,
+    };
+    const grant = existing
+      ? await tx.accessGrant.update({ where: { id: existing.id }, data: grantData })
+      : await tx.accessGrant.create({ data: grantData });
     return grant;
   }, { maxWait: 10000, timeout: 20000 });
 
@@ -215,7 +223,7 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
     if (code === 'DECIDED') return fail(res, 409, 'Esta solicitação já foi decidida ou expirou. Atualize a lista.');
     const databaseCode = String((error as { code?: string })?.code ?? 'UNKNOWN');
     // Only error identifiers in logs/response: do not print patient data or query parameters.
-    console.error('MyDoctor: falha na autorização do prontuário', { code: databaseCode });
+    console.error('MyDoctor: falha na autorização do prontuário', { code: databaseCode, target: (error as { meta?: { target?: unknown } })?.meta?.target });
     const reason = databaseCode === 'P2028' || databaseCode === 'P1008' || databaseCode === 'P2024' ? 'O banco excedeu o tempo de resposta.' : databaseCode === 'P2022' || databaseCode === 'P2021' ? 'A estrutura do banco precisa ser atualizada.' : databaseCode === 'P2002' ? 'Existe um conflito com uma autorização anterior.' : databaseCode === 'P2003' ? 'Um vínculo necessário para a autorização está inconsistente.' : databaseCode === 'P2034' ? 'Houve um conflito entre operações simultâneas.' : 'O servidor não conseguiu concluir a gravação.';
     return fail(res, 503, `Não foi possível autorizar. ${reason} Código: ${databaseCode}. Nenhuma nova autorização foi confirmada.`);
   }
@@ -239,5 +247,6 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
 
