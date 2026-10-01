@@ -29,17 +29,26 @@ function installDictationButtonForLabel(labelPrefix: string) {
   const field = label.querySelector('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
   if (!field) return;
 
+  label.classList.add('grid', 'grid-cols-[minmax(0,1fr)_auto]', 'gap-x-2', 'items-start');
+  field.classList.add('col-start-1', 'row-start-2', 'min-w-0');
   const controls = document.createElement('div');
-  controls.className = 'mt-2 flex flex-wrap items-center gap-2';
+  controls.className = 'col-start-2 row-start-2 mt-1 flex flex-col gap-1';
   controls.dataset.mydoctorRecordDictation = 'true';
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'rounded-lg border border-moss-500 bg-white px-3 py-2 text-xs font-bold text-moss-800';
+  button.className = 'min-h-11 shrink-0 rounded-lg border border-moss-500 bg-white px-3 py-2 text-xs font-bold text-moss-800';
   button.textContent = '🎙️ Ditar';
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.className = 'min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-xs font-bold text-mute';
+  clearButton.textContent = 'Limpar';
   const status = document.createElement('span');
-  status.className = 'text-xs font-semibold text-moss-700';
-  controls.append(button, status);
-  label.appendChild(controls);
+  status.className = 'col-span-2 row-start-3 mt-1 text-xs font-semibold text-moss-700';
+  status.setAttribute('role', 'status');
+  status.hidden = true;
+  const setStatus = (text: string) => { status.textContent = text; status.hidden = !text; };
+  controls.append(button, clearButton);
+  label.append(controls, status);
 
   let recognition: SpeechRecognitionLike | null = null;
   let baseText = '';
@@ -51,10 +60,15 @@ function installDictationButtonForLabel(labelPrefix: string) {
     field.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
+  clearButton.addEventListener('click', () => {
+    if (recognition) { recognition.onresult = null; recognition.onerror = null; recognition.onend = null; recognition.stop(); recognition = null; }
+    button.textContent = '🎙️ Ditar'; setStatus(''); setValue('');
+  });
+
   button.addEventListener('click', () => {
     if (recognition) { recognition.stop(); return; }
     const RecognitionApi = speechRecognitionConstructor();
-    if (!RecognitionApi) { status.textContent = 'Ditado não disponível neste navegador.'; return; }
+    if (!RecognitionApi) { setStatus('Ditado não disponível neste navegador.'); return; }
     const activeRecognition = new RecognitionApi();
     recognition = activeRecognition;
     activeRecognition.lang = 'pt-BR';
@@ -72,10 +86,10 @@ function installDictationButtonForLabel(labelPrefix: string) {
       }
       setValue([baseText, finalText.trim(), interim.trim()].filter(Boolean).join(' '));
     };
-    activeRecognition.onerror = () => { status.textContent = 'Não foi possível continuar o ditado.'; };
-    activeRecognition.onend = () => { recognition = null; button.textContent = '🎙️ Ditar'; status.textContent = ''; };
-    button.textContent = '■ Parar ditado';
-    status.textContent = 'Ouvindo em português...';
+    activeRecognition.onerror = () => { setStatus('Não foi possível continuar o ditado.'); };
+    activeRecognition.onend = () => { recognition = null; button.textContent = '🎙️ Ditar'; setStatus(''); };
+    button.textContent = '■ Parar';
+    setStatus('Ouvindo em português...');
     activeRecognition.start();
   });
 }
@@ -100,3 +114,4 @@ export default function RecordDictationEnhancer() {
   }, []);
   return null;
 }
+
