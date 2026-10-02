@@ -37,6 +37,9 @@ async function menu() { const button = document.querySelector('button[aria-label
 try {
   await settle(() => root.render(React.createElement(Shell))); await settle();
   assert.match(document.body.textContent, /Olá, Pessoa/);
+  const initialDashboard=document.querySelector('[aria-label="Menu do MyDoctor"]');assert.ok(initialDashboard,'Menu de ícones não apareceu após login');
+  assert.ok(initialDashboard.querySelector('button svg'),'Ícones não renderizados');
+  assert.ok([...initialDashboard.querySelectorAll('button')].some(button=>button.textContent==='Prontuário'));
   assert.equal(window.localStorage.getItem('mydoctor.v1.activeProfileId'), 'p1', 'Paciente lembrado de outra conta foi selecionado');
   await menu(); await click('Prontuário');
   assert.match(document.body.textContent, /Atendimento próprio/);
@@ -138,6 +141,7 @@ try {
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
   await click('Clique aqui para se cadastrar');
   assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
+  assert.equal(document.querySelector('[aria-label="Menu do MyDoctor"]'),null,'Menu persistiu após logout');
   await build({ entryPoints: ['src/AccessRequestsPanel.tsx'], outfile: '.consent-test.cjs', bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react'] });
   const ConsentPanel = require('../.consent-test.cjs').default;
   let consent = { id:'request', patientId:'patient', patientName:'Paciente teste', practitionerName:'Médico teste', requesterName:'Médico teste', status:'pending', requestedAt:new Date().toISOString(), registrations:[], requestedPermission:'read_write_consultation', requestedScope:['record'] };
@@ -155,6 +159,7 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 
 

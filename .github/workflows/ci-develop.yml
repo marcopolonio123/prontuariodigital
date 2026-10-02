@@ -20,9 +20,11 @@ jobs:
       - run: npm run build:web
       - name: Navigation regression test
         run: |
-          npm install --no-save --ignore-scripts --package-lock=false jsdom@26
+          npm install --no-save --ignore-scripts --package-lock=false jsdom@26 playwright
           node scripts/navigation-smoke.mjs
           node scripts/professional-encounter-smoke.mjs
+          npx playwright install --with-deps chromium
+          node scripts/responsive-navigation-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest

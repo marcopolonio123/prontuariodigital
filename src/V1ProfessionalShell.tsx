@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { NavigationIcon } from './components/DashboardNavigation';
 import { ProfessionalLocationsPage } from './components/ProfessionalLocations';
 import ProfessionalAdminPanel from './ProfessionalAdminPanel';
 import AccessRequestsPanel from './AccessRequestsPanel';
@@ -51,7 +52,7 @@ export default function V1ProfessionalShell() {
           <div><p className="text-xs font-bold uppercase tracking-wide text-moss-700">MyDoctor</p><h1 className="font-display text-2xl font-bold text-ink">{title}</h1></div>
           <button type="button" onClick={() => setView('app')} className="rounded-xl border border-moss-500 px-4 py-3 text-sm font-bold text-moss-800">← Voltar ao MyDoctor</button>
         </div>
-        {token && ['professional','clinicar','professional-locations','professional-access'].includes(view) && <nav aria-label="Navegação profissional" className="mb-5 flex flex-wrap gap-2">{([['clinicar','Atendimento'],['professional-access','Solicitar acesso ao prontuário do paciente'],['professional-locations','Locais que atendo'],['professional','Validação de cadastro profissional']] as const).map(([key,label])=><button type="button" key={key} aria-current={view===key?'page':undefined} onClick={()=>setView(key)} className={`rounded-lg border px-3 py-2 text-sm font-bold ${view===key?'border-moss-500 bg-moss-50 text-moss-800':'border-line text-ink'}`}>{label}</button>)}</nav>}
+        {token && ['professional','clinicar','professional-locations','professional-access'].includes(view) && <nav aria-label="Navegação profissional" className="mb-5 flex flex-wrap gap-2">{([['clinicar','Atendimento'],['professional-access','Solicitar acesso ao prontuário do paciente'],['professional-locations','Locais que atendo'],['professional','Validação de cadastro profissional']] as const).map(([key,label])=><button type="button" key={key} aria-current={view===key?'page':undefined} onClick={()=>setView(key)} className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold ${view===key?'border-moss-500 bg-moss-50 text-moss-800':'border-line text-ink'}`}><NavigationIcon destination={key} className="h-5 w-5 shrink-0"/>{label}</button>)}</nav>}
         {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift"><h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2><p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p><button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button></section>
           : view === 'administration' ? <ProfessionalAdminPanel api={api} />
           : view === 'professional' ? <ProfessionalProfilePanel api={api} />
@@ -64,6 +65,7 @@ export default function V1ProfessionalShell() {
     </main>}
   </>;
 }
+
 
 
 
