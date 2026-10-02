@@ -45,6 +45,7 @@ try {
   await menu(); await click('Prontuário');
   assert.match(document.body.textContent, /Atendimento próprio/);
   assert.doesNotMatch(document.body.textContent, /Registro de outra conta|family_history|wellbeing_diary|Atendimento pendente/);
+  const filterSection=[...document.querySelectorAll('summary')].find(item=>item.textContent==='Filtros');assert.ok(filterSection);assert.equal(filterSection.parentElement.open,false);await settle(()=>filterSection.click());assert.equal(filterSection.parentElement.open,true);
   const rowIds=()=>[...document.querySelectorAll('[data-record-id]')].map(item=>item.dataset.recordId);
   const filter=label=>[...document.querySelectorAll('label')].find(item=>item.textContent.startsWith(label)).querySelector('input,select');
   await settle(()=>document.querySelector('[aria-label="Ordenar por Data/Hora"]').click());
@@ -52,19 +53,27 @@ try {
   await settle(()=>document.querySelector('[aria-label="Ordenar por Data/Hora"]').click());
   assert.equal(rowIds()[0],'own');
   await settle(()=>Simulate.change(document.getElementById('record-filter-text'),{target:{value:'REVISAO'}}));
+  assert.equal(rowIds().length,3,'Filtro aplicado antes de acionar o botão');
+  await click('Aplicar filtros');
   assert.deepEqual(rowIds(),['recent-record'],'Busca não considerou detalhes sem acentuação');
   await settle(()=>Simulate.change(filter('Filtrar por especialidade'),{target:{value:'Dermatologia'}}));
+  await click('Aplicar filtros');
   assert.deepEqual(rowIds(),[],'Filtros não foram combinados');
   await click('Limpar filtros');
   await settle(()=>Simulate.change(filter('Filtrar por profissional'),{target:{value:'Dra. Ana'}}));
+  await click('Aplicar filtros');
   assert.deepEqual(rowIds(),['old-record']);
   await click('Limpar filtros');
   await settle(()=>Simulate.change(filter('Data inicial'),{target:{value:'2025-12-09'}}));
   await settle(()=>Simulate.change(filter('Data final'),{target:{value:'2025-12-09'}}));
+  await click('Aplicar filtros');
   assert.deepEqual(rowIds(),['old-record'],'Período não incluiu o dia completo');
   await settle(()=>Simulate.change(filter('Data inicial'),{target:{value:'2025-12-10'}}));
   assert.match(document.body.textContent,/data final deve ser igual ou posterior/);
+  assert.deepEqual(rowIds(),['old-record'],'Período inválido alterou os resultados');
+  assert.equal([...document.querySelectorAll('button')].find(item=>item.textContent==='Aplicar filtros').disabled,true);
   await click('Limpar filtros');
+  await settle(()=>filterSection.click());assert.equal(filterSection.parentElement.open,false);
   await settle(()=>document.querySelector('[aria-label="Ordenar por Médico/Atendente"]').click());
   assert.deepEqual(rowIds(),['own','recent-record','old-record']);
 
@@ -183,11 +192,3 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
-
-
-
-
-
-
-
-
