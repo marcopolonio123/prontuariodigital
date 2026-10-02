@@ -41,6 +41,13 @@ try {
   assert.equal((await call('/utility/logs',patient.token)).body.items.some(l=>l.id===usage.body.id),false,'Uso sem identificação vazou');
   const adminAudit=await call('/utility/logs?admin=1',admin.token);assert.equal(adminAudit.status,200);assert.equal(adminAudit.body.items.find(l=>l.id===usage.body.id).location.latitude,-23.55);
   assert.equal((await call('/utility/usage',professional.token,{method:'finger',location:{status:'obtained',latitude:91,longitude:0,accuracy:1}})).status,400);
+  const photo=await call('/utility/usage',professional.token,{method:'finger_photo',action:'photo_captured',patientId:patient.patientId,result:'match',image:'não armazenar',location:{status:'denied'},diagnostic:{width:1600,height:1200,brightness:120,sharpness:500,extra:'não armazenar'}});
+  assert.equal(photo.status,201);assert.equal(photo.body.result,'photo_captured');
+  const photoRow=await db.identificationLog.findUnique({where:{id:photo.body.id}});assert.equal(photoRow.patientId,null);assert.equal(photoRow.confidence,0);assert.ok(!photoRow.detail.includes('não armazenar'));
+  assert.equal((await call('/utility/logs',professional.token)).body.items.find(l=>l.id===photo.body.id).diagnostic.width,1600);
+  assert.equal((await call('/utility/usage',professional.token,{method:'finger_photo',action:'match',location:{status:'denied'}})).status,400);
+  assert.equal((await call('/utility/usage',professional.token,{method:'finger_photo',action:'photo_captured',location:{status:'denied'},diagnostic:{width:999999,height:999999,brightness:120,sharpness:2}})).status,400);
+  await db.identificationLog.delete({where:{id:photo.body.id}});
   const denied=await call('/utility/usage',professional.token,{method:'open',location:{status:'denied'}});assert.equal(denied.status,201);
   const targetLog=await db.identificationLog.create({data:{method:'finger',patientId:patient.patientId,patientName:'Paciente teste',byUserId:professional.id,byName:'Profissional teste',result:'review'}});
   assert.equal((await call('/utility/logs?patientId='+patient.patientId,patient.token)).body.items.some(l=>l.id===targetLog.id),true);
