@@ -23,7 +23,9 @@ export function subscribeV1SessionToken(listener: (token: string) => void) {
 }
 
 export interface LoginStartResponse { challengeId: string; channel: MfaChannel; destinationMasked: string; expiresAt: string; developmentCode?: string; }
-export interface AccountProfileV1 extends V1User { rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
+export interface FingerprintReferenceMetadata {registeredAt:string;width:number;height:number;finger:'right_index'|'left_index';status:'pending_engine'}
+export interface FingerprintReferenceInput {photo:string;consent:true;finger:'right_index'|'left_index'}
+export interface AccountProfileV1 extends V1User { fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
 export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
@@ -151,13 +153,13 @@ export type UtilityPhotoAction='camera_opened'|'camera_failed'|'photo_captured'|
 export interface UtilityLog {id:string;at:string;method:string;result:string;patientName:string|null;byName:string;location:UtilityLocation;diagnostic?:UtilityPhotoDiagnostic|null}
 export class MyDoctorV1Api {
   recordUtilityUsage(method:'open'|'finger'|'finger_photo',location:UtilityLocation,action?:UtilityPhotoAction,diagnostic?:UtilityPhotoDiagnostic){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location,action,diagnostic})})}
-  utilityLogs(query:{admin?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
+  utilityLogs(query:{admin?:boolean;mine?:boolean;identificationOnly?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.mine)params.set('mine','1');if(query.identificationOnly)params.set('identificationOnly','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
 
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
-  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
+  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string;fingerprintReference?:FingerprintReferenceInput|null }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
   getIdentityDocument() { return this.req<VerificationDocumentV1 | null>('/account/document'); }
   async saveIdentityDocument(kind: string, file: File, expectedId: string | null) {
     if (file.size > 3 * 1024 * 1024) throw new Error('Cada documento pode ter até 3 MB.');
