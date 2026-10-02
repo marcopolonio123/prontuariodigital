@@ -219,6 +219,11 @@ try {
   process.env.MYDOCTOR_ADMIN_EMAILS = '';
   assert.equal((await call('/admin/professionals', admin.token)).status, 403, 'remoção de administração não surtiu efeito');
   console.log('✅ Administração: autorização, aprovação manual, rejeição, suspensão/revogação, auditoria, concorrência e bloqueio de autovalidação OK.');
+  await db.healthEvent.createMany({ data: Array.from({length:205},(_,index)=>({patientId:patient.patientId,type:'consultation',title:'Arquivo histórico '+index,status:'final',occurredAt:new Date('2001-01-01T12:00:00Z'),payload:{}})) });
+  const fullHistory = await call('/patients/' + patient.patientId + '/events', patient.token);
+  assert.equal(fullHistory.status,200);
+  assert.equal(fullHistory.body.filter(event=>event.title.startsWith('Arquivo histórico')).length,205,'Lista truncou atendimentos antigos necessários aos filtros');
+  assert.equal((await call('/patients/' + patient.patientId + '/events', admin.token)).status,403,'Histórico completo vazou para outra conta');
 } finally {
   await db.$executeRawUnsafe('DROP INDEX IF EXISTS "test_legacy_grant_pair_unique"');
   await db.practitioner.deleteMany({ where: { id: { in: professionals } } });
@@ -226,6 +231,7 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
 

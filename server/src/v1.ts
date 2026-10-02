@@ -608,7 +608,6 @@ router.get('/patients/:patientId/events', auth, async (req: AuthedRequest, res: 
     where: { patientId: req.params.patientId, status: { not: 'draft' } },
     include: { practitioner: true, organization: true, location: true },
     orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-    take: 200,
   });
   res.json(events);
 });
@@ -986,6 +985,7 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
 
