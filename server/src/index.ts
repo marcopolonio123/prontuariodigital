@@ -11,6 +11,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from './db.js';
 import clinicalWorkflowRouter from './clinical-workflow.js';
 import v1Router from './v1.js';
+import publicUtilityRouter from './public-utility.js';
 import professionalAccessRouter from './professional-access.js';
 import professionalAdminRouter from './professional-admin.js';
 import medicationAgendaRouter from './medication-agenda.js';
@@ -30,6 +31,7 @@ app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 app.use('/api/v1', clinicalWorkflowRouter);
 app.use('/api/v1', v1Router);
+app.use('/api/v1', publicUtilityRouter);
 app.use('/api/v1', professionalAccessRouter);
 app.use('/api/v1', medicationAgendaRouter);
 app.use('/api/v1', professionalAdminRouter);
@@ -44,7 +46,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-02-record-filters', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-02-utility-audit', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body ?? {};
@@ -117,13 +119,18 @@ app.delete('/api/grants/:id', auth, async (req: AuthedRequest, res: Response) =>
 
 app.get('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);
-  const logs = await prisma.identificationLog.findMany({ where: { OR: [{ patientId: null }, { patientId: { in: [...ids] } }] }, orderBy: { at: 'desc' }, take: 100 });
+  const logs = await prisma.identificationLog.findMany({ where: { OR: [{ byUserId: req.userId! }, { patientId: { in: [...ids] } }] }, orderBy: { at: 'desc' }, take: 100 });
   res.json(logs.map((l) => ({ id: l.id, method: l.method, patientId: l.patientId, patientName: l.patientName, confidence: l.confidence, quality: l.quality, result: l.result, at: l.at.getTime(), thumb: null as string | null, detail: l.detail ?? undefined, byName: l.byName })));
 });
 
 app.post('/api/log', auth, async (req: AuthedRequest, res: Response) => {
   const b = req.body ?? {};
-  await prisma.identificationLog.create({ data: { id: String(b.id ?? crypto.randomUUID()), method: String(b.method ?? 'face'), patientId: b.patientId ? String(b.patientId) : null, patientName: String(b.patientName ?? '—'), confidence: Number(b.confidence ?? 0), quality: b.quality === null || b.quality === undefined ? null : Number(b.quality), result: String(b.result ?? 'none'), byUserId: req.userId!, byName: String(b.byName ?? ''), detail: b.detail ? String(b.detail) : null, at: new Date(Number(b.at ?? Date.now())) } });
+  const patientId=b.patientId?String(b.patientId):null;
+  const ids=await visiblePatientIds(req.userId!);
+  if(patientId&&!ids.has(patientId))return fail(res,403,'Sem acesso à pessoa indicada.');
+  const actor=await prisma.user.findUnique({where:{id:req.userId!},select:{name:true}});
+  const patient=patientId?await prisma.patient.findUnique({where:{id:patientId},select:{name:true}}):null;
+  await prisma.identificationLog.create({data:{method:['face','finger'].includes(b.method)?b.method:'legacy',patientId,patientName:patient?.name??'—',byUserId:req.userId!,byName:actor?.name??'',result:'legacy_unverified',confidence:0,detail:'Registro do protótipo; identificação não validada.'}});
   res.status(201).json({ ok: true });
 });
 
@@ -141,10 +148,3 @@ app.listen(PORT, '0.0.0.0', () => {
   // derrubar o query engine e interromper login/prontuário.
   console.log('My Doctor: migração de schema em runtime desativada.');
 });
-
-
-
-
-
-
-

@@ -89,7 +89,7 @@ function randomCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
-async function visiblePatientIds(userId: string, includeProfessional = false): Promise<Set<string>> {
+export async function visiblePatientIds(userId: string, includeProfessional = false): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
     prisma.patient.findMany({ where: { ownerUserId: userId, archived: false }, select: { id: true } }),
     prisma.accessGrant.findMany({
@@ -985,7 +985,3 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
-
-
-
-

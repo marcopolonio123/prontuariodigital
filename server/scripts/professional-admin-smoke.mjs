@@ -32,6 +32,25 @@ try {
   assert.equal((await call('/admin/professionals', patient.token)).status, 403);
   assert.equal((await call('/admin/session', patient.token)).body.authorized, false);
   assert.equal((await call('/admin/session', admin.token)).body.authorized, true);
+  const usage=await call('/utility/usage',professional.token,{method:'finger',patientId:patient.patientId,result:'match',byName:'Nome falso',location:{status:'obtained',latitude:-23.55,longitude:-46.63,accuracy:12}});
+  assert.equal(usage.status,201);assert.equal(usage.body.result,'reader_not_configured');
+  const audit=await db.identificationLog.findUnique({where:{id:usage.body.id}});
+  assert.equal(audit.patientId,null,'Cliente atribuiu identificação falsa');assert.equal(audit.byUserId,professional.id);assert.equal(audit.byName,'Profissional teste');
+  assert.equal((await call('/utility/logs?admin=1',patient.token)).status,403);
+  assert.equal((await call('/utility/logs?patientId='+patient.patientId,professional.token)).status,403);
+  assert.equal((await call('/utility/logs',patient.token)).body.items.some(l=>l.id===usage.body.id),false,'Uso sem identificação vazou');
+  const adminAudit=await call('/utility/logs?admin=1',admin.token);assert.equal(adminAudit.status,200);assert.equal(adminAudit.body.items.find(l=>l.id===usage.body.id).location.latitude,-23.55);
+  assert.equal((await call('/utility/usage',professional.token,{method:'finger',location:{status:'obtained',latitude:91,longitude:0,accuracy:1}})).status,400);
+  const denied=await call('/utility/usage',professional.token,{method:'open',location:{status:'denied'}});assert.equal(denied.status,201);
+  const targetLog=await db.identificationLog.create({data:{method:'finger',patientId:patient.patientId,patientName:'Paciente teste',byUserId:professional.id,byName:'Profissional teste',result:'review'}});
+  assert.equal((await call('/utility/logs?patientId='+patient.patientId,patient.token)).body.items.some(l=>l.id===targetLog.id),true);
+  const guardianGrant=await db.accessGrant.create({data:{accountId:admin.id,patientId:patient.patientId,permission:'read',level:'completo'}});
+  assert.equal((await call('/utility/logs?patientId='+patient.patientId,admin.token)).body.items.some(l=>l.id===targetLog.id),true);
+  await db.accessGrant.update({where:{id:guardianGrant.id},data:{revokedAt:new Date()}});
+  assert.equal((await call('/utility/logs?patientId='+patient.patientId,admin.token)).status,403);
+  await db.accessGrant.delete({where:{id:guardianGrant.id}});
+  await db.identificationLog.deleteMany({where:{id:{in:[usage.body.id,denied.body.id,targetLog.id]}}});
+
   const profileData = { profession: 'Médico teste', council: 'CRM', registration: String(Date.now()), region: 'SP', specialty: 'Teste', verificationStatus: 'verified' };
   const requested = await call('/professional/profile', professional.token, profileData, 'PUT');
   assert.equal(requested.body.verificationStatus, 'pending', 'autoverificação indevida');
@@ -231,10 +250,3 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
-
-
-
-
-
-
-

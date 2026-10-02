@@ -6,7 +6,7 @@ import { isUnder18 } from './identity-policy.js';
 
 interface AdminRequest extends Request { actor?: { id: string; name: string }; }
 const router = Router();
-async function administrator(req: AdminRequest) {
+export async function administrator(req: AdminRequest) {
   const token = (req.headers.authorization ?? '').replace(/^Bearer /, '');
   const { uid } = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me') as { uid: string };
   const user = await prisma.user.findUnique({ where: { id: uid }, select: { id: true, name: true, email: true, emailVerifiedAt: true,

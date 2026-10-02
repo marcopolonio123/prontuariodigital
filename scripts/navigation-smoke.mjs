@@ -21,6 +21,8 @@ let pendingConsultations = [{ id: 'confirmed-consultation', patientId: 'p1', pat
 globalThis.fetch = async (url, init = {}) => {
   if (String(url).includes('/api/v1/address/cep/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
+  if(path==='/utility/usage')return {ok:true,status:201,json:async()=>({id:'usage',result:'reader_not_configured'})};
+  if(path==='/utility/logs')return {ok:true,status:200,json:async()=>({items:[],nextCursor:null})};
   if (path === '/consultations/confirmed-consultation/decision' && init.method === 'POST') { pendingConsultations = []; healthEvents.push({ ...event('confirmed-consultation', 'p1', 'consultation', 'Consulta do Dr. Lucas'), professionSnapshot: 'Médico', payload: { specialty: 'Cardiologia' }, provenance: { source: 'mydoctor_professional' } }); return { ok: true, status: 200, json: async () => ({ id: 'confirmed-consultation', status: 'final' }) }; }
   if (path === '/patients/p1/events' && init.method === 'POST') { const input=JSON.parse(init.body); const saved={...event('home-visit-personal','p1',input.type,input.title),payload:input.payload,organizationNameSnapshot:input.organizationName||null}; healthEvents.push(saved); return {ok:true,status:201,json:async()=>saved}; }
   if (path === '/account' && init.method === 'PUT') account = { ...account, ...JSON.parse(init.body) };
@@ -77,6 +79,7 @@ try {
   await settle(()=>document.querySelector('[aria-label="Ordenar por Médico/Atendente"]').click());
   assert.deepEqual(rowIds(),['own','recent-record','old-record']);
 
+  await menu();await click('Utilidade pública');await settle();assert.match(document.body.textContent,/Leitor digital ainda não integrado/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');await click('Registrar tentativa de leitura digital');assert.match(document.body.textContent,/Nenhuma pessoa foi identificada/);await click('← Voltar ao MyDoctor');
   await menu(); await click('Início');
   const restoreRequests = requests.filter(path => path === '/account').length;
   await menu();
