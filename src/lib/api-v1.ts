@@ -146,9 +146,11 @@ export interface AdminProfessionalV1 {
   history: Array<{ id: string; decision: string; status: string; actorName: string; note: string; evidence: string | null; createdAt: string }>;
 }
 export interface UtilityLocation {status:string;latitude?:number;longitude?:number;accuracy?:number}
-export interface UtilityLog {id:string;at:string;method:string;result:string;patientName:string|null;byName:string;location:UtilityLocation}
+export interface UtilityPhotoDiagnostic {width:number;height:number;brightness:number;sharpness:number}
+export type UtilityPhotoAction='camera_opened'|'camera_failed'|'photo_captured'|'photo_discarded'|'photo_failed';
+export interface UtilityLog {id:string;at:string;method:string;result:string;patientName:string|null;byName:string;location:UtilityLocation;diagnostic?:UtilityPhotoDiagnostic|null}
 export class MyDoctorV1Api {
-  recordUtilityUsage(method:'open'|'finger',location:UtilityLocation){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location})})}
+  recordUtilityUsage(method:'open'|'finger'|'finger_photo',location:UtilityLocation,action?:UtilityPhotoAction,diagnostic?:UtilityPhotoDiagnostic){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location,action,diagnostic})})}
   utilityLogs(query:{admin?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
 
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
