@@ -44,7 +44,7 @@ try {
   await menu(); await click('Início');
   const restoreRequests = requests.filter(path => path === '/account').length;
   await menu();
-  const lockedClinicar = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Clinicar'));
+  const lockedClinicar = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Atendimento') && !button.textContent.startsWith('Atendimentos'));
   assert.equal(lockedClinicar?.disabled, true, 'Clinicar disponível para perfil sem validação');
   await click('Meu Diário');
   assert.match(document.body.textContent, /Meu Diário/); assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
@@ -108,7 +108,7 @@ try {
   assert.equal(account.rg, '11.966.756-3');
   assert.equal(account.postalCode, '99999-999');
   await menu();
-  assert.equal([...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Clinicar')), false, 'Clinicar visível para conta não profissional');
+  assert.equal([...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Atendimento') && !button.textContent.startsWith('Atendimentos')), false, 'Clinicar visível para conta não profissional');
   await click('Atendimentos para confirmar');
   await click('Confirmar e incluir no prontuário');
   assert.match(document.body.textContent, /Atendimento confirmado e incluído no prontuário/);
