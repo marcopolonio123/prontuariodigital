@@ -21,6 +21,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (String(url).includes('/api/v1/address/cep/')) { requests.push(String(url)); return { ok: true, json: async () => String(url).includes('99999999') ? { erro: true } : { cep: '01001-000', logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP' } }; }
   const path = new URL(url).pathname.replace('/api/v1', ''); requests.push(path);
   if (path === '/consultations/confirmed-consultation/decision' && init.method === 'POST') { pendingConsultations = []; healthEvents.push({ ...event('confirmed-consultation', 'p1', 'consultation', 'Consulta do Dr. Lucas'), professionSnapshot: 'Médico', payload: { specialty: 'Cardiologia' }, provenance: { source: 'mydoctor_professional' } }); return { ok: true, status: 200, json: async () => ({ id: 'confirmed-consultation', status: 'final' }) }; }
+  if (path === '/patients/p1/events' && init.method === 'POST') { const input=JSON.parse(init.body); const saved={...event('home-visit-personal','p1',input.type,input.title),payload:input.payload,organizationNameSnapshot:input.organizationName||null}; healthEvents.push(saved); return {ok:true,status:201,json:async()=>saved}; }
   if (path === '/account' && init.method === 'PUT') account = { ...account, ...JSON.parse(init.body) };
   const data = path === '/consultations/incoming' ? pendingConsultations : path === '/patients/p1/events' ? healthEvents : path === '/account' ? account : path === '/admin/session' ? { authorized: true } : path === '/profiles' ? [{ id: 'p1', name: account.name, source: 'owned', relationship: 'self' }] : ['/professional/profile','/account/document'].includes(path) ? null : [];
   return { ok: true, status: 200, json: async () => data };
@@ -118,6 +119,16 @@ try {
   assert.ok(confirmedRecord);
   assert.match(confirmedRecord.textContent, /Cardiologia/, 'Especialidade salva não aparece no atendimento profissional');
   assert.equal([...confirmedRecord.querySelectorAll('span,p')].some(item => item.textContent.trim() === 'Médico'), false, 'Profissão exibida como especialidade');
+  await click('+ Adicionar Atendimento');
+  const clinicalField=label=>[...document.querySelectorAll('label')].find(item=>item.textContent.startsWith(label)).querySelector('input');
+  await settle(()=>Simulate.change(clinicalField('Atendimento (descrição)'),{target:{value:'Consulta domiciliar pessoal'}}));
+  await settle(()=>Simulate.change(clinicalField('Atendimento domiciliar'),{target:{checked:true}}));
+  await click('Salvar Atendimento');
+  const savedHome=healthEvents.find(item=>item.id==='home-visit-personal');
+  assert.equal(savedHome.patientId,'p1');assert.equal(savedHome.payload.homeVisit,true);assert.equal(savedHome.payload.onlineVisit,false);
+  assert.match(document.body.textContent,/Consulta domiciliar pessoal/);
+  const personalHome=[...document.querySelectorAll('details')].find(item=>item.textContent.includes('Consulta domiciliar pessoal'));
+  assert.match(personalHome.textContent,/Atendimento domiciliar/);
   await menu();
   await click('Sair');
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
@@ -141,6 +152,7 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 
 
