@@ -45,7 +45,7 @@ try {
   await menu(); await click('Prontuário');
   assert.match(document.body.textContent, /Atendimento próprio/);
   assert.doesNotMatch(document.body.textContent, /Registro de outra conta|family_history|wellbeing_diary|Atendimento pendente/);
-  const filterSection=[...document.querySelectorAll('summary')].find(item=>item.textContent==='Filtros');assert.ok(filterSection);assert.equal(filterSection.parentElement.open,false);await settle(()=>filterSection.click());assert.equal(filterSection.parentElement.open,true);
+  const filterSection=[...document.querySelectorAll('summary')].find(item=>item.textContent.startsWith('Filtros'));assert.ok(filterSection);assert.equal(filterSection.parentElement.open,false);await settle(()=>filterSection.click());assert.equal(filterSection.parentElement.open,true);
   const rowIds=()=>[...document.querySelectorAll('[data-record-id]')].map(item=>item.dataset.recordId);
   const filter=label=>[...document.querySelectorAll('label')].find(item=>item.textContent.startsWith(label)).querySelector('input,select');
   await settle(()=>document.querySelector('[aria-label="Ordenar por Data/Hora"]').click());
