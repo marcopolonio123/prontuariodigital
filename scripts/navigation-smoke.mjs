@@ -79,7 +79,7 @@ try {
   await settle(()=>document.querySelector('[aria-label="Ordenar por Médico/Atendente"]').click());
   assert.deepEqual(rowIds(),['own','recent-record','old-record']);
 
-  await menu();await click('Utilidade pública');await settle();assert.match(document.body.textContent,/Piloto de captura pela câmera/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Abrir câmera'));assert.equal(document.querySelector('input[capture=environment]').accept,'image/jpeg,image/png,image/webp');await click('← Voltar ao MyDoctor');
+  await menu();await click('Histórico de uso e identificação');await settle();assert.match(document.body.textContent,/Consultar histórico/);assert.ok(!document.querySelector('[aria-label="Captura da digital por foto"]'));assert.ok(!requests.includes('/utility/usage'),'Histórico criou uso de identificação');await click('← Voltar ao MyDoctor');await menu();await click('Utilidade pública');await settle();assert.match(document.body.textContent,/Piloto de captura pela câmera/);assert.doesNotMatch(document.querySelector('main:not(.hidden)').textContent,/Consultar histórico|Atualizar histórico/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Abrir câmera'));assert.equal(document.querySelector('input[capture=environment]').accept,'image/jpeg,image/png,image/webp');await click('← Voltar ao MyDoctor');
   await menu(); await click('Início');
   const restoreRequests = requests.filter(path => path === '/account').length;
   await menu();
