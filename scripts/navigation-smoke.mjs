@@ -79,7 +79,7 @@ try {
   await settle(()=>document.querySelector('[aria-label="Ordenar por Médico/Atendente"]').click());
   assert.deepEqual(rowIds(),['own','recent-record','old-record']);
 
-  await menu();await click('Utilidade pública');await settle();assert.match(document.body.textContent,/Leitor digital ainda não integrado/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');await click('Registrar tentativa de leitura digital');assert.match(document.body.textContent,/Nenhuma pessoa foi identificada/);await click('← Voltar ao MyDoctor');
+  await menu();await click('Utilidade pública');await settle();assert.match(document.body.textContent,/Piloto de captura pela câmera/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Abrir câmera'));assert.equal(document.querySelector('input[capture=environment]').accept,'image/jpeg,image/png,image/webp');await click('← Voltar ao MyDoctor');
   await menu(); await click('Início');
   const restoreRequests = requests.filter(path => path === '/account').length;
   await menu();
