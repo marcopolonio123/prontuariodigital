@@ -113,7 +113,7 @@ function localDateTimeInputValue(date = new Date()) {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefresh = 0 }: { recordRefresh?: number; canAdmin?: boolean; onNavigate?: (view: 'app' | 'professional' | 'clinicar' | 'professional-locations' | 'professional-access' | 'access-requests' | 'consultation-confirmations' | 'administration') => void }) {
+export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefresh = 0 }: { recordRefresh?: number; canAdmin?: boolean; onNavigate?: (view: 'utility' | 'app' | 'professional' | 'clinicar' | 'professional-locations' | 'professional-access' | 'access-requests' | 'consultation-confirmations' | 'administration') => void }) {
   const [apiUrl] = useState(defaultV1ApiUrl());
   const api = useMemo(() => new MyDoctorV1Api(apiUrl), [apiUrl]);
   const [token, setToken] = useState(readV1SessionToken);
@@ -504,7 +504,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     </Card>;
   };
 
-  const navigation = (includeHome = false) => <DashboardNavigation current={view} includeHome={includeHome} isProfessional={Boolean(user?.isHealthProfessional)} canPractice={canClinicar} canAdmin={canAdmin} external={Boolean(onNavigate)} onLogout={logout} onSelect={destination=>{if(['professional','clinicar','professional-access','professional-locations','access-requests','consultation-confirmations','administration'].includes(destination)){setMenuOpen(false);onNavigate?.(destination as Parameters<NonNullable<typeof onNavigate>>[0]);}else go(destination as AppView)}}/>;
+  const navigation = (includeHome = false) => <DashboardNavigation current={view} includeHome={includeHome} isProfessional={Boolean(user?.isHealthProfessional)} canPractice={canClinicar} canAdmin={canAdmin} external={Boolean(onNavigate)} onLogout={logout} onSelect={destination=>{if(['utility','professional','clinicar','professional-access','professional-locations','access-requests','consultation-confirmations','administration'].includes(destination)){setMenuOpen(false);onNavigate?.(destination as Parameters<NonNullable<typeof onNavigate>>[0]);}else go(destination as AppView)}}/>;
   const menu = user && menuOpen ? <div className="mb-5 rounded-2xl border border-line bg-paper p-3 sm:p-5">{navigation(true)}</div> : null;
   const welcomeView = <div className="space-y-5"><div className="rounded-2xl border border-line bg-white px-5 py-5 sm:px-6"><p className="text-xs font-semibold text-moss-700">Bem-vindo ao MyDoctor</p><h1 className="mt-1 font-display text-2xl font-bold text-ink">Olá, {user?.name?.split(' ')[0]}.</h1><p className="mt-2 text-sm text-mute">Escolha o que você precisa cuidar hoje.</p>{activeProfile&&<p className="mt-3 inline-flex rounded-lg bg-moss-50 px-3 py-1.5 text-xs font-semibold text-moss-800">Perfil atual: {activeProfile.name}</p>}</div>{!menuOpen&&navigation()}</div>;
 
@@ -615,11 +615,3 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><p className="mt-1 text-sm text-mute">Sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
-
-
-
-
-
-
-
-
