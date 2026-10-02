@@ -38,10 +38,14 @@ router.get('/utility/logs',auth,async(req:UtilityRequest,res:Response)=>{
   if(admin){if(!(await administrator(req)).authorized)return res.status(403).json({error:'Acesso restrito à administração.'});where={}}
   else{
     const ids=await visiblePatientIds(req.userId!);
-    const patientId=typeof req.query.patientId==='string'?req.query.patientId:'';
+    let patientId=typeof req.query.patientId==='string'?req.query.patientId:'';
+    if(req.query.mine==='1'){const patients=await prisma.patient.findMany({where:{ownerUserId:req.userId!,archived:false},select:{id:true,data:true}});patientId=patients.find(p=>(p.data as any)?.relationshipToOwner==='self')?.id??'';if(!patientId)return res.json({items:[],nextCursor:null})}
     if(patientId&&!ids.has(patientId))return res.status(403).json({error:'Sem acesso ao histórico desta pessoa.'});
     where=patientId?{patientId}:{byUserId:req.userId!};
   }
+  // Log de acesso pessoal só contém correspondência confirmada pelo motor no servidor.
+  // Etapas do piloto e resultados legados nunca são promovidos a match confirmado.
+  if(req.query.identificationOnly==='1'||req.query.mine==='1')where={AND:[where,{patientId:{not:null},method:{in:['finger','finger_photo']},result:'match_verified'}]};
   const cursor=typeof req.query.cursor==='string'?req.query.cursor:undefined;
   const rows=await prisma.identificationLog.findMany({where,orderBy:[{at:'desc'},{id:'desc'}],take:51,...(cursor?{cursor:{id:cursor},skip:1}:{})});
   const items=rows.slice(0,50).map(l=>({id:l.id,at:l.at,method:l.method,result:l.result,patientName:l.patientId?l.patientName:null,byName:l.byName,location:metadata(l.detail)?.location??{status:'legacy_not_recorded'},diagnostic:metadata(l.detail)?.diagnostic??null}));
