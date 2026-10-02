@@ -11,6 +11,7 @@ import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 import { consultantPolicy, getConsultantUsage, reserveConsultantResponse, completeConsultantResponse, releaseConsultantResponse } from './consultant-usage.js';
 import { validCpf, normalizeCpf, normalizeRg, rgError, BRAZIL_UFS } from './document-validation.js';
 import { isUnder18 } from './identity-policy.js';
+import { prepareReference, referenceMetadata } from './fingerprint-reference.js';
 import { sendLoginVerificationEmail } from './email.js';
 
 const router = Router();
@@ -284,7 +285,7 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
 });
 
 function accountView(user: { id: string; name: string; email: string; phone: string | null }, data: any) {
-  return { id: user.id, name: user.name, email: user.email, phone: user.phone,
+  return { fingerprintReference: referenceMetadata(data?.fingerprintReference), id: user.id, name: user.name, email: user.email, phone: user.phone,
     rgUf: data?.rgUf ?? '', rgType: data?.rgType ?? 'RG', avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
     birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
@@ -339,17 +340,21 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   if (city.length > 100) return fail(res, 400, 'Cidade: use no máximo 100 caracteres.');
   if (state && !BRAZIL_UFS.includes(state)) return fail(res, 400, 'UF do endereço: selecione um estado na lista.');
   if (phone && !/^\+?\d{8,15}$/.test(phone)) return fail(res, 400, 'Celular inválido: informe DDD e número, com código do país opcional.');
+  const referenceChanged=Object.prototype.hasOwnProperty.call(body,'fingerprintReference');
+  let reference:any;
+  try{if(referenceChanged)reference=prepareReference(body.fingerprintReference,req.userId!)}catch(e){return fail(res,400,e instanceof Error?e.message:'Foto da digital inválida.')}
   try {
     const result = await prisma.$transaction(async tx => {
       const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
       const identity = await tx.userIdentityDocument.findUnique({ where: { userId: old.id }, select: { kind: true } });
       if (identity?.kind === 'Certidão de nascimento' && !isUnder18(birthDate)) throw new Error('AGE');
-      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...address, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
+      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...(referenceChanged?{fingerprintReference:reference}:{}), ...address, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
       const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
       const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
       else await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });
+      if(referenceChanged)await tx.identificationLog.create({data:{method:'reference',byUserId:old.id,byName:name,result:reference?'reference_registered':'reference_removed',detail:'Foto de referência do piloto; comparação biométrica não ativada.'}});
       if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || normalizeRg(String((old.accountData as any)?.rg ?? '')) !== rg || ((old.accountData as any)?.rgUf ?? '') !== (rgType === 'CIN' ? '' : rgUf) || ((old.accountData as any)?.rgType ?? 'RG') !== rgType || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
         if (practitioner) {

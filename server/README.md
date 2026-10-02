@@ -119,3 +119,9 @@ Testes CI: e-mail simulado, sem envio a pessoas reais; autorização/escopo, des
 `npm run prepare:hostinger` aplica os dois patches aditivos (Consultor e Agenda) por conexão PostgreSQL direta quando o build tem `NODE_ENV=production` e `DATABASE_URL`. Os patches são idempotentes, transacionais e têm tempo limite de locks. Uma falha interrompe o build antes da publicação. Não é DDL no runtime web, não usa o query engine Prisma para migrar e não remove dados.
 
 Se a Hostinger disponibilizar as variáveis apenas no runtime, configure-as também no build ou execute explicitamente `NODE_ENV=production node server/scripts/apply-feature-patches.cjs` no ambiente do projeto antes do redeploy. Builds sem essas condições informam que os patches foram omitidos. A ativação dos e-mails ainda exige `MEDICATION_REMINDERS_ENABLED=true` e o provedor transacional configurado.
+
+
+
+### Foto opcional de referência da digital
+O piloto guarda somente uma referência privada, com consentimento explícito, no mesmo salvamento do cadastro. Não existe motor de comparação ativado e a foto não é um template biométrico. A API devolve apenas metadados; a referência não integra o prontuário compartilhado. O conteúdo é cifrado com AES-256-GCM e chave derivada de JWT_SECRET por usuário. Antes de rotacionar JWT_SECRET, preserve a chave anterior e recriptografe as referências; trocar o segredo sem migração impede a leitura das fotos anteriores.
+O histórico pessoal aceita exclusivamente registros de motor confiável com patientId, método finger/finger_photo e resultado match_verified. Capturas, referências e resultados antigos não confirmados permanecem apenas na auditoria operacional. O cliente não pode declarar um match.
