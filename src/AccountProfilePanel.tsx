@@ -1,3 +1,4 @@
+import FingerprintPhotoCapture from './components/FingerprintPhotoCapture';
 import { useEffect, useRef, useState } from 'react';
 import { formatCpf, formatCep, formatRg, validCpf, rgError, BRAZIL_UFS } from '../server/src/document-validation';
 import type { AccountProfileV1, MyDoctorV1Api, VerificationDocumentV1 } from './lib/api-v1';
@@ -27,6 +28,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
   const [data, setData] = useState<AccountProfileV1 | null>(null);
   const [document, setDocument] = useState<VerificationDocumentV1 | null>(null);
   const [kind, setKind] = useState('CNH'); const [file, setFile] = useState<File | null>(null);
+  const [digitalPhoto,setDigitalPhoto]=useState<string|null>(null),[digitalConsent,setDigitalConsent]=useState(false),[digitalRemove,setDigitalRemove]=useState(false),[digitalFinger,setDigitalFinger]=useState<'right_index'|'left_index'>('right_index');
   const lastCep = useRef('');
   const [cepLoading, setCepLoading] = useState(false);
   const [cepMessage, setCepMessage] = useState('');
@@ -72,9 +74,11 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     const cepIssue = data.postalCode && data.postalCode.replace(/\D/g,'').length !== 8 ? 'CEP deve ter 8 números.' : '';
     if (cpfIssue || rgIssue || cepIssue) { setMessage(cpfIssue || rgIssue || cepIssue); window.document.getElementById(cpfIssue ? 'account-cpf' : rgIssue ? 'account-rg' : 'account-postalCode')?.focus(); return; }
     if (data.rgType === 'CIN' && data.rg && data.cpf && data.rg.replace(/\D/g,'') !== data.cpf.replace(/\D/g,'')) return setMessage('Os dois campos de CPF devem conter o mesmo número.');
+    if(digitalPhoto&&!digitalConsent)return setMessage('Autorize o cadastro opcional da foto da digital ou descarte a foto.');
     setBusy(true); setMessage('');
     try {
-      const saved = await api.saveAccount({ ...data, phone: (data.phone ?? '').trim().replace(/[().\s-]/g, '') }); setData(saved);
+      const {fingerprintReference:_metadata,...accountInput}=data;
+      const saved = await api.saveAccount({ ...accountInput, ...(digitalPhoto?{fingerprintReference:{photo:digitalPhoto,consent:true as const,finger:digitalFinger}}:digitalRemove?{fingerprintReference:null}:{}), phone: (data.phone ?? '').trim().replace(/[().\s-]/g, '') }); setData(saved);setDigitalPhoto(null);setDigitalConsent(false);setDigitalRemove(false);
       if (file) { const doc = await api.saveIdentityDocument(kind, file, document?.id ?? null); setDocument(doc); setFile(null); }
       await onSaved(saved); setMessage('Cadastro salvo.');
       if (saved.isHealthProfessional) onProfessional();
@@ -151,6 +155,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
         <label className="min-w-0 text-xs font-bold">Anexar documento (opcional)<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e => setFile(e.target.files?.[0] ?? null)} className={field} /><span className="mt-1 block font-normal text-mute">PDF ou imagem, até 3 MB. {file && `Selecionado: ${file.name}`}</span></label>
         {document && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line p-3 text-xs sm:col-span-2"><span className="min-w-0 break-words">{document.kind} · {document.filename}</span><button type="button" className="font-bold text-moss-700 underline" onClick={() => void api.openVerificationDocument('account:' + document.id).catch(error => setMessage(error.message))}>Abrir</button><button type="button" className="text-danger-600" onClick={() => { if (!window.confirm('Remover o documento de identificação?')) return; setBusy(true); void api.removeIdentityDocument(document.id).then(() => setDocument(null)).catch(error => setMessage(error.message)).finally(() => setBusy(false)); }}>Remover</button></div>}
       </fieldset>
+      <details className="rounded-xl border border-line bg-white p-3" id="account-fingerprint"><summary className="cursor-pointer text-sm font-bold text-moss-800">Digital (opcional)</summary><fieldset disabled={busy} className="mt-3 space-y-3"><p className="text-sm text-mute">A digital poderá ajudar a identificar você em situações de desorientação, perda de memória ou vulnerabilidade, para acionar seus responsáveis. Não é obrigatória e não impede o uso do aplicativo.</p><p className="rounded-lg bg-paper p-3 text-xs text-ink">Nesta etapa, guardamos uma foto de referência privada e criptografada. Ela ficará pendente até a integração do motor biométrico; ainda não permite encontrar ou identificar pessoas.</p>{data.fingerprintReference&&<p className="text-xs text-moss-800">Referência registrada em {new Date(data.fingerprintReference.registeredAt).toLocaleString('pt-BR')} · {data.fingerprintReference.finger==='right_index'?'Indicador direito':'Indicador esquerdo'} · aguardando comparação biométrica.</p>}<label className="block text-xs font-bold">Dedo fotografado<select value={digitalFinger} onChange={e=>setDigitalFinger(e.target.value as 'right_index'|'left_index')} className={field}><option value="right_index">Indicador direito</option><option value="left_index">Indicador esquerdo</option></select></label><FingerprintPhotoCapture purpose="reference" key={data.fingerprintReference?.registeredAt??'new'} onAudit={async()=>{}} onPhoto={photo=>{setDigitalPhoto(photo);setDigitalConsent(false);if(photo)setDigitalRemove(false)}}/>{digitalPhoto&&<label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={digitalConsent} onChange={e=>setDigitalConsent(e.target.checked)} style={{width:16,height:16,maxWidth:16,flex:'0 0 16px'}}/>Autorizo guardar esta foto da minha digital para o piloto de identificação. Posso removê-la pelo cadastro. O reconhecimento automático ainda não está ativo.</label>}{data.fingerprintReference&&!digitalPhoto&&<label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={digitalRemove} onChange={e=>setDigitalRemove(e.target.checked)} style={{width:16,height:16,maxWidth:16,flex:'0 0 16px'}}/>Remover a referência cadastrada ao salvar</label>}<p className="text-xs text-mute">Use o botão Salvar cadastro abaixo para gravar ou remover a referência junto dos seus dados.</p></fieldset></details>
       <label className="flex items-start gap-2 text-sm"><input disabled={busy} type="checkbox" checked={data.isHealthProfessional} onChange={e => setData({ ...data, isHealthProfessional: e.target.checked })} style={{ width: 16, height: 16, maxWidth: 16, flex: '0 0 16px', marginTop: 2 }} />{question}</label>
       {data.isHealthProfessional && <p className="text-xs text-mute">Ao salvar, você seguirá para os dados profissionais e o comprovante do conselho. Clinicar depende da aprovação do administrador.</p>}
       {message && <p role="status" className="rounded-lg bg-paper p-3 text-sm">{message}</p>}
@@ -158,5 +163,3 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     </form> : <p className="mt-3 text-sm">Carregando cadastro...</p>}
   </section>;
 }
-
-
