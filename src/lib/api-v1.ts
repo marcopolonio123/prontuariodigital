@@ -145,7 +145,12 @@ export interface AdminProfessionalV1 {
   documents: VerificationDocumentV1[];
   history: Array<{ id: string; decision: string; status: string; actorName: string; note: string; evidence: string | null; createdAt: string }>;
 }
+export interface UtilityLocation {status:string;latitude?:number;longitude?:number;accuracy?:number}
+export interface UtilityLog {id:string;at:string;method:string;result:string;patientName:string|null;byName:string;location:UtilityLocation}
 export class MyDoctorV1Api {
+  recordUtilityUsage(method:'open'|'finger',location:UtilityLocation){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location})})}
+  utilityLogs(query:{admin?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
+
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
@@ -288,7 +293,3 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
-
-
-
-
