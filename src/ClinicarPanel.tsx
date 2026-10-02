@@ -85,8 +85,8 @@ export default function ClinicarPanel({ api, onOpenProfessional }: { api: MyDoct
 
   return <div className="space-y-5">
     <section className="rounded-2xl border border-line bg-card p-5 shadow-lift">
-      <p className="text-xs font-bold uppercase tracking-wide text-moss-700">Clinicar</p>
-      <h2 className="mt-1 font-display text-2xl font-bold text-ink">Atendimento profissional pelo MyDoctor</h2>
+      <p className="text-xs font-bold uppercase tracking-wide text-moss-700">Solicitar acesso</p>
+      <h2 className="mt-1 font-display text-2xl font-bold text-ink">Solicitar acesso ao prontuário de paciente</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-mute">O profissional usa a mesma conta pessoal. Para atender outro usuário, primeiro solicita acesso ao prontuário; o paciente precisa autorizar antes de qualquer consulta aos dados.</p>
     </section>
 
@@ -110,4 +110,5 @@ export default function ClinicarPanel({ api, onOpenProfessional }: { api: MyDoct
     </section>}
   </div>;
 }
+
 

@@ -49,6 +49,17 @@ try {
   assert.equal(concurrent.filter(r => r.status === 409).length, 1);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'aprovação concedeu acesso ao paciente');
+  const location = await call('/professional/locations', professional.token, { name: 'Clínica teste', address: 'Rua de teste, 10' });
+  assert.equal(location.status,201);
+  assert.equal((await call('/professional/locations', professional.token)).body[0].name,'Clínica teste');
+  assert.equal((await call('/professional/locations', patient.token)).status,403);
+  const otherPractitioner = await db.practitioner.create({ data: { userId: admin.id, name: 'Outro profissional', profession: 'Médico', verificationStatus: 'verified', active: true } });
+  professionals.push(otherPractitioner.id);
+  assert.deepEqual((await call('/professional/locations', admin.token)).body,[],'Locais vazaram para outro profissional');
+  assert.equal((await call('/professional/locations/' + location.body.id, admin.token, {name:'Alteração indevida',address:''},'PUT')).status,404);
+  assert.equal((await call('/professional/locations/' + location.body.id, admin.token, undefined,'DELETE')).status,404);
+  assert.equal((await call('/professional/locations', professional.token, {name:'Clínica teste',address:''})).status,409);
+  assert.equal((await call('/professional/locations/' + location.body.id, professional.token, {name:'Consultório teste',address:'Rua de teste, 11'},'PUT')).status,200);
   row = await reviewRow(); assert.equal(row.history.length, 1); assert.equal(row.history[0].actorName, 'Administrador teste');
   await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "test_legacy_grant_pair_unique" ON "AccessGrant" ("accountId", "patientId")');
   const legacyGrant = await db.accessGrant.create({ data: { accountId: professional.id, patientId: patient.patientId, level: 'leitura', revokedAt: new Date() } });
@@ -83,12 +94,12 @@ try {
   assert.equal((await call(summaryPath, patient.token)).status, 403);
   assert.equal((await call('/professional/patients/' + admin.patientId + '/summary', professional.token)).status, 403);
   const occurredAt = '2026-10-01T17:30:00-03:00';
-  const consultation = await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Consulta completa', type: 'therapy', occurredAt, symptoms: 'Queixa teste', diagnosis: 'Hipótese teste', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste' });
+  const consultation = await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Consulta completa', type: 'therapy', occurredAt, homeVisit: true, organizationName:'Consultório teste', symptoms: 'Queixa teste', diagnosis: 'Hipótese teste', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste' });
   assert.equal(consultation.status, 201);
   assert.equal(consultation.body.status, 'draft');
   const encounterPath = '/professional/consultations/' + consultation.body.id;
   assert.equal((await call(encounterPath, patient.token)).status, 403);
-  assert.equal((await call(encounterPath, admin.token)).status, 403);
+  assert.equal((await call(encounterPath, admin.token)).status, 404);
   assert.equal((await call('/professional/consultations', professional.token)).body.some(e => e.id === consultation.body.id && e.status === 'draft'), true);
   assert.equal((await call('/patients/' + patient.patientId + '/events', patient.token)).body.some(e => e.id === consultation.body.id), false);
   assert.equal((await call('/consultations/incoming', patient.token)).body.some(e => e.id === consultation.body.id), false);
@@ -96,6 +107,10 @@ try {
   assert.equal((await call('/patients/' + patient.patientId + '/events/' + consultation.body.id, patient.token, { title: 'alteração indevida' }, 'PUT')).status, 403);
   assert.equal(consultation.body.occurredAt, '2026-10-01T20:30:00.000Z');
   assert.equal(consultation.body.payload.specialty, 'Teste');
+  assert.equal(consultation.body.payload.homeVisit,true);
+  assert.equal((await call('/professional/locations/' + location.body.id, professional.token, undefined,'DELETE')).status,200);
+  assert.deepEqual((await call('/professional/locations', professional.token)).body,[]);
+  assert.equal((await call(encounterPath, professional.token)).body.organizationNameSnapshot,'Consultório teste','Excluir local alterou atendimento histórico');
   assert.equal(consultation.body.payload.symptoms, 'Queixa teste');
   const form = new FormData(); form.append('category', 'report'); form.append('files', new Blob(['%PDF-1.4\nTeste de isolamento\n%%EOF'], { type: 'application/pdf' }), 'isolamento.pdf');
   const attachment = await fetch(base + '/patients/' + patient.patientId + '/events/' + consultation.body.id + '/documents', { method: 'POST', headers: { authorization: 'Bearer ' + professional.token }, body: form });
@@ -115,12 +130,18 @@ try {
   assert.equal((await call(encounterPath + '/submit', professional.token, { expectedUpdatedAt: detail.body.updatedAt })).status, 200);
   const pending = (await call('/consultations/incoming', patient.token)).body.find(e => e.id === consultation.body.id);
   assert.equal(pending.clinical.diagnosis, 'Hipótese teste');
-  const edited = await call(encounterPath, professional.token, { title: 'Consulta revisada', type: 'therapy', occurredAt, symptoms: 'Queixa teste', diagnosis: 'Hipótese revisada', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste', expectedUpdatedAt: pending.updatedAt }, 'PUT');
+  assert.equal(pending.homeVisit,true);
+  const edited = await call(encounterPath, professional.token, { title: 'Consulta revisada', type: 'therapy', occurredAt, homeVisit: false, onlineVisit:true, organizationName:'Local não aplicável', symptoms: 'Queixa teste', diagnosis: 'Hipótese revisada', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste', expectedUpdatedAt: pending.updatedAt }, 'PUT');
   assert.equal(edited.status, 200);
   assert.equal(edited.body.status, 'pending_patient_confirmation');
+  assert.equal(edited.body.payload.homeVisit,false);
+  assert.equal(edited.body.payload.onlineVisit,true);
+  assert.equal(edited.body.organizationNameSnapshot,null);
   assert.equal((await call('/consultations/' + consultation.body.id + '/decision', patient.token, { decision: 'confirm', expectedUpdatedAt: pending.updatedAt })).status, 409, 'Paciente aprovou versão anterior à edição');
   const reviewed = (await call('/consultations/incoming', patient.token)).body.find(e => e.id === consultation.body.id);
   assert.equal(reviewed.clinical.diagnosis, 'Hipótese revisada');
+  assert.equal(reviewed.homeVisit,false);
+  assert.equal(reviewed.onlineVisit,true);
   assert.equal((await call('/consultations/' + consultation.body.id + '/decision', patient.token, { decision: 'confirm', expectedUpdatedAt: reviewed.updatedAt })).status, 200);
   detail = await call(encounterPath, professional.token);
   assert.equal(detail.body.status, 'final');
@@ -205,6 +226,7 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
 

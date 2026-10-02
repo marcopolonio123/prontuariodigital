@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from './db.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
@@ -27,6 +28,45 @@ async function verifiedPractitioner(userId: string) {
     include: { registrations: { include: { authority: true } } },
   });
 }
+
+// Private professional directory. Stored separately from patient records and identity fields.
+type ProfessionalLocation = { id: string; name: string; address: string };
+function professionalLocations(data: unknown): ProfessionalLocation[] {
+  const items = (data as { professionalLocations?: unknown } | null)?.professionalLocations;
+  return Array.isArray(items) ? items.filter((item): item is ProfessionalLocation => !!item && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.address === 'string') : [];
+}
+router.get('/professional/locations', auth, async (req: AuthedRequest, res: Response) => {
+  if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
+  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { accountData: true } });
+  return res.json(professionalLocations(user?.accountData));
+});
+async function saveProfessionalLocation(req: AuthedRequest, res: Response, action: 'create' | 'edit' | 'remove') {
+  if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
+  const name = String(req.body?.name ?? '').trim(), address = String(req.body?.address ?? '').trim();
+  if (action !== 'remove' && (name.length < 2 || name.length > 150 || address.length > 300)) return fail(res, 400, 'Informe um nome de 2 a 150 caracteres e endereço de até 300 caracteres.');
+  try {
+    const result = await prisma.$transaction(async tx => {
+      // Lock the same user row as account edits, preserving identity data during concurrent writes.
+      const user = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() }, select: { accountData: true } });
+      const items = professionalLocations(user.accountData);
+      const id = action === 'create' ? randomUUID() : req.params.id;
+      if (action !== 'create' && !items.some(item => item.id === id)) throw new Error('LOCATION_NOT_FOUND');
+      if (action !== 'remove' && items.some(item => item.id !== id && item.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw new Error('LOCATION_DUPLICATE');
+      const location = { id, name, address };
+      const next = action === 'create' ? [...items, location] : action === 'remove' ? items.filter(item => item.id !== id) : items.map(item => item.id === id ? location : item);
+      await tx.user.update({ where: { id: req.userId! }, data: { accountData: { ...(user.accountData as Prisma.JsonObject), professionalLocations: next } } });
+      return action === 'remove' ? { id, removed: true } : location;
+    });
+    return res.status(action === 'create' ? 201 : 200).json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'LOCATION_NOT_FOUND') return fail(res, 404, 'Local não encontrado no seu cadastro.');
+    if (error instanceof Error && error.message === 'LOCATION_DUPLICATE') return fail(res, 409, 'Já existe um local com esse nome no seu cadastro.');
+    throw error;
+  }
+}
+router.post('/professional/locations', auth, (req: AuthedRequest, res: Response) => saveProfessionalLocation(req, res, 'create'));
+router.put('/professional/locations/:id', auth, (req: AuthedRequest, res: Response) => saveProfessionalLocation(req, res, 'edit'));
+router.delete('/professional/locations/:id', auth, (req: AuthedRequest, res: Response) => saveProfessionalLocation(req, res, 'remove'));
 
 // A linha do tempo manual (GET/POST /patients/:patientId/events) pertence ao v1Router.
  // Este router trata apenas o workflow profissional/confirmacao do paciente.
@@ -110,8 +150,10 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
       councilSnapshot: registration?.authority.code ?? null,
       registrationSnapshot: registration?.registration ?? null,
       registrationRegionSnapshot: registration?.region ?? null,
-      organizationNameSnapshot: String(body.organizationName ?? '').trim() || null,
+      organizationNameSnapshot: body.onlineVisit === true ? null : String(body.organizationName ?? '').trim() || null,
       payload: {
+        onlineVisit: body.onlineVisit === true,
+        homeVisit: body.onlineVisit !== true && body.homeVisit === true,
         notes: String(body.notes ?? '').trim(),
         symptoms: String(body.symptoms ?? '').trim(),
         diagnosis: String(body.diagnosis ?? '').trim(),
@@ -177,7 +219,7 @@ router.put('/professional/consultations/:id', auth, async (req: AuthedRequest, r
   const expected = new Date(body.expectedUpdatedAt ?? event.updatedAt);
   if (Number.isNaN(expected.getTime())) return fail(res, 400, 'Versão do atendimento inválida.');
   const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
-  const updated = await prisma.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, organizationNameSnapshot: String(body.organizationName ?? '').trim() || null, payload: { ...payload, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
+  const updated = await prisma.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, organizationNameSnapshot: body.onlineVisit === true ? null : String(body.organizationName ?? '').trim() || null, payload: { ...payload, onlineVisit: body.onlineVisit === undefined ? payload.onlineVisit === true : body.onlineVisit === true, homeVisit: body.onlineVisit === true ? false : body.homeVisit === undefined ? payload.homeVisit === true : body.homeVisit === true, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
   if (!updated.count) return fail(res, 409, 'O atendimento foi atualizado ou aprovado enquanto você editava. Reabra para consultar a versão atual.');
   return res.json(await prisma.healthEvent.findUnique({ where: { id: event.id } }));
 });
@@ -225,6 +267,8 @@ router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Resp
     title: item.title,
     occurredAt: item.occurredAt.toISOString(),
     organizationName: item.organizationNameSnapshot,
+    onlineVisit: typeof item.payload === 'object' && item.payload !== null && !Array.isArray(item.payload) && (item.payload as Record<string, unknown>).onlineVisit === true,
+    homeVisit: typeof item.payload === 'object' && item.payload !== null && !Array.isArray(item.payload) && (item.payload as Record<string, unknown>).homeVisit === true,
     profession: item.professionSnapshot,
     practitionerName: item.practitionerNameSnapshot ?? item.practitioner?.name ?? 'Profissional de saúde',
     council: item.councilSnapshot,
@@ -266,5 +310,6 @@ router.post('/consultations/:id/decision', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
 
