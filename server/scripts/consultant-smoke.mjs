@@ -9,16 +9,18 @@ process.env.CONSULTANT_RESPONSE_LIMIT = '2';
 process.env.CONSULTANT_WINDOW_HOURS = '24';
 const realFetch = globalThis.fetch;
 let providerFailure = false;
+let visionFailure=false;
 let providerCalls = [];
 let scopeCalls = [];
 let invalidScope = false;
 globalThis.fetch = async (url, options) => {
   if (String(url).startsWith(process.env.CONSULTANT_BASE_URL)) {
     const body = JSON.parse(options.body);
+    if(visionFailure)return new Response('{}',{status:400});
     if (body.max_tokens === 20) {
       scopeCalls.push(body);
       if (invalidScope) return Response.json({ choices: [{ message: { content: 'invalid' } }] });
-      const input = JSON.parse(body.messages[1].content);
+      const input = JSON.parse(Array.isArray(body.messages[1].content)?body.messages[1].content[0].text:body.messages[1].content);
       const other = /programa|ações da bolsa|ignorar regras|marketing/.test(input.question);
       return Response.json({ choices: [{ message: { content: other ? 'OTHER' : 'HEALTH' } }] });
     }
@@ -110,6 +112,22 @@ try {
   assert(!context.includes('DO_NOT_SEND'), 'campo não clínico enviado');
   const b = await account();
   assert.equal((await call('/consultant/usage', null, b.token)).body.remaining, 2, 'saldo de outra conta foi afetado');
+  const photo='data:image/jpeg;base64,'+Buffer.from([255,216,255,224,0,2,255,218,0,2,255,217]).toString('base64');
+  const visionInput={...input,question:'Pode me orientar sobre esta foto da pele?',images:[photo]};
+  const visionPath='/patients/'+b.patientId+'/consultant';
+  const callsBeforeInvalid=scopeCalls.length;
+  for(const images of [[photo,photo,photo,photo],['https://example.test/photo.jpg'],['data:image/jpeg;base64,YWJj'],[photo+'!']])assert.equal((await call(visionPath,{...visionInput,images},b.token)).status,400);
+  assert.equal(scopeCalls.length,callsBeforeInvalid,'Anexo inválido chegou ao provedor');
+  assert.equal((await call(path,visionInput,b.token)).status,403,'Imagem foi enviada ao prontuário alheio');
+  visionFailure=true;
+  const rejectedVision=await call(visionPath,visionInput,b.token);assert.equal(rejectedVision.status,502);assert.match(rejectedVision.body.error,/não aceitou as imagens/);
+  assert.equal((await call('/consultant/usage',null,b.token)).body.used,0,'Modelo sem visão descontou saldo');
+  visionFailure=false;
+  const vision=await call(visionPath,visionInput,b.token);assert.equal(vision.status,200);assert.equal(vision.body.usage.used,1);
+  const parts=providerCalls.at(-1).messages.at(-1).content;assert.equal(parts[0].text,visionInput.question);assert.equal(parts[1].image_url.url,photo);
+  assert.equal(scopeCalls.at(-1).messages[1].content[1].image_url.url,photo,'Classificador não recebeu imagem');
+  assert.equal(JSON.stringify(vision.body).includes(photo),false,'Resposta armazenou ou devolveu imagem');
+  await db.consultantUsage.deleteMany({where:{userId:b.id}});
   const oldest = await db.consultantUsage.findFirst({ where: { userId: a.id }, orderBy: { completedAt: 'asc' } });
   await db.consultantUsage.update({ where: { id: oldest.id }, data: { completedAt: new Date(Date.now() - 24 * 3600000 - 1) } });
   assert.equal((await call('/consultant/usage', null, a.token)).body.remaining, 1, 'saldo não renovou após 24h');
@@ -129,4 +147,5 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 

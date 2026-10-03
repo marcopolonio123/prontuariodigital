@@ -153,10 +153,13 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
   const [diaryText, setDiaryText] = useState('');
   const [consultantQuestion, setConsultantQuestion] = useState('');
   const [consultantConsent, setConsultantConsent] = useState(false);
+  const [consultantImages,setConsultantImages]=useState<Array<{name:string;data:string}>>([]);
+  const [imageLoading,setImageLoading]=useState(false);
+  const imageGeneration=useRef(0);
   const [consultantUsage, setConsultantUsage] = useState<ConsultantUsageV1 | null>(null);
   const [consultantUsageError, setConsultantUsageError] = useState('');
   const [consultantMessages, setConsultantMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  useEffect(() => { setConsultantQuestion(''); setConsultantMessages([]); setConsultantConsent(false); }, [activeProfile?.id]);
+  useEffect(() => { setConsultantQuestion(''); setConsultantMessages([]); setConsultantConsent(false);setConsultantImages([]);setImageLoading(false);imageGeneration.current++; }, [activeProfile?.id]);
   const [familyHistoryText, setFamilyHistoryText] = useState('');
   const [editingFamilyHistory, setEditingFamilyHistory] = useState(false);
   const [showInsuranceForm, setShowInsuranceForm] = useState(false);
@@ -570,19 +573,43 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
   const insuranceView = <div className="space-y-5"><Card><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Convênios</p><h2 className="font-display text-2xl font-bold text-ink">{activeProfile?.name ?? 'Escolha um perfil'}</h2></div>{activeProfile && <PrimaryButton onClick={() => setShowInsuranceForm((v) => !v)}>{showInsuranceForm ? 'Cancelar' : '+ Incluir convênio'}</PrimaryButton>}</div>{!activeProfile ? <p className="mt-4 text-sm text-mute">Escolha um perfil.</p> : insuranceEvents.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-line bg-white p-5 text-sm text-mute">Nenhum convênio cadastrado. Use “+ Incluir convênio” para adicionar.</div> : <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">{insuranceEvents.map((event) => { const payload = event.payload as InsurancePayload; return <article key={event.id} className="min-w-0 overflow-hidden rounded-xl border border-line bg-white p-4"><h3 className="break-words font-display text-lg font-bold text-ink">{payload.provider || event.title}</h3>{payload.planName && <p className="break-words text-sm text-mute">{payload.planName}</p>}<div className="mt-3 space-y-1 break-words text-sm text-ink">{payload.memberNumber && <p><strong>Carteirinha:</strong> {payload.memberNumber}</p>}{payload.holderName && <p><strong>Titular:</strong> {payload.holderName}</p>}{payload.validity && <p><strong>Validade:</strong> {new Date(`${payload.validity}T12:00:00`).toLocaleDateString('pt-BR')}</p>}</div>{(payload.cardFront || payload.cardBack) && <div className="mt-4 grid min-w-0 grid-cols-2 gap-2">{payload.cardFront && <figure className="min-w-0"><img src={payload.cardFront} alt="Frente da carteirinha" className="h-28 w-full rounded-lg border border-line object-cover" /><figcaption className="mt-1 text-center text-[10px] text-mute">Frente</figcaption></figure>}{payload.cardBack && <figure className="min-w-0"><img src={payload.cardBack} alt="Verso da carteirinha" className="h-28 w-full rounded-lg border border-line object-cover" /><figcaption className="mt-1 text-center text-[10px] text-mute">Verso</figcaption></figure>}</div>}</article>; })}</div>}</Card>{showInsuranceForm && activeProfile && <Card><h3 className="font-display text-xl font-bold text-ink">Novo convênio</h3><div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"><label className="min-w-0 text-xs font-bold text-mute">Convênio / operadora<input value={insuranceProvider} onChange={(e) => setInsuranceProvider(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 text-xs font-bold text-mute">Plano / categoria<input value={insurancePlan} onChange={(e) => setInsurancePlan(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 text-xs font-bold text-mute">Número da carteirinha<input value={insuranceNumber} onChange={(e) => setInsuranceNumber(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 text-xs font-bold text-mute">Nome do titular<input value={insuranceHolder} onChange={(e) => setInsuranceHolder(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 overflow-hidden text-xs font-bold text-mute sm:col-span-2">Validade da carteirinha<input type="date" value={insuranceValidity} onChange={(e) => setInsuranceValidity(e.target.value)} className={`${inputClass()} mt-1`} /></label><div className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-2"><label className="min-w-0 rounded-xl border border-line bg-white p-3 text-xs font-bold text-mute">Foto da carteirinha — frente<input type="file" accept="image/*" capture="environment" onChange={(e) => handleCardPhoto('front', e.target.files?.[0])} className="mt-2 block w-full min-w-0 max-w-full text-xs" />{insuranceFront && <img src={insuranceFront} alt="Prévia da frente" className="mt-3 h-32 w-full rounded-lg object-cover" />}</label><label className="min-w-0 rounded-xl border border-line bg-white p-3 text-xs font-bold text-mute">Foto da carteirinha — verso<input type="file" accept="image/*" capture="environment" onChange={(e) => handleCardPhoto('back', e.target.files?.[0])} className="mt-2 block w-full min-w-0 max-w-full text-xs" />{insuranceBack && <img src={insuranceBack} alt="Prévia do verso" className="mt-3 h-32 w-full rounded-lg object-cover" />}</label></div><label className="min-w-0 text-xs font-bold text-mute sm:col-span-2">Observações<textarea value={insuranceNotes} onChange={(e) => setInsuranceNotes(e.target.value)} className={`${inputClass()} mt-1 min-h-20`} /></label><div className="sm:col-span-2"><PrimaryButton disabled={busy} onClick={() => void createInsurance()}>Salvar convênio</PrimaryButton></div></div></Card>}</div>;
 
 
+  const attachConsultantImages = async (files:File[]) => {
+    const generation=++imageGeneration.current;
+    if(!files.length)return;
+    if(consultantImages.length+files.length>3){setMessage('Anexe até 3 imagens por pergunta.');return}
+    setImageLoading(true);setMessage('');
+    try{
+      const prepared:Array<{name:string;data:string}>=[];
+      for(const file of files){
+        if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error('Use JPEG, PNG ou WebP de até 10 MB.');
+        const url=URL.createObjectURL(file);
+        try{
+          const image=await new Promise<HTMLImageElement>((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Não foi possível abrir esta imagem.'));img.src=url});
+          if(image.naturalWidth*image.naturalHeight>24000000)throw new Error('Use uma imagem de até 24 megapixels.');
+          const scale=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight));
+          const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+          const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Não foi possível preparar a imagem.');
+          ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+          const data=canvas.toDataURL('image/jpeg',0.85);if(data.length>2800000)throw new Error('A imagem ficou muito grande. Escolha outra foto.');
+          prepared.push({name:file.name,data});
+        }finally{URL.revokeObjectURL(url)}
+      }
+      if(generation===imageGeneration.current){setConsultantImages(current=>[...current,...prepared]);setConsultantConsent(false)}
+    }catch(error){if(generation===imageGeneration.current)setMessage(error instanceof Error?error.message:'Falha ao preparar imagem.')}finally{if(generation===imageGeneration.current)setImageLoading(false)}
+  };
   const askConsultant = () => run(async () => {
-    if (busy) return;
+    if (busy || imageLoading) return;
     if (!activeProfile) throw new Error('Escolha um perfil.');
     const question = consultantQuestion.trim();
     if (!question) throw new Error('Digite ou dite sua pergunta.');
     if (!consultantConsent) throw new Error('Autorize o envio do contexto à IA para continuar.');
     const profileId = activeProfile.id;
     try {
-      const result = await api.askConsultant(profileId, question, consultantMessages, consultantConsent);
+      const result = await api.askConsultant(profileId, question, consultantMessages, consultantConsent, consultantImages.map(image=>image.data));
       setConsultantUsage(result.usage);
       if (activeProfileIdRef.current !== profileId) return;
-      setConsultantMessages(current => [...current, { role: 'user', content: question }, { role: 'assistant', content: result.answer }]);
-      setConsultantQuestion('');
+      setConsultantMessages(current => [...current, { role: 'user', content: question+(consultantImages.length?`\n[${consultantImages.length} imagem(ns) enviada(s) nesta pergunta]`:'') }, { role: 'assistant', content: result.answer }]);
+      setConsultantQuestion('');setConsultantImages([]);
     } finally {
       await api.getConsultantUsage().then(setConsultantUsage).catch(() => undefined);
     }
@@ -603,8 +630,9 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     {activeProfile && <>
       <div className="mt-4 space-y-3">{consultantMessages.map((item, index) => <div key={index} className="rounded-xl border border-line bg-paper p-3"><p className="text-xs font-bold text-moss-700">{item.role === 'user' ? 'Sua pergunta' : 'Consultor MyDoctor'}</p><p className="mt-1 whitespace-pre-wrap text-sm text-ink">{item.content}</p></div>)}</div>
       <div className="mt-4"><DictationTextarea key={activeProfile.id} value={consultantQuestion} onChange={setConsultantQuestion} placeholder="Digite ou dite sua pergunta..." className={`${inputClass()} min-h-24`} /></div>
-      <label className="mt-3 flex gap-2 text-xs text-mute"><input type="checkbox" checked={consultantConsent} onChange={e => setConsultantConsent(e.target.checked)} />Autorizo enviar minha pergunta e os registros clínicos disponíveis ao provedor de IA usado pelo MyDoctor para esta conversa.</label>
-      <div className="mt-3"><PrimaryButton disabled={busy || !consultantConsent || !consultantQuestion.trim() || !consultantUsage?.configured || consultantUsage.remaining === 0} onClick={() => void askConsultant()}>{busy ? 'Consultando...' : 'Enviar pergunta'}</PrimaryButton></div>
+      <div className="mt-3 rounded-xl border border-line p-3"><label className="block text-sm font-bold text-ink">Anexar imagens<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy||imageLoading||consultantImages.length>=3} onChange={e=>{const files=Array.from(e.target.files??[]);e.target.value='';void attachConsultantImages(files)}} className="mt-2 block w-full min-w-0 max-w-full text-xs" /></label><p className="mt-2 text-xs text-mute">Até 3 imagens por pergunta. Escolha uma foto nítida e explique sua dúvida abaixo. As imagens são enviadas ao provedor de IA com sua autorização e não são salvas automaticamente no prontuário. Para revê-las em outra pergunta, anexe novamente.</p>{imageLoading&&<p role="status" className="mt-2 text-xs">Preparando imagens...</p>}<div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{consultantImages.map((image,index)=><figure key={index} className="min-w-0 rounded-lg border border-line p-2"><img src={image.data} alt={`Imagem anexada ${index+1}`} className="h-28 w-full object-contain"/><figcaption className="truncate text-xs">{image.name}</figcaption><button type="button" disabled={busy||imageLoading} onClick={()=>setConsultantImages(current=>current.filter((_,i)=>i!==index))} className="mt-1 text-xs font-bold text-danger-600" aria-label={`Remover imagem ${index+1}`}>Remover</button></figure>)}</div></div>
+      <label className="mt-3 flex gap-2 text-xs text-mute"><input type="checkbox" checked={consultantConsent} onChange={e => setConsultantConsent(e.target.checked)} />Autorizo enviar minha pergunta, as imagens anexadas e os registros clínicos disponíveis ao provedor de IA usado pelo MyDoctor para esta conversa.</label>
+      <div className="mt-3"><PrimaryButton disabled={busy || imageLoading || !consultantConsent || !consultantQuestion.trim() || !consultantUsage?.configured || consultantUsage.remaining === 0} onClick={() => void askConsultant()}>{busy ? 'Consultando...' : 'Enviar pergunta'}</PrimaryButton></div>
     </>}
   </Card>;
 
@@ -615,3 +643,4 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
 
   return <div className="min-h-screen bg-paper"><div className="mx-auto max-w-6xl p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] md:p-8"><header className="mb-4 flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-moss-700">MyDoctor</p><p className="mt-1 text-sm text-mute">Sua saúde e seus cuidados em um só lugar.</p></div>{user && <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-ink shadow-sm" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}><MenuIcon open={menuOpen} /></button>}</header>{menu}{message && <div className="mb-4 break-words rounded-xl border border-moss-200 bg-moss-50 px-4 py-3 text-sm font-semibold text-moss-800">{message}</div>}{!user ? <div className="mx-auto max-w-md pt-4 sm:pt-10">{authPanel()}</div> : activeView}</div></div>;
 }
+
