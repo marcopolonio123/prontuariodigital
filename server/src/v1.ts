@@ -779,7 +779,7 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
         { role: 'user', content: consultantContent(JSON.stringify({ question, previous }),images) },
       ] }),
     });
-    if (!scopeResponse.ok) return imageProviderError(res,images,scopeResponse.status);
+    if (!scopeResponse.ok) {await releaseConsultantResponse(reservationId);reservationId=null;return imageProviderError(res,images,scopeResponse.status);}
     const scopeResult = await scopeResponse.json() as { choices?: Array<{ message?: { content?: string } }> };
     const scope = scopeResult.choices?.[0]?.message?.content?.trim();
     if (scope === 'OTHER') {
@@ -787,7 +787,7 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
       reservationId = null;
       return res.json({ answer: 'Posso ajudar com dúvidas sobre saúde e bem-estar: sintomas, doenças, medicamentos, exercícios e alimentação. Qual é sua dúvida de saúde?', usage: { ...await getConsultantUsage(req.userId!, policy), configured: true } });
     }
-    if (scope !== 'HEALTH') return fail(res, 502, 'Não foi possível verificar o escopo da pergunta. Tente novamente; nenhum uso será descontado.');
+    if (scope !== 'HEALTH') {await releaseConsultantResponse(reservationId);reservationId=null;return fail(res, 502, 'Não foi possível verificar o escopo da pergunta. Tente novamente; nenhum uso será descontado.');}
     await purgeExpiredDiary(req.params.patientId);
     const patient = await prisma.patient.findUnique({ where: { id: req.params.patientId }, select: { data: true } });
     const data = patient?.data && typeof patient.data === 'object' && !Array.isArray(patient.data) ? patient.data as Record<string, unknown> : {};
@@ -834,7 +834,8 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
     const usage = await getConsultantUsage(req.userId!, policy);
     res.json({ answer, usage: { ...usage, configured: true } });
   } catch {
-    return fail(res, 502, 'Não foi possível concluir a resposta do Consultor. Tente novamente.');
+    if(reservationId){await releaseConsultantResponse(reservationId).catch(():void=>undefined);reservationId=null;}
+    return fail(res, 502, 'Não foi possível concluir a resposta do Consultor. Tente novamente; nenhum uso será descontado.');
   } finally {
     if (reservationId) await releaseConsultantResponse(reservationId).catch((): void => undefined);
   }
