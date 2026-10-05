@@ -329,9 +329,10 @@ router.get('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
 });
 router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
   if(!await verifiedPractitioner(req.userId!))return fail(res,403,'A agenda exige perfil profissional aprovado e ativo.');
-  const body=req.body??{},id=String(body.id??''),status=String(body.status??'scheduled');
-  if(!['scheduled','completed','cancelled'].includes(status))return fail(res,400,'Situação inválida.');
+  const body=req.body??{},id=String(body.id??'');
   const existing=id?(await ownAgenda(req.userId!)).find(item=>item.id===id):null;
+  const status=String(body.status??existing?.status??'scheduled');
+  if(!['scheduled','completed','cancelled'].includes(status))return fail(res,400,'Situação inválida.');
   if(id&&!existing)return fail(res,404,'Compromisso não encontrado na sua agenda.');
   if(existing?.source==='return'&&body.action!=='status')return fail(res,400,'A data do retorno é alterada no atendimento, respeitando sua aprovação.');
   const title=String(body.title??existing?.title??'').trim(),at=new Date(body.at??existing?.at??''),notes=String(body.notes??existing?.notes??'').trim();
