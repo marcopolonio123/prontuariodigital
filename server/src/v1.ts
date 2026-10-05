@@ -10,6 +10,7 @@ import prisma from './db.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 import { consultantPolicy, getConsultantUsage, reserveConsultantResponse, completeConsultantResponse, releaseConsultantResponse } from './consultant-usage.js';
 import { validCpf, normalizeCpf, normalizeRg, rgError, BRAZIL_UFS } from './document-validation.js';
+import { normalizeFollowUp } from './follow-up.js';
 import { isUnder18 } from './identity-policy.js';
 import { prepareReference, referenceMetadata } from './fingerprint-reference.js';
 import { sendLoginVerificationEmail } from './email.js';
@@ -630,6 +631,7 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
     return fail(res, 400, 'Informe tipo, descrição e data/hora válidos.');
   }
 
+  if(body.payload?.followUp!==undefined){try{body.payload.followUp=normalizeFollowUp(body.payload.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}}
   const actor = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true } });
   const event = await prisma.healthEvent.create({
     data: {
@@ -684,6 +686,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
   if (current.practitionerId && current.authoredByUserId === req.userId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento está disponível somente para consulta pelo profissional.');
   if (current.status === 'cancelled') return fail(res, 409, 'Reative o registro antes de editá-lo.');
   const body = req.body ?? {};
+  if(body.payload?.followUp!==undefined){try{body.payload.followUp=normalizeFollowUp(body.payload.followUp,new Date(body.occurredAt??current.occurredAt))}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}}
   const isDiary = current.type === 'wellbeing_diary';
   if (isDiary && body.type !== undefined && body.type !== 'wellbeing_diary') return fail(res, 400, 'O tipo do Diário não pode ser alterado.');
   const previous = {
@@ -1010,4 +1013,5 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
