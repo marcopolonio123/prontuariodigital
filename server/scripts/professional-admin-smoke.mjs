@@ -128,7 +128,8 @@ try {
   assert.equal((await call('/professional/agenda',patient.token)).status,403);
   assert.equal((await call('/professional/agenda/patients?q=te',patient.token)).status,403);
   await db.user.update({where:{id:patient.id},data:{accountData:{cpf:'52998224725',fingerprintReference:{secret:'never-return'}}}});
-  await db.patient.update({where:{id:patient.patientId},data:{record:'PR-123'}});
+  const identityFixture=await db.patient.findUnique({where:{id:patient.patientId}});
+  await db.patient.update({where:{id:patient.patientId},data:{record:'PR-123',data:{...identityFixture.data,relationshipToOwner:'self',cpf:''}}});
   const agendaPatients=await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token);
   assert.equal((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),admin.token)).body.total,0);
   assert.equal(agendaPatients.status,200);assert(agendaPatients.body.items.some(item=>item.id===patient.patientId));assert(agendaPatients.body.items.every(item=>Object.keys(item).sort().join(',')==='documentNumber,documentType,id,name,record'));
