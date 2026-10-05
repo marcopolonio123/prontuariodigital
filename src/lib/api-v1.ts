@@ -219,7 +219,8 @@ export class MyDoctorV1Api {
   listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
   revokePatientAccess(id: string) { return this.req<{ status: string }>(`/access-requests/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); }
   getClinicalSummary(patientId: string) { return this.req<ClinicalSummaryV1>(`/professional/patients/${encodeURIComponent(patientId)}/summary`); }
-  getProfessionalAgenda() {return this.req<Array<{id:string;title:string;at:string;notes:string;patientName:string|null;source:string;status:string;alert:boolean;updatedAt:string;locationId?:string;locationName?:string;locationAddress?:string}>>('/professional/agenda')}
+  searchAgendaPatients(name:string) {return this.req<Array<{id:string;name:string}>>('/professional/agenda/patients?q='+encodeURIComponent(name))}
+  getProfessionalAgenda() {return this.req<Array<{id:string;title:string;at:string;notes:string;patientName:string|null;patientId?:string;source:string;status:string;alert:boolean;updatedAt:string;locationId?:string;locationName?:string;locationAddress?:string}>>('/professional/agenda')}
   saveProfessionalAgenda(input:Record<string,unknown>) {return this.req('/professional/agenda',{method:'POST',body:JSON.stringify(input)})}
   createProfessionalConsultation(input: { followUp?:unknown;accessRequestId: string; title: string; occurredAt: string; timezone?: string; type?: string; organizationName?: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms?: string; diagnosis?: string; exams?: string; prescriptions?: string; notes?: string }) {
     return this.req<HealthEventV1>('/professional/consultations', { method: 'POST', body: JSON.stringify(input) });
@@ -299,6 +300,5 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
-
 
 
