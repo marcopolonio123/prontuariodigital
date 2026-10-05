@@ -87,7 +87,7 @@ const event = await call(`/api/v1/patients/${profile.id}/events`, {
 });
 assert(event?.id && event?.patientId === profile.id, 'evento clínico não foi persistido');
 
-assert.equal(event.payload.followUp.at,'2026-09-26T17:30:00.000Z');
+assert(event.payload.followUp.at==='2026-09-26T17:30:00.000Z','retorno não preservou data/hora e fuso');
 console.log('8/10 create vital sign');
 const vital = await call(`/api/v1/patients/${profile.id}/events`, {
   method: 'POST',
