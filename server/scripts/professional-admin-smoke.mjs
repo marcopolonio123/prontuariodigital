@@ -129,9 +129,10 @@ try {
   let agenda=(await call('/professional/agenda',professional.token)).body;
   assert.equal(agenda.filter(item=>item.id==='return:'+consultation.body.id).length,1);
   assert.equal(typeof agenda[0].patientName,'string');
-  assert.equal((await call('/professional/agenda',professional.token,{title:'Planejamento particular',at:'2026-11-02T09:00:00-03:00',alert:true})).status,200);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Planejamento particular',locationId:location.body.id,at:'2026-11-02T09:00:00-03:00',alert:true})).status,200);
   agenda=(await call('/professional/agenda',professional.token)).body;
-  const ownAppointment=agenda.find(item=>item.source==='manual');assert(ownAppointment);
+  const ownAppointment=agenda.find(item=>item.source==='manual');assert(ownAppointment);assert.equal(ownAppointment.locationName,'Consultório teste');assert.equal(ownAppointment.locationId,location.body.id);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Local alheio',at:'2026-11-02T09:00:00Z',locationId:'nao-pertence'})).status,400);
   const otherAgenda=await call('/professional/agenda',admin.token);if(otherAgenda.status===200)assert.equal(otherAgenda.body.some(item=>item.id===ownAppointment.id||item.id==='return:'+consultation.body.id),false,'Agenda vazou para outro profissional');
   assert.equal((await call('/account',professional.token)).body.professionalAgenda,undefined);
   assert.equal((await call('/professional/agenda',patient.token,{id:ownAppointment.id,action:'status',status:'cancelled',expectedUpdatedAt:ownAppointment.updatedAt})).status,403);
@@ -283,4 +284,5 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
