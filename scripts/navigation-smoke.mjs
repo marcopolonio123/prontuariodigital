@@ -79,6 +79,15 @@ try {
   await settle(()=>document.querySelector('[aria-label="Ordenar por Médico/Atendente"]').click());
   assert.deepEqual(rowIds(),['own','recent-record','old-record']);
 
+  await click('+ Adicionar Atendimento');
+  const returnCheckbox=[...document.querySelectorAll('label')].find(label=>label.textContent.includes('Deseja agendar um retorno e receber um alerta?')).querySelector('input');
+  await settle(()=>Simulate.change(returnCheckbox,{target:{checked:true}}));
+  const returnPeriod=[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Prazo para retorno')).querySelector('select');
+  const returnDate=[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Data/Hora do retorno')).querySelector('input');
+  const encounterDate=[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Data/Hora (horário local)')).querySelector('input');
+  for(const days of ['30','60','90','180']){await settle(()=>Simulate.change(returnPeriod,{target:{value:days}}));const expected=new Date(encounterDate.value);expected.setDate(expected.getDate()+Number(days));assert.equal(new Date(returnDate.value).getTime(),expected.getTime(),'Prazo não manteve horário local');}
+  await settle(()=>Simulate.change(returnDate,{target:{value:'2027-05-20T09:45'}}));assert.equal(returnPeriod.value,'custom');
+  await click('Cancelar');
   await menu();await click('Acessos à minha digital');await settle();assert.match(document.body.textContent,/Consultar histórico/);assert.ok(!document.querySelector('[aria-label="Captura da digital por foto"]'));assert.ok(!requests.includes('/utility/usage'),'Histórico criou uso de identificação');await click('← Voltar ao MyDoctor');await menu();await click('Identificar Pessoa');await settle();assert.match(document.body.textContent,/Piloto de captura pela câmera/);assert.doesNotMatch(document.querySelector('main:not(.hidden)').textContent,/Consultar histórico|Atualizar histórico/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Abrir câmera'));assert.equal(document.querySelector('input[capture=environment]').accept,'image/jpeg,image/png,image/webp');await click('← Voltar ao MyDoctor');
   await menu(); await click('Início');
   const restoreRequests = requests.filter(path => path === '/account').length;
@@ -91,7 +100,7 @@ try {
   assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
   await menu(); const professionalMenu=[...document.querySelectorAll('summary')].find(item=>item.textContent==='Profissional'); assert.ok(professionalMenu);
   await settle(()=>professionalMenu.click());
-  assert.deepEqual([...document.querySelector('[aria-label="Menu profissional"]').querySelectorAll('button')].map(item=>item.textContent.replace('Aguardando validação','').trim()),['Atendimento','Solicitar acesso ao prontuário do paciente','Locais que atendo','Validação de cadastro profissional']);
+  assert.deepEqual([...document.querySelector('[aria-label="Menu profissional"]').querySelectorAll('button')].map(item=>item.textContent.replace('Aguardando validação','').trim()),['Atendimento','Minha agenda','Solicitar acesso ao prontuário do paciente','Locais que atendo','Validação de cadastro profissional']);
   await click('Validação de cadastro profissional');
   assert.match(document.querySelector('main').textContent, /Dados para validação/);
   assert.equal(document.querySelectorAll('[data-mydoctor-professional-entry]').length, 0, 'Menu depende de mutação externa');
@@ -195,3 +204,4 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
