@@ -20,7 +20,7 @@ async function account(name) {
   const login = await call('/auth/login/verify', null, { challengeId: start.body.challengeId, code: start.body.developmentCode });
   assert.equal(login.status, 200);
   const profiles = await call('/profiles', login.body.token);
-  return { id: registered.body.id, email, token: login.body.token, patientId: profiles.body[0].id };
+  return { name: profiles.body[0].name, id: registered.body.id, email, token: login.body.token, patientId: profiles.body[0].id };
 }
 try {
   for (let i = 0; i < 30; i++) { try { await fetch('http://127.0.0.1:8793/api/health'); break; } catch { await delay(100); } }
@@ -126,12 +126,18 @@ try {
   const encounterPath = '/professional/consultations/' + consultation.body.id;
   assert.equal(consultation.body.payload.followUp.at,'2026-10-31T20:30:00.000Z');
   assert.equal((await call('/professional/agenda',patient.token)).status,403);
+  assert.equal((await call('/professional/agenda/patients?q=te',patient.token)).status,403);
+  const agendaPatients=await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token);
+  assert.deepEqual((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),admin.token)).body,[]);
+  assert.equal(agendaPatients.status,200);assert(agendaPatients.body.some(item=>item.id===patient.patientId));assert(agendaPatients.body.every(item=>Object.keys(item).sort().join(',')==='id,name'));
+  assert.equal((await call('/professional/agenda/patients?q=a',professional.token)).status,400);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Paciente alheio',patientId:'nao-autorizado',patientName:'Outro',at:'2026-11-02T08:00:00Z'})).status,403);
   let agenda=(await call('/professional/agenda',professional.token)).body;
   assert.equal(agenda.filter(item=>item.id==='return:'+consultation.body.id).length,1);
   assert.equal(typeof agenda[0].patientName,'string');
-  assert.equal((await call('/professional/agenda',professional.token,{title:'Planejamento particular',locationId:location.body.id,at:'2026-11-02T09:00:00-03:00',alert:true})).status,200);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Planejamento particular',patientId:patient.patientId,patientName:'Nome adulterado',locationId:location.body.id,at:'2026-11-02T09:00:00-03:00',alert:true})).status,200);
   agenda=(await call('/professional/agenda',professional.token)).body;
-  const ownAppointment=agenda.find(item=>item.source==='manual');assert(ownAppointment);assert.equal(ownAppointment.locationName,'Consultório teste');assert.equal(ownAppointment.locationId,location.body.id);
+  const ownAppointment=agenda.find(item=>item.source==='manual');assert(ownAppointment);assert.equal(ownAppointment.locationName,'Consultório teste');assert.equal(ownAppointment.locationId,location.body.id);assert.equal(ownAppointment.patientId,patient.patientId);assert.equal(ownAppointment.patientName,patient.name);
   assert.equal((await call('/professional/agenda',professional.token,{title:'Local alheio',at:'2026-11-02T09:00:00Z',locationId:'nao-pertence'})).status,400);
   const otherAgenda=await call('/professional/agenda',admin.token);if(otherAgenda.status===200)assert.equal(otherAgenda.body.some(item=>item.id===ownAppointment.id||item.id==='return:'+consultation.body.id),false,'Agenda vazou para outro profissional');
   assert.equal((await call('/account',professional.token)).body.professionalAgenda,undefined);
@@ -222,6 +228,10 @@ try {
   else { assert.equal(afterRace.title, 'Versão nova'); assert.equal(afterRace.status, 'pending_patient_confirmation'); }
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', admin.token, {})).status, 403);
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', patient.token, {})).status, 200);
+  assert.deepEqual((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token)).body,[]);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Após revogação',patientId:patient.patientId,at:'2026-11-02T08:00:00Z'})).status,403);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Paciente informado',patientName:'Pessoa sem cadastro',at:'2026-11-02T08:00:00Z'})).status,200);
+  assert((await call('/professional/agenda',professional.token)).body.some(item=>item.patientName==='Pessoa sem cadastro'&&!item.patientId));
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);
   assert.equal((await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Teste', occurredAt: new Date().toISOString() })).status, 403);
   assert.equal((await call(summaryPath, professional.token)).status, 403, 'Revogação manteve resumo acessível');
