@@ -330,8 +330,25 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
   if(q.length<2||q.length>150)return fail(res,400,'Digite pelo menos duas letras do nome (até 150 caracteres).');
   const now=new Date();
   const grants=await prisma.accessGrant.findMany({where:{accountId:req.userId!,practitionerId:practitioner.id,permission:'read_write_consultation',revokedAt:null,validFrom:{lte:now},OR:[{validUntil:null},{validUntil:{gt:now}}]},select:{patientId:true}});
-  const patients=await prisma.patient.findMany({where:{id:{in:grants.map(item=>item.patientId)},name:{contains:q,mode:'insensitive'}},select:{id:true,name:true},orderBy:[{name:'asc'},{id:'asc'}],take:20});
-  return res.json(patients);
+  const patients=await prisma.patient.findMany({where:{id:{in:grants.map(item=>item.patientId)},archived:false},select:{id:true,name:true,record:true,data:true,owner:{select:{accountData:true}}},orderBy:[{name:'asc'},{id:'asc'}]});
+  const normalized=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const close=(a:string,b:string)=>{
+    if(a.length<4||Math.abs(a.length-b.length)>1)return false;
+    let previous=Array.from({length:b.length+1},(_,i)=>i);
+    for(let i=1;i<=a.length;i++){const row=[i];for(let j=1;j<=b.length;j++)row[j]=Math.min(row[j-1]+1,previous[j]+1,previous[j-1]+(a[i-1]===b[j-1]?0:1));previous=row}
+    return previous[b.length]<=1;
+  };
+  const words=normalized(q).split(' ').filter(Boolean);
+  const matching=patients.filter(patient=>{const name=normalized(patient.name),parts=name.split(' ');return words.length>0&&words.every(word=>name.includes(word)||parts.some(part=>close(word,part)))});
+  const items=matching.slice(0,20).map(patient=>{
+    const data=(patient.data??{}) as any;
+    // The owner's identity belongs only to the self profile, never to a dependent.
+    const account=data.relationshipToOwner==='self'?(patient.owner.accountData??{}) as any:{};
+    const cpf=String(data.cpf||account.cpf||'').replace(/\D/g,'');
+    const rg=String(data.rg||account.rg||'');
+    return {id:patient.id,name:patient.name,record:patient.record,documentType:cpf?'CPF':rg?'RG':'',documentNumber:cpf||rg};
+  });
+  return res.json({items,total:matching.length});
 });
 router.get('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
   if(!await verifiedPractitioner(req.userId!))return fail(res,403,'A agenda exige perfil profissional aprovado e ativo.');
