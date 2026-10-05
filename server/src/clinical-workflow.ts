@@ -317,9 +317,9 @@ router.post('/consultations/:id/decision', auth, async (req: AuthedRequest, res:
 async function ownAgenda(userId:string){
   const user=await prisma.user.findUnique({where:{id:userId},select:{accountData:true}});
   const data=(user?.accountData??{}) as any;
-  const events=await prisma.healthEvent.findMany({where:{authoredByUserId:userId,practitionerId:{not:null},status:{notIn:['cancelled','inactive']},payload:{path:['followUp','enabled'],equals:true}},select:{id:true,title:true,payload:true,updatedAt:true,patient:{select:{name:true}}},orderBy:{occurredAt:'desc'}});
+  const events=await prisma.healthEvent.findMany({where:{authoredByUserId:userId,practitionerId:{not:null},status:{notIn:['cancelled','inactive']},payload:{path:['followUp','enabled'],equals:true}},select:{id:true,title:true,payload:true,organizationNameSnapshot:true,updatedAt:true,patient:{select:{name:true}}},orderBy:{occurredAt:'desc'}});
   const overrides=data.professionalAgendaOverrides??{};
-  const returns=events.map(event=>{const f=(event.payload as any).followUp;const override=overrides[event.id];const same=override?.at===f.at;return {id:'return:'+event.id,title:'Retorno · '+event.title,at:f.at,notes:'Programado no atendimento',patientName:event.patient.name,source:'return',status:same?override.status:'scheduled',alert:f.alert!==false,updatedAt:event.updatedAt.toISOString()}});
+  const returns=events.map(event=>{const place=professionalLocations(data).find(item=>item.name===event.organizationNameSnapshot);const f=(event.payload as any).followUp;const override=overrides[event.id];const same=override?.at===f.at;return {id:'return:'+event.id,locationId:place?.id??'',locationName:(event.payload as any).onlineVisit?'Atendimento on-line':(event.payload as any).homeVisit?'Atendimento domiciliar':event.organizationNameSnapshot??'',locationAddress:(event.payload as any).onlineVisit||(event.payload as any).homeVisit?'':place?.address??'',title:'Retorno · '+event.title,at:f.at,notes:'Programado no atendimento',patientName:event.patient.name,source:'return',status:same?override.status:'scheduled',alert:f.alert!==false,updatedAt:event.updatedAt.toISOString()}});
   const manual=Array.isArray(data.professionalAgenda)?data.professionalAgenda:[];
   return [...returns,...manual.map((entry:any)=>({...entry,patientName:null,source:'manual'}))].sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
 }
@@ -350,15 +350,21 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
         const items=Array.isArray(data.professionalAgenda)?data.professionalAgenda:[],current=items.find((item:any)=>item.id===id);
         if(id&&(!current||current.updatedAt!==body.expectedUpdatedAt))throw new Error('CONFLICT');
         if(!id&&items.length>=500)throw new Error('LIMIT');
-        const next={id:id||'manual:'+randomUUID(),title,at:at.toISOString(),notes,status,alert:body.alert===undefined?current?.alert!==false:body.alert===true,updatedAt:new Date().toISOString()};
+        const locationId=String(body.locationId??current?.locationId??'');
+        const place=professionalLocations(data).find(item=>item.id===locationId);
+        if(locationId&&!['online','home'].includes(locationId)&&!place&&locationId!==current?.locationId)throw new Error('LOCATION');
+        const locationName=locationId==='online'?'Atendimento on-line':locationId==='home'?'Atendimento domiciliar':place?.name??(locationId?current?.locationName??'':'');
+        const locationAddress=['online','home'].includes(locationId)?'':place?.address??(locationId?current?.locationAddress??'':'');
+        const next={locationId,locationName,locationAddress,id:id||'manual:'+randomUUID(),title,at:at.toISOString(),notes,status,alert:body.alert===undefined?current?.alert!==false:body.alert===true,updatedAt:new Date().toISOString()};
         await tx.user.update({where:{id:user.id},data:{accountData:{...data,professionalAgenda:[...items.filter((item:any)=>item.id!==id),next]}}});
       }
     });
     return res.json({saved:true});
-  }catch(e){if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
+  }catch(e){if(e instanceof Error&&e.message==='LOCATION')return fail(res,400,'Selecione um local do seu cadastro profissional.');if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
 });
 
 export default router;
+
 
 
 
