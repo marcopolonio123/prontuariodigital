@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from './db.js';
+import { normalizeFollowUp } from './follow-up.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 
 const router = Router();
@@ -133,6 +134,7 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
     return fail(res, 403, 'Esta autorização não permite registrar atendimento.');
   }
 
+  let followUp;try{followUp=normalizeFollowUp(body.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}
   const registration = practitioner.registrations.find((item) => item.status === 'active') ?? practitioner.registrations[0];
   const event = await prisma.healthEvent.create({
     data: {
@@ -152,6 +154,7 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
       registrationRegionSnapshot: registration?.region ?? null,
       organizationNameSnapshot: body.onlineVisit === true ? null : String(body.organizationName ?? '').trim() || null,
       payload: {
+        followUp,
         onlineVisit: body.onlineVisit === true,
         homeVisit: body.onlineVisit !== true && body.homeVisit === true,
         notes: String(body.notes ?? '').trim(),
@@ -219,7 +222,8 @@ router.put('/professional/consultations/:id', auth, async (req: AuthedRequest, r
   const expected = new Date(body.expectedUpdatedAt ?? event.updatedAt);
   if (Number.isNaN(expected.getTime())) return fail(res, 400, 'Versão do atendimento inválida.');
   const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
-  const updated = await prisma.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, organizationNameSnapshot: body.onlineVisit === true ? null : String(body.organizationName ?? '').trim() || null, payload: { ...payload, onlineVisit: body.onlineVisit === undefined ? payload.onlineVisit === true : body.onlineVisit === true, homeVisit: body.onlineVisit === true ? false : body.homeVisit === undefined ? payload.homeVisit === true : body.homeVisit === true, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
+  let followUp;try{followUp=normalizeFollowUp(body.followUp??payload.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}
+  const updated = await prisma.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, organizationNameSnapshot: body.onlineVisit === true ? null : String(body.organizationName ?? '').trim() || null, payload: { ...payload, followUp, onlineVisit: body.onlineVisit === undefined ? payload.onlineVisit === true : body.onlineVisit === true, homeVisit: body.onlineVisit === true ? false : body.homeVisit === undefined ? payload.homeVisit === true : body.homeVisit === true, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
   if (!updated.count) return fail(res, 409, 'O atendimento foi atualizado ou aprovado enquanto você editava. Reabra para consultar a versão atual.');
   return res.json(await prisma.healthEvent.findUnique({ where: { id: event.id } }));
 });
@@ -309,7 +313,53 @@ router.post('/consultations/:id/decision', auth, async (req: AuthedRequest, res:
   return res.json({ id: event.id, status });
 });
 
+// Agenda privada: retornos são derivados dos próprios atendimentos, sem duplicar registros.
+async function ownAgenda(userId:string){
+  const user=await prisma.user.findUnique({where:{id:userId},select:{accountData:true}});
+  const data=(user?.accountData??{}) as any;
+  const events=await prisma.healthEvent.findMany({where:{authoredByUserId:userId,practitionerId:{not:null},status:{notIn:['cancelled','inactive']},payload:{path:['followUp','enabled'],equals:true}},select:{id:true,title:true,payload:true,updatedAt:true,patient:{select:{name:true}}},orderBy:{occurredAt:'desc'}});
+  const overrides=data.professionalAgendaOverrides??{};
+  const returns=events.map(event=>{const f=(event.payload as any).followUp;const override=overrides[event.id];const same=override?.at===f.at;return {id:'return:'+event.id,title:'Retorno · '+event.title,at:f.at,notes:'Programado no atendimento',patientName:event.patient.name,source:'return',status:same?override.status:'scheduled',alert:f.alert!==false,updatedAt:event.updatedAt.toISOString()}});
+  const manual=Array.isArray(data.professionalAgenda)?data.professionalAgenda:[];
+  return [...returns,...manual.map((entry:any)=>({...entry,patientName:null,source:'manual'}))].sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
+}
+router.get('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
+  if(!await verifiedPractitioner(req.userId!))return fail(res,403,'A agenda exige perfil profissional aprovado e ativo.');
+  return res.json(await ownAgenda(req.userId!));
+});
+router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
+  if(!await verifiedPractitioner(req.userId!))return fail(res,403,'A agenda exige perfil profissional aprovado e ativo.');
+  const body=req.body??{},id=String(body.id??'');
+  const existing=id?(await ownAgenda(req.userId!)).find(item=>item.id===id):null;
+  const status=String(body.status??existing?.status??'scheduled');
+  if(!['scheduled','completed','cancelled'].includes(status))return fail(res,400,'Situação inválida.');
+  if(id&&!existing)return fail(res,404,'Compromisso não encontrado na sua agenda.');
+  if(existing?.source==='return'&&body.action!=='status')return fail(res,400,'A data do retorno é alterada no atendimento, respeitando sua aprovação.');
+  const title=String(body.title??existing?.title??'').trim(),at=new Date(body.at??existing?.at??''),notes=String(body.notes??existing?.notes??'').trim();
+  if(!title||title.length>200||notes.length>2000||!Number.isFinite(at.getTime()))return fail(res,400,'Informe descrição e data/hora válidas (até 200 caracteres na descrição e 2.000 nas observações).');
+  try{
+    await prisma.$transaction(async tx=>{
+      const user=await tx.user.update({where:{id:req.userId!},data:{updatedAt:new Date()}});const data=(user.accountData??{}) as any;
+      if(existing?.source==='return'){
+        const event=await tx.healthEvent.findFirst({where:{id:id.slice(7),authoredByUserId:req.userId!,practitionerId:{not:null}},select:{payload:true,updatedAt:true}});
+        if(!event||event.updatedAt.toISOString()!==body.expectedUpdatedAt)throw new Error('CONFLICT');
+        const f=(event.payload as any).followUp;
+        const overrides={...(data.professionalAgendaOverrides??{}),[id.slice(7)]:{at:f.at,status}};
+        await tx.user.update({where:{id:user.id},data:{accountData:{...data,professionalAgendaOverrides:overrides}}});
+      }else{
+        const items=Array.isArray(data.professionalAgenda)?data.professionalAgenda:[],current=items.find((item:any)=>item.id===id);
+        if(id&&(!current||current.updatedAt!==body.expectedUpdatedAt))throw new Error('CONFLICT');
+        if(!id&&items.length>=500)throw new Error('LIMIT');
+        const next={id:id||'manual:'+randomUUID(),title,at:at.toISOString(),notes,status,alert:body.alert===undefined?current?.alert!==false:body.alert===true,updatedAt:new Date().toISOString()};
+        await tx.user.update({where:{id:user.id},data:{accountData:{...data,professionalAgenda:[...items.filter((item:any)=>item.id!==id),next]}}});
+      }
+    });
+    return res.json({saved:true});
+  }catch(e){if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
+});
+
 export default router;
+
 
 
 

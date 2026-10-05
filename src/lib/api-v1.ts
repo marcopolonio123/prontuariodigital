@@ -219,11 +219,13 @@ export class MyDoctorV1Api {
   listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
   revokePatientAccess(id: string) { return this.req<{ status: string }>(`/access-requests/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); }
   getClinicalSummary(patientId: string) { return this.req<ClinicalSummaryV1>(`/professional/patients/${encodeURIComponent(patientId)}/summary`); }
-  createProfessionalConsultation(input: { accessRequestId: string; title: string; occurredAt: string; timezone?: string; type?: string; organizationName?: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms?: string; diagnosis?: string; exams?: string; prescriptions?: string; notes?: string }) {
+  getProfessionalAgenda() {return this.req<Array<{id:string;title:string;at:string;notes:string;patientName:string|null;source:string;status:string;alert:boolean;updatedAt:string}>>('/professional/agenda')}
+  saveProfessionalAgenda(input:Record<string,unknown>) {return this.req('/professional/agenda',{method:'POST',body:JSON.stringify(input)})}
+  createProfessionalConsultation(input: { followUp?:unknown;accessRequestId: string; title: string; occurredAt: string; timezone?: string; type?: string; organizationName?: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms?: string; diagnosis?: string; exams?: string; prescriptions?: string; notes?: string }) {
     return this.req<HealthEventV1>('/professional/consultations', { method: 'POST', body: JSON.stringify(input) });
   }
   getProfessionalConsultation(id: string) { return this.req<ProfessionalConsultationDetailV1>(`/professional/consultations/${encodeURIComponent(id)}`); }
-  updateProfessionalConsultation(id: string, input: { title: string; type: string; occurredAt: string; organizationName: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms: string; diagnosis: string; exams: string; prescriptions: string; notes: string; expectedUpdatedAt: string }) { return this.req<HealthEventV1>(`/professional/consultations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
+  updateProfessionalConsultation(id: string, input: { followUp?:unknown;title: string; type: string; occurredAt: string; organizationName: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms: string; diagnosis: string; exams: string; prescriptions: string; notes: string; expectedUpdatedAt: string }) { return this.req<HealthEventV1>(`/professional/consultations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
   submitProfessionalConsultation(id: string, expectedUpdatedAt: string) { return this.req<{ id: string; status: string }>(`/professional/consultations/${encodeURIComponent(id)}/submit`, { method: 'POST', body: JSON.stringify({ expectedUpdatedAt }) }); }
   removeProfessionalConsultationDocument(id: string, documentId: string) { return this.req<{ status: string }>(`/professional/consultations/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}/inactivate`, { method: 'POST' }); }
   listIncomingConsultations() { return this.req<IncomingConsultationV1[]>('/consultations/incoming'); }
@@ -297,4 +299,5 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 

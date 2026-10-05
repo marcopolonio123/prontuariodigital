@@ -120,10 +120,26 @@ try {
   assert.equal((await call(summaryPath, patient.token)).status, 403);
   assert.equal((await call('/professional/patients/' + admin.patientId + '/summary', professional.token)).status, 403);
   const occurredAt = '2026-10-01T17:30:00-03:00';
-  const consultation = await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Consulta completa', type: 'therapy', occurredAt, homeVisit: true, organizationName:'Consultório teste', symptoms: 'Queixa teste', diagnosis: 'Hipótese teste', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste' });
+  const consultation = await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Consulta completa', type: 'therapy', occurredAt, followUp:{enabled:true,period:'30',at:'2026-10-31T17:30:00-03:00',alert:true}, homeVisit: true, organizationName:'Consultório teste', symptoms: 'Queixa teste', diagnosis: 'Hipótese teste', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste' });
   assert.equal(consultation.status, 201);
   assert.equal(consultation.body.status, 'draft');
   const encounterPath = '/professional/consultations/' + consultation.body.id;
+  assert.equal(consultation.body.payload.followUp.at,'2026-10-31T20:30:00.000Z');
+  assert.equal((await call('/professional/agenda',patient.token)).status,403);
+  let agenda=(await call('/professional/agenda',professional.token)).body;
+  assert.equal(agenda.filter(item=>item.id==='return:'+consultation.body.id).length,1);
+  assert.equal(typeof agenda[0].patientName,'string');
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Planejamento particular',at:'2026-11-02T09:00:00-03:00',alert:true})).status,200);
+  agenda=(await call('/professional/agenda',professional.token)).body;
+  const ownAppointment=agenda.find(item=>item.source==='manual');assert(ownAppointment);
+  const otherAgenda=await call('/professional/agenda',admin.token);if(otherAgenda.status===200)assert.equal(otherAgenda.body.some(item=>item.id===ownAppointment.id||item.id==='return:'+consultation.body.id),false,'Agenda vazou para outro profissional');
+  assert.equal((await call('/account',professional.token)).body.professionalAgenda,undefined);
+  assert.equal((await call('/professional/agenda',patient.token,{id:ownAppointment.id,action:'status',status:'cancelled',expectedUpdatedAt:ownAppointment.updatedAt})).status,403);
+  assert.equal((await call('/professional/agenda',professional.token,{id:ownAppointment.id,title:'Planejamento atualizado',at:'2026-11-02T10:00:00-03:00',expectedUpdatedAt:ownAppointment.updatedAt})).status,200);
+  assert.equal((await call('/professional/agenda',professional.token,{id:ownAppointment.id,action:'status',status:'completed',expectedUpdatedAt:ownAppointment.updatedAt})).status,409,'Agenda aceitou versão antiga');
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Inválido',at:'invalida'})).status,400);
+  assert.equal((await call('/professional/consultations',professional.token,{accessRequestId:access.body.id,title:'Retorno inválido',occurredAt,followUp:{enabled:true,period:'30',at:'2026-09-30T00:00:00Z'}})).status,400);
+
   assert.equal((await call(encounterPath, patient.token)).status, 403);
   assert.equal((await call(encounterPath, admin.token)).status, 404);
   assert.equal((await call('/professional/consultations', professional.token)).body.some(e => e.id === consultation.body.id && e.status === 'draft'), true);
@@ -157,8 +173,9 @@ try {
   const pending = (await call('/consultations/incoming', patient.token)).body.find(e => e.id === consultation.body.id);
   assert.equal(pending.clinical.diagnosis, 'Hipótese teste');
   assert.equal(pending.homeVisit,true);
-  const edited = await call(encounterPath, professional.token, { title: 'Consulta revisada', type: 'therapy', occurredAt, homeVisit: false, onlineVisit:true, organizationName:'Local não aplicável', symptoms: 'Queixa teste', diagnosis: 'Hipótese revisada', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste', expectedUpdatedAt: pending.updatedAt }, 'PUT');
+  const edited = await call(encounterPath, professional.token, { title: 'Consulta revisada', type: 'therapy', occurredAt,followUp:{enabled:true,period:'60',at:'2026-11-30T17:30:00-03:00',alert:true}, homeVisit: false, onlineVisit:true, organizationName:'Local não aplicável', symptoms: 'Queixa teste', diagnosis: 'Hipótese revisada', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste', expectedUpdatedAt: pending.updatedAt }, 'PUT');
   assert.equal(edited.status, 200);
+  const revisedAgenda=(await call('/professional/agenda',professional.token)).body.filter(item=>item.id==='return:'+consultation.body.id);assert.equal(revisedAgenda.length,1);assert.equal(revisedAgenda[0].at,'2026-11-30T20:30:00.000Z');
   assert.equal(edited.body.status, 'pending_patient_confirmation');
   assert.equal(edited.body.payload.homeVisit,false);
   assert.equal(edited.body.payload.onlineVisit,true);
@@ -172,6 +189,15 @@ try {
   detail = await call(encounterPath, professional.token);
   assert.equal(detail.body.status, 'final');
   assert.equal(detail.body.editable, false);
+  agenda=(await call('/professional/agenda',professional.token)).body;
+  const returnItem=agenda.find(item=>item.id==='return:'+consultation.body.id);assert(returnItem);
+  assert.equal(agenda.filter(item=>item.id===returnItem.id).length,1,'Edição/ aprovação duplicou retorno');
+  assert.equal((await call('/professional/agenda',professional.token,{id:returnItem.id,action:'status',status:'completed',expectedUpdatedAt:returnItem.updatedAt})).status,200);
+  assert.equal((await call(encounterPath,professional.token)).body.updatedAt,detail.body.updatedAt,'Concluir agenda alterou atendimento aprovado');
+  assert.equal((await call('/professional/agenda',professional.token,{id:returnItem.id,at:'2027-01-01T00:00:00Z',expectedUpdatedAt:returnItem.updatedAt})).status,400);
+  const finalPatient=(await call('/patients/'+patient.patientId+'/events',patient.token)).body.find(item=>item.id===consultation.body.id);
+  assert.equal(finalPatient.payload.followUp.enabled,true,'Retorno desapareceu do prontuário aprovado');
+
   assert.equal((await call(encounterPath, professional.token, { title: 'Alteração proibida', occurredAt }, 'PUT')).status, 409);
   assert.equal((await call(encounterPath + '/submit', professional.token, {})).status, 409);
   assert.equal((await call(encounterPath + '/documents/' + documentId + '/inactivate', professional.token, {})).status, 409);
@@ -257,3 +283,4 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
