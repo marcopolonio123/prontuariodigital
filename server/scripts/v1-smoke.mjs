@@ -82,11 +82,12 @@ const event = await call(`/api/v1/patients/${profile.id}/events`, {
     council: 'CRM',
     registration: '123456',
     registrationRegion: 'SP',
-    payload: { notes: 'Evento criado automaticamente no teste ponta a ponta da V1.' },
+    payload: { followUp:{enabled:true,period:'30',at:'2026-09-26T14:30:00-03:00',alert:true},notes: 'Evento criado automaticamente no teste ponta a ponta da V1.' },
   }),
 });
 assert(event?.id && event?.patientId === profile.id, 'evento clínico não foi persistido');
 
+assert.equal(event.payload.followUp.at,'2026-09-26T17:30:00.000Z');
 console.log('8/10 create vital sign');
 const vital = await call(`/api/v1/patients/${profile.id}/events`, {
   method: 'POST',
@@ -199,5 +200,6 @@ try {
 }
 await db.$disconnect();
 console.log('✅ Diary retention, deletion and Consultant consent OK');
+
 
 
