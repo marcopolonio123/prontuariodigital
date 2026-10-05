@@ -82,6 +82,7 @@ try {
   await click('+ Adicionar Atendimento');
   const returnCheckbox=[...document.querySelectorAll('label')].find(label=>label.textContent.includes('Deseja agendar um retorno e receber um alerta?')).querySelector('input');
   await settle(()=>Simulate.change(returnCheckbox,{target:{checked:true}}));
+  assert(returnCheckbox.compareDocumentPosition([...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Observações')).querySelector('textarea'))&window.Node.DOCUMENT_POSITION_PRECEDING,'Retorno ficou antes das observações');
   const returnPeriod=[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Prazo para retorno')).querySelector('select');
   const returnDate=[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Data/Hora do retorno')).querySelector('input');
   const encounterDate=[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Data/Hora (horário local)')).querySelector('input');
@@ -204,4 +205,5 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
