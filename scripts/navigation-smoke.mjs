@@ -198,7 +198,7 @@ try {
   const untilInput = document.querySelector('input[type="datetime-local"]');
   await settle(()=>Simulate.change(untilInput,{target:{value:'2000-01-01T00:00'}}));
   await click('Autorizar acesso');assert.match(document.querySelector('[role=alert]').textContent,/futuro/);assert.equal(decisionArgs,undefined);
-  await settle(()=>Simulate.change(document.querySelector('select'),{target:{value:'indefinite'}}));
+  await settle(()=>Simulate.change([...document.querySelectorAll('select')].find(select=>[...select.options].some(option=>option.value==='indefinite')),{target:{value:'indefinite'}}));
   await click('Autorizar acesso');assert.equal(decisionArgs[3],'indefinite');assert.equal(decisionArgs[4],undefined);
   assert.match(document.body.textContent,/Tempo indeterminado/);
   window.confirm=()=>true;await click('Revogar acesso');assert.equal(revoked,true);assert.match(document.body.textContent,/Revogado/);
