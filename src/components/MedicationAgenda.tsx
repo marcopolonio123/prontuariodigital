@@ -1,3 +1,4 @@
+import PaginatedList from './PaginatedList';
 import { useEffect, useState } from 'react';
 import type { MedicationAgendaV1, MedicationScheduleInput, MedicationScheduleV1, MyDoctorV1Api, PatientProfile } from '../lib/api-v1';
 
@@ -93,13 +94,13 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
         <p className="text-xs text-mute sm:hidden">Deslize a tabela para ver todas as colunas.</p>
       </div>
       <div className="overflow-x-auto" role="region" aria-label="Tabela da agenda de medicamentos" tabIndex={0}>
-        <table className="w-full min-w-[740px] border-collapse text-left text-sm">
+        <PaginatedList items={agenda.schedules} label="Registros">{pageRows=>(<table className="w-full min-w-[740px] border-collapse text-left text-sm">
           <caption className="sr-only">Agenda de medicamentos de {profile.name}</caption>
           <thead className="border-b border-line bg-paper text-xs font-bold uppercase tracking-wide text-mute">
             <tr>{['Medicamento e dose', 'Dias', 'Horários', 'Período', 'Alertas', 'Ações'].map(title => <th key={title} scope="col" className="px-3 py-2">{title}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {agenda.schedules.map(schedule => <tr key={schedule.id} className="align-middle transition-colors even:bg-paper/40 hover:bg-moss-50/50">
+            {pageRows.map(schedule => <tr key={schedule.id} className="align-middle transition-colors even:bg-paper/40 hover:bg-moss-50/50">
               <th scope="row" className="max-w-[200px] px-3 py-2 font-normal">
                 <span className="block break-words font-bold text-ink">{schedule.name}</span>
                 <span className="mt-1 block text-xs text-mute">{schedule.dose || 'Dose não informada'}</span>
@@ -115,7 +116,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
               </div> : <span className="text-xs text-mute">Consulta</span>}</td>
             </tr>)}
           </tbody>
-        </table>
+        </table>)}</PaginatedList>
       </div>
     </section>}
   </div>;
