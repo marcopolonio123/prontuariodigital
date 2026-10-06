@@ -1,3 +1,4 @@
+import PaginatedList from './components/PaginatedList';
 import { useEffect, useState } from 'react';
 import type { IncomingConsultationV1, MyDoctorV1Api } from './lib/api-v1';
 
@@ -44,7 +45,7 @@ export default function ConsultationConfirmationsPanel({ api, onDecision }: { ap
       </div>
 
       {items.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-line bg-white p-5 text-sm text-mute">Nenhum atendimento aguardando confirmação.</div> : <div className="mt-4 space-y-3">
-        {items.map((item) => <article key={item.id} className="rounded-xl border border-line bg-white p-4">
+        <PaginatedList items={items} label="Registros">{pageRows=>(<>{pageRows.map((item) => <article key={item.id} className="rounded-xl border border-line bg-white p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-moss-700">{item.patientName}</p>
           <h4 className="mt-1 text-lg font-bold text-ink">{item.title}</h4>
           <p className="mt-1 text-sm text-mute">{item.practitionerName}{item.profession ? ` · ${item.profession}` : ''}</p>
@@ -60,7 +61,7 @@ export default function ConsultationConfirmationsPanel({ api, onDecision }: { ap
             <button type="button" disabled={busyId === item.id} onClick={() => void decide(item, 'confirm')} className="rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Confirmar e incluir no prontuário</button>
             <button type="button" disabled={busyId === item.id} onClick={() => void decide(item, 'reject')} className="rounded-xl border border-line px-4 py-3 text-sm font-bold text-danger-600 disabled:opacity-50">Recusar registro</button>
           </div>
-        </article>)}
+        </article>)}</>)}</PaginatedList>
       </div>}
     </section>
 
