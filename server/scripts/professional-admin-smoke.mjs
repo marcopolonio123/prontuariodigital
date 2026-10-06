@@ -86,6 +86,17 @@ try {
   assert.equal((await call('/professional/locations/' + location.body.id, admin.token, undefined,'DELETE')).status,404);
   assert.equal((await call('/professional/locations', professional.token, {name:'Clínica teste',address:''})).status,409);
   assert.equal((await call('/professional/locations/' + location.body.id, professional.token, {name:'Consultório teste',address:'Rua de teste, 11'},'PUT')).status,200);
+  const address={postalCode:'01001000',street:'Rua de teste',number:'11',complement:'Sala 2',neighborhood:'Centro',city:'São Paulo',state:'SP',country:'Brasil'};
+  const weekly=[1,3,5].map(weekday=>({weekday,start:'09:00',end:'17:00'}));
+  const configured=await call('/professional/locations/'+location.body.id,professional.token,{name:'Consultório teste',address:'',fullAddress:address,availability:weekly},'PUT');
+  assert.equal(configured.status,200);assert.deepEqual(configured.body.fullAddress,address);assert.deepEqual(configured.body.availability,weekly);assert(configured.body.address.includes('Sala 2'));
+  assert.equal((await call('/professional/locations/'+location.body.id,professional.token,{name:'Consultório teste',address:'',availability:[{weekday:1,start:'17:00',end:'09:00'}]},'PUT')).status,400);
+  assert.equal((await call('/professional/locations/'+location.body.id,professional.token,{name:'Consultório teste',address:'',availability:[{weekday:1,start:'09:00',end:'17:00'},{weekday:1,start:'12:00',end:'13:00'}]},'PUT')).status,400);
+  const saturday=await call('/professional/locations',professional.token,{name:'Local B',address:'Rua B',availability:[{weekday:6,start:'09:00',end:'13:00'}]});assert.equal(saturday.status,201);
+  const places=(await call('/professional/locations',professional.token)).body;assert.deepEqual(places.find(place=>place.id===location.body.id).availability,weekly);assert.equal(places.find(place=>place.id===saturday.body.id).availability[0].weekday,6);
+  assert.equal((await call('/professional/locations',admin.token)).body.some(place=>place.id===location.body.id),false,'Local/disponibilidade de outro profissional vazou');
+  assert.equal((await call('/professional/locations/'+saturday.body.id,professional.token,undefined,'DELETE')).status,200);
+
   row = await reviewRow(); assert.equal(row.history.length, 1); assert.equal(row.history[0].actorName, 'Administrador teste');
   await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "test_legacy_grant_pair_unique" ON "AccessGrant" ("accountId", "patientId")');
   const legacyGrant = await db.accessGrant.create({ data: { accountId: professional.id, patientId: patient.patientId, level: 'leitura', revokedAt: new Date() } });
