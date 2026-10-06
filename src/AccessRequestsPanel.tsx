@@ -1,3 +1,4 @@
+import PaginatedList from './components/PaginatedList';
 import { useEffect, useState } from 'react';
 import type { IncomingAccessRequestV1, MyDoctorV1Api } from './lib/api-v1';
 const field = 'mt-1 block w-full rounded-lg border border-line bg-white px-3 py-2 text-sm';
@@ -56,7 +57,7 @@ export default function AccessRequestsPanel({ api }: { api: MyDoctorV1Api }) {
     </section>
     <section className="rounded-xl border border-line bg-card p-4"><h3 className="font-bold">Aguardando sua decisão</h3>
       {!loading && !pending.length && <p className="mt-3 text-sm text-mute">Nenhuma solicitação pendente.</p>}
-      {pending.map(item => <article key={item.id} className="mt-3 rounded-lg border border-line bg-white p-4">
+      <PaginatedList items={pending} label="Registros">{pageRows=>(<>{pageRows.map(item => <article key={item.id} className="mt-3 rounded-lg border border-line bg-white p-4">
         <div className="-mx-4 -mt-4 rounded-t-lg border-b border-line bg-moss-50/50 p-4"><ProfessionalIdentity item={item} /></div>
         <div className="mt-3 grid gap-3 rounded-lg bg-paper p-3 sm:grid-cols-2"><div><p className="text-[10px] font-bold uppercase tracking-wide text-mute">Prontuário solicitado</p><p className="mt-1 text-sm font-semibold text-ink">{item.patientName}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wide text-mute">Solicitação enviada</p><p className="mt-1 text-sm text-ink">{new Date(item.requestedAt).toLocaleString('pt-BR')}</p></div></div>
         <p className="mt-3 text-xs text-mute">Ao autorizar, este profissional poderá consultar seu prontuário e registrar atendimentos durante o período escolhido.</p>
@@ -67,13 +68,13 @@ export default function AccessRequestsPanel({ api }: { api: MyDoctorV1Api }) {
         <p className="mt-2 text-xs text-mute">{choice(item.id).duration === 'indefinite' ? 'O acesso continuará ativo até você revogá-lo ou o profissional perder a validação.' : 'O acesso será bloqueado automaticamente no horário escolhido. Você também pode revogar antes.'}</p>
         {errors[item.id] && <p role="alert" className="mt-3 rounded-lg bg-paper p-3 text-sm">{errors[item.id]}</p>}
         <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={Boolean(busyId)} onClick={() => void decide(item,'approve')} className="rounded-lg bg-pine-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busyId === item.id ? 'Processando...' : 'Autorizar acesso'}</button><button type="button" disabled={Boolean(busyId)} onClick={() => void decide(item,'reject')} className="rounded-lg border border-line px-4 py-2 text-sm text-danger-600 disabled:opacity-50">Recusar</button></div>
-      </article>)}
+      </article>)}</>)}</PaginatedList>
     </section>
     {decided.length > 0 && <section className="rounded-xl border border-line bg-card p-4"><h3 className="font-bold">Autorizações e histórico</h3>
-      {decided.map(item => <article key={item.id} className="mt-3 rounded-lg border border-line p-3">
+      <PaginatedList items={decided} label="Registros">{pageRows=>(<>{pageRows.map(item => <article key={item.id} className="mt-3 rounded-lg border border-line p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><ProfessionalIdentity item={item} compact /><p className="mt-3 text-xs text-mute">Paciente: <span className="font-semibold text-ink">{item.patientName}</span> · <span className="font-bold text-moss-800">{statusLabel(item.status)}</span></p>{item.status === 'approved' && <p className="mt-1 text-xs text-mute">{item.grantValidUntil ? `Até ${new Date(item.grantValidUntil).toLocaleString('pt-BR')}` : 'Tempo indeterminado'}</p>}</div>{item.status === 'approved' && <button type="button" disabled={Boolean(busyId)} onClick={() => void revoke(item)} className="rounded-lg border border-line px-3 py-2 text-sm text-danger-600 disabled:opacity-50">{busyId === item.id ? 'Revogando...' : 'Revogar acesso'}</button>}</div>
         {errors[item.id] && <p role="alert" className="mt-2 text-sm text-danger-600">{errors[item.id]}</p>}
-      </article>)}
+      </article>)}</>)}</PaginatedList>
     </section>}
   </div>;
 }
