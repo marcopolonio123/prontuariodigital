@@ -25,6 +25,7 @@ jobs:
           node scripts/professional-encounter-smoke.mjs
           npx playwright install --with-deps chromium
           node scripts/responsive-navigation-smoke.mjs
+          node scripts/pagination-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
