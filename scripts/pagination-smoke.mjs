@@ -13,7 +13,7 @@ try{
   const events=Array.from({length:23},(_,i)=>({id:'record-'+String(i).padStart(2,'0'),patientId:'p1',type:'consultation',title:'Consulta '+i,status:'final',occurredAt:new Date(Date.UTC(2026,8,i+1,12)).toISOString(),createdAt:'2026-09-01T12:00:00Z',updatedAt:'2026-09-01T12:00:00Z',practitionerNameSnapshot:'Dra. Teste',payload:{specialty:'Clínica',notes:i===0?'Alvo distante':''}}));
   await page.route('**/api/v1/**',route=>{
    const path=new URL(route.request().url()).pathname.replace('/api/v1','');
-   const data=path==='/account'?{id:'u1',name:'Marco teste',email:'fixture@example.test',completed:true}:path==='/profiles'?[{id:'p1',name:'Marco teste',source:'owned',relationship:'self'}]:path==='/patients/p1/events'?events:path==='/admin/session'?{authorized:false}:[];
+   const data=path==='/practitioners/lookup'?(new URL(route.request().url()).searchParams.get('region')==='SP'?{id:'doctor-fixture',name:'Dra. Registro',specialty:'Cardiologia',profession:'Médico'}:null):path==='/account'?{id:'u1',name:'Marco teste',email:'fixture@example.test',completed:true}:path==='/profiles'?[{id:'p1',name:'Marco teste',source:'owned',relationship:'self'}]:path==='/patients/p1/events'?events:path==='/admin/session'?{authorized:false}:[];
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
   await page.goto('http://127.0.0.1:4175/');await page.getByText('Olá, Marco.').waitFor();
@@ -34,6 +34,17 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/mydoctor-pagination-'+width+'.png',fullPage:true});
   await page.getByRole('button',{name:'Limpar filtros',exact:true}).click();assert.equal(await page.locator('[data-record-id]').count(),20);await top.waitFor();await bottom.waitFor();
+  await page.getByRole('button',{name:'+ Adicionar Atendimento',exact:true}).click();
+  await page.getByPlaceholder('Número',{exact:true}).fill('65000');
+  const registry=page.locator('label').filter({hasText:/^CRM\/CREFITO/}).first();
+  await registry.locator('select').last().selectOption('SP');
+  await page.waitForFunction(()=>[...document.querySelectorAll('label')].find(label=>label.textContent.startsWith('Nome do Médico/Fisioterapeuta/Atendente'))?.querySelector('input')?.value==='Dra. Registro');
+  assert.equal(await page.getByLabel('Especialidade',{exact:true}).inputValue(),'Cardiologia');
+  await page.getByText('Profissional localizado: Dra. Registro · Cardiologia. Nome e especialidade preenchidos. Confira os dados.',{exact:true}).waitFor();
+  await registry.locator('select').last().selectOption('RJ');
+  await page.getByText('Nenhum profissional validado encontrado com este conselho, registro e UF. Você pode preencher os dados manualmente.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  console.log('Busca automática e especialidade por registro OK',width);
   console.log('Paginação, controles sincronizados, 23 registros e filtros OK',width);await page.close();
  }
 }finally{await browser?.close();server.kill()}

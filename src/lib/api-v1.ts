@@ -205,6 +205,7 @@ export class MyDoctorV1Api {
   register(input: { name: string; email: string; password: string; phone?: string; isHealthProfessional?: boolean }) { return this.req<RegisterResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) }); }
   startPasswordLogin(input: { email: string; password: string; channel: MfaChannel }) { return this.req<LoginStartResponse>('/auth/login/start', { method: 'POST', body: JSON.stringify(input) }); }
   verifyPasswordLogin(input: { challengeId: string; code: string }) { return this.req<LoginVerifyResponse>('/auth/login/verify', { method: 'POST', body: JSON.stringify(input) }); }
+  lookupPractitioner(council:string,registration:string,region:string){return this.req<{id:string;name:string;specialty:string|null;profession:string}|null>('/practitioners/lookup?'+new URLSearchParams({council,registration,region}))}
   getProfessionalProfile() { return this.req<ProfessionalProfileV1 | null>('/professional/profile'); }
   saveProfessionalProfile(input: UpsertProfessionalProfileInput) { return this.req<ProfessionalProfileV1>('/professional/profile', { method: 'PUT', body: JSON.stringify(input) }); }
 
