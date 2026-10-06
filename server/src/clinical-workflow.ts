@@ -38,6 +38,14 @@ function professionalLocations(data: unknown): ProfessionalLocation[] {
   const items = (data as { professionalLocations?: unknown } | null)?.professionalLocations;
   return Array.isArray(items) ? items.filter((item): item is ProfessionalLocation => !!item && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.address === 'string') : [];
 }
+// Authenticated exact registry lookup for personal records. Never returns clinical data or private appointments.
+router.get('/practitioners/lookup', auth, async (req: AuthedRequest, res: Response) => {
+ const council=String(req.query.council??'').trim().toUpperCase(),registration=String(req.query.registration??'').trim(),region=String(req.query.region??'').trim().toUpperCase();
+ if(!['CRM','CREFITO','CRN','COREN','CRO','OUTROS'].includes(council)||!registration||registration.length>80||!/^[A-Z]{2}$/.test(region))return fail(res,400,'Informe conselho, número do registro e UF.');
+ const matches=await prisma.practitioner.findMany({where:{active:true,verificationStatus:'verified',registrations:{some:{status:'active',registration:{equals:registration,mode:'insensitive'},region:{equals:region,mode:'insensitive'},authority:{code:council}}}},select:{id:true,name:true,specialty:true,profession:true},take:2});
+ if(matches.length!==1)return res.json(null);
+ return res.json(matches[0]);
+});
 router.get('/professional/locations', auth, async (req: AuthedRequest, res: Response) => {
   if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
   const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { accountData: true } });
