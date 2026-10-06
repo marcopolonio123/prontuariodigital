@@ -131,16 +131,16 @@ try {
   const identityFixture=await db.patient.findUnique({where:{id:patient.patientId}});
   await db.patient.update({where:{id:patient.patientId},data:{record:'PR-123',data:{...identityFixture.data,relationshipToOwner:'self',cpf:''}}});
   const agendaPatients=await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token);
-  assert.equal((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),admin.token)).body.total,0);
+  assert((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),admin.token)).body.items.some(item=>item.id===patient.patientId));
   assert.equal(agendaPatients.status,200);assert(agendaPatients.body.items.some(item=>item.id===patient.patientId));assert(agendaPatients.body.items.every(item=>Object.keys(item).sort().join(',')==='documentNumber,documentType,id,name,record'));
-  const found=agendaPatients.body.items.find(item=>item.id===patient.patientId);assert.equal(found.record,'PR-123');assert.equal(found.documentNumber,'52998224725');
+  const found=agendaPatients.body.items.find(item=>item.id===patient.patientId);assert.equal(found.record,'PR-123');assert.equal(found.documentNumber,'•••••••4725');
   assert.equal((await call('/professional/agenda/patients?q=PACÍNTE',professional.token)).body.items[0].id,patient.patientId);
   const dependent=await db.patient.create({data:{id:'agenda-dependent-'+Date.now(),ownerUserId:patient.id,name:'Paciente dependente teste',record:'DEP-123',data:{relationshipToOwner:'child'}}});
   await db.accessGrant.create({data:{accountId:professional.id,patientId:dependent.id,practitionerId:requested.body.id,permission:'read_write_consultation',scope:['record'],validFrom:new Date(),grantedByUserId:patient.id,grantedByName:patient.name}});
   assert.equal((await call('/professional/agenda/patients?q=dependente',professional.token)).body.items[0].documentNumber,'','Documento do tutor vazou como documento do dependente');
   await db.patient.delete({where:{id:dependent.id}});
   assert.equal((await call('/professional/agenda/patients?q=a',professional.token)).status,400);
-  assert.equal((await call('/professional/agenda',professional.token,{title:'Paciente alheio',patientId:'nao-autorizado',patientName:'Outro',at:'2026-11-02T08:00:00Z'})).status,403);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Paciente alheio',patientId:'nao-existe',patientName:'Outro',at:'2026-11-02T08:00:00Z'})).status,404);
   let agenda=(await call('/professional/agenda',professional.token)).body;
   assert.equal(agenda.filter(item=>item.id==='return:'+consultation.body.id).length,1);
   assert.equal(typeof agenda[0].patientName,'string');
@@ -237,8 +237,10 @@ try {
   else { assert.equal(afterRace.title, 'Versão nova'); assert.equal(afterRace.status, 'pending_patient_confirmation'); }
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', admin.token, {})).status, 403);
   assert.equal((await call('/access-requests/' + access.body.id + '/revoke', patient.token, {})).status, 200);
-  assert.equal((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token)).body.total,0);
-  assert.equal((await call('/professional/agenda',professional.token,{title:'Após revogação',patientId:patient.patientId,at:'2026-11-02T08:00:00Z'})).status,403);
+  assert((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token)).body.items.some(item=>item.id===patient.patientId));
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Após revogação',patientId:patient.patientId,at:'2026-11-02T08:00:00Z'})).status,200);
+  assert.equal((await call(summaryPath,professional.token)).status,403,'Agendar liberou prontuário sem autorização');
+  assert.equal(await db.accessGrant.count({where:{accountId:professional.id,patientId:patient.patientId,revokedAt:null}}),0,'Agendar criou autorização');
   assert.equal((await call('/professional/agenda',professional.token,{title:'Paciente informado',patientName:'Pessoa sem cadastro',at:'2026-11-02T08:00:00Z'})).status,200);
   assert((await call('/professional/agenda',professional.token)).body.some(item=>item.patientName==='Pessoa sem cadastro'&&!item.patientId));
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403);

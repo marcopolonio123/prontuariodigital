@@ -328,9 +328,7 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
   if(!practitioner)return fail(res,403,'A pesquisa exige perfil profissional aprovado e ativo.');
   const q=String(req.query.q??'').trim();
   if(q.length<2||q.length>150)return fail(res,400,'Digite pelo menos duas letras do nome (até 150 caracteres).');
-  const now=new Date();
-  const grants=await prisma.accessGrant.findMany({where:{accountId:req.userId!,practitionerId:practitioner.id,permission:'read_write_consultation',revokedAt:null,validFrom:{lte:now},OR:[{validUntil:null},{validUntil:{gt:now}}]},select:{patientId:true}});
-  const patients=await prisma.patient.findMany({where:{id:{in:grants.map(item=>item.patientId)},archived:false},select:{id:true,name:true,record:true,data:true,owner:{select:{accountData:true}}},orderBy:[{name:'asc'},{id:'asc'}]});
+  const patients=await prisma.patient.findMany({where:{archived:false},select:{id:true,name:true,record:true},orderBy:[{name:'asc'},{id:'asc'}]});
   const normalized=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const close=(a:string,b:string)=>{
     if(a.length<4||Math.abs(a.length-b.length)>1)return false;
@@ -340,13 +338,16 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
   };
   const words=normalized(q).split(' ').filter(Boolean);
   const matching=patients.filter(patient=>{const name=normalized(patient.name),parts=name.split(' ');return words.length>0&&words.every(word=>name.includes(word)||parts.some(part=>close(word,part)))});
-  const items=matching.slice(0,20).map(patient=>{
+  const details=await prisma.patient.findMany({where:{id:{in:matching.slice(0,20).map(patient=>patient.id)},archived:false},select:{id:true,name:true,record:true,data:true,owner:{select:{accountData:true}}}});
+  const mask=(value:string)=>value?value.length<=4?'••••':value.slice(0,-4).replace(/./g,'•')+value.slice(-4):'';
+  const items=matching.slice(0,20).flatMap(entry=>{
+    const patient=details.find(patient=>patient.id===entry.id);if(!patient)return [];
     const data=(patient.data??{}) as any;
     // The owner's identity belongs only to the self profile, never to a dependent.
     const account=data.relationshipToOwner==='self'?(patient.owner.accountData??{}) as any:{};
     const cpf=String(data.cpf||account.cpf||'').replace(/\D/g,'');
     const rg=String(data.rg||account.rg||'');
-    return {id:patient.id,name:patient.name,record:patient.record,documentType:cpf?'CPF':rg?'RG':'',documentNumber:cpf||rg};
+    return [{id:patient.id,name:patient.name,record:patient.record,documentType:cpf?'CPF':rg?'RG':'',documentNumber:mask(cpf||rg)}];
   });
   return res.json({items,total:matching.length});
 });
@@ -387,17 +388,16 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
         let patientName=String(body.action==='status'?current?.patientName??'':body.patientName??current?.patientName??'').trim();
         if(patientName.length>150)throw new Error('PATIENT_NAME');
         if(patientId&&body.action!=='status'){
-          const now=new Date();
-          const grant=await tx.accessGrant.findFirst({where:{accountId:req.userId!,practitionerId:practitioner.id,patientId,permission:'read_write_consultation',revokedAt:null,validFrom:{lte:now},OR:[{validUntil:null},{validUntil:{gt:now}}]},select:{patient:{select:{name:true}}}});
-          if(!grant)throw new Error('PATIENT_ACCESS');
-          patientName=grant.patient.name;
+          const patient=await tx.patient.findFirst({where:{id:patientId,archived:false},select:{name:true}});
+          if(!patient)throw new Error('PATIENT_NOT_FOUND');
+          patientName=patient.name;
         }
         const next={patientId,patientName,locationId,locationName,locationAddress,id:id||'manual:'+randomUUID(),title,at:at.toISOString(),notes,status,alert:body.alert===undefined?current?.alert!==false:body.alert===true,updatedAt:new Date().toISOString()};
         await tx.user.update({where:{id:user.id},data:{accountData:{...data,professionalAgenda:[...items.filter((item:any)=>item.id!==id),next]}}});
       }
     });
     return res.json({saved:true});
-  }catch(e){if(e instanceof Error&&e.message==='PATIENT_ACCESS')return fail(res,403,'O vínculo com este paciente expirou ou foi revogado. Pesquise novamente ou registre apenas o nome.');if(e instanceof Error&&e.message==='PATIENT_NAME')return fail(res,400,'O nome do paciente deve ter até 150 caracteres.');if(e instanceof Error&&e.message==='LOCATION')return fail(res,400,'Selecione um local do seu cadastro profissional.');if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
+  }catch(e){if(e instanceof Error&&e.message==='PATIENT_NOT_FOUND')return fail(res,404,'O paciente não está mais disponível no cadastro. Pesquise novamente ou informe apenas o nome.');if(e instanceof Error&&e.message==='PATIENT_NAME')return fail(res,400,'O nome do paciente deve ter até 150 caracteres.');if(e instanceof Error&&e.message==='LOCATION')return fail(res,400,'Selecione um local do seu cadastro profissional.');if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
 });
 
 export default router;
