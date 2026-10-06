@@ -63,6 +63,8 @@ try {
   assert.equal(requested.body.verificationStatus, 'pending', 'autoverificação indevida');
   professionals.push(requested.body.id);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 403);
+  const pendingLookup='/practitioners/lookup?'+new URLSearchParams({council:'CRM',registration:profileData.registration,region:'SP'});
+  assert.equal((await call(pendingLookup,patient.token)).body,null,'Perfil pendente apareceu na busca');
   async function reviewRow() { const list = await call('/admin/professionals', admin.token); assert.equal(list.status, 200); return list.body.find(row => row.id === requested.body.id); }
   let row = await reviewRow();
   const path = '/admin/professionals/' + row.id + '/decision';
@@ -75,6 +77,11 @@ try {
   assert.equal(concurrent.filter(r => r.status === 409).length, 1);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'aprovação concedeu acesso ao paciente');
+  const lookup='/practitioners/lookup?'+new URLSearchParams({council:'CRM',registration:profileData.registration,region:'SP'});
+  const found=await call(lookup,patient.token);assert.equal(found.status,200);assert.equal(found.body.id,requested.body.id);assert.equal(found.body.name,'Profissional teste');assert.equal(found.body.specialty,'Teste');
+  assert.deepEqual(Object.keys(found.body).sort(),['id','name','profession','specialty'],'Busca retornou dados privados');
+  assert.equal((await call(lookup.replace('region=SP','region=RJ'),patient.token)).body,null,'UF incorreta identificou profissional');
+  assert.equal((await call('/practitioners/lookup?council=CRM',patient.token)).status,400);
   const location = await call('/professional/locations', professional.token, { name: 'Clínica teste', address: 'Rua de teste, 10' });
   assert.equal(location.status,201);
   assert.equal((await call('/professional/locations', professional.token)).body[0].name,'Clínica teste');
