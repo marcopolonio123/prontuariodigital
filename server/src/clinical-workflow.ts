@@ -33,7 +33,7 @@ async function verifiedPractitioner(userId: string) {
 // Private professional directory. Stored separately from patient records and identity fields.
 type LocationAddress={postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string};
 type LocationAvailability={weekday:number;start:string;end:string};
-type ProfessionalLocation = { id: string; name: string; address: string;fullAddress?:LocationAddress|null;availability?:LocationAvailability[] };
+type ProfessionalLocation = { id: string; name: string; address: string;fullAddress?:LocationAddress|null;availability?:LocationAvailability[];active?:boolean };
 function professionalLocations(data: unknown): ProfessionalLocation[] {
   const items = (data as { professionalLocations?: unknown } | null)?.professionalLocations;
   return Array.isArray(items) ? items.filter((item): item is ProfessionalLocation => !!item && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.address === 'string') : [];
@@ -41,7 +41,12 @@ function professionalLocations(data: unknown): ProfessionalLocation[] {
 router.get('/professional/locations', auth, async (req: AuthedRequest, res: Response) => {
   if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
   const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { accountData: true } });
-  return res.json(professionalLocations(user?.accountData));
+  const data=(user?.accountData??{}) as any;
+  const events=await prisma.healthEvent.findMany({where:{authoredByUserId:req.userId!,organizationNameSnapshot:{not:null}},select:{organizationNameSnapshot:true}});
+  const names=new Set(events.map(event=>event.organizationNameSnapshot?.trim().toLocaleLowerCase('pt-BR')));
+  const agenda=Array.isArray(data.professionalAgenda)?data.professionalAgenda:[];
+  const locations=professionalLocations(data).map(place=>({...place,active:place.active!==false,hasAssociations:names.has(place.name.trim().toLocaleLowerCase('pt-BR'))||agenda.some((item:any)=>item.locationId===place.id||item.locationName===place.name)}));
+  return res.json(req.query.includeInactive==='1'?locations:locations.filter(place=>place.active));
 });
 async function saveProfessionalLocation(req: AuthedRequest, res: Response, action: 'create' | 'edit' | 'remove') {
   if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
@@ -57,6 +62,11 @@ async function saveProfessionalLocation(req: AuthedRequest, res: Response, actio
       if (action !== 'create' && !items.some(item => item.id === id)) throw new Error('LOCATION_NOT_FOUND');
       if (action !== 'remove' && items.some(item => item.id !== id && item.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw new Error('LOCATION_DUPLICATE');
       const current=items.find(item=>item.id===id);
+      if(current){
+        const linkedAgenda=Array.isArray((user.accountData as any)?.professionalAgenda)&&(user.accountData as any).professionalAgenda.some((entry:any)=>entry.locationId===current.id||entry.locationName===current.name);
+        const linkedEvent=await tx.healthEvent.findFirst({where:{authoredByUserId:req.userId!,organizationNameSnapshot:{equals:current.name,mode:'insensitive'}},select:{id:true}});
+        if(linkedAgenda||linkedEvent)throw new Error('LOCATION_ASSOCIATED');
+      }
       let fullAddress=current?.fullAddress??null;
       if(body.fullAddress!==undefined){
         if(body.fullAddress===null)fullAddress=null;
@@ -79,13 +89,14 @@ async function saveProfessionalLocation(req: AuthedRequest, res: Response, actio
         availability.sort((a,b)=>a.weekday-b.weekday||a.start.localeCompare(b.start));
       }
       const formatted=fullAddress?[fullAddress.street+(fullAddress.number?', '+fullAddress.number:''),fullAddress.complement,fullAddress.neighborhood,fullAddress.city+' / '+fullAddress.state,fullAddress.postalCode,fullAddress.country].filter(Boolean).join(' · '):address;
-      const location = { id, name, address:formatted,fullAddress,availability };
+      const location = { id, name, address:formatted,fullAddress,availability,active:current?.active!==false };
       const next = action === 'create' ? [...items, location] : action === 'remove' ? items.filter(item => item.id !== id) : items.map(item => item.id === id ? location : item);
       await tx.user.update({ where: { id: req.userId! }, data: { accountData: { ...(user.accountData as Prisma.JsonObject), professionalLocations: next } } });
       return action === 'remove' ? { id, removed: true } : location;
     });
     return res.status(action === 'create' ? 201 : 200).json(result);
   } catch (error) {
+    if(error instanceof Error&&error.message==='LOCATION_ASSOCIATED')return fail(res,409,'Este local tem registros associados. Você pode inativá-lo, mas não alterar ou excluir.');
     if(error instanceof Error&&error.message==='ADDRESS')return fail(res,400,'Confira endereço, cidade, estado, país e CEP do local.');
     if(error instanceof Error&&error.message==='AVAILABILITY')return fail(res,400,'Confira dias e horários: o início deve ser anterior ao fim, sem períodos sobrepostos no mesmo dia.');
     if (error instanceof Error && error.message === 'LOCATION_NOT_FOUND') return fail(res, 404, 'Local não encontrado no seu cadastro.');
@@ -96,6 +107,18 @@ async function saveProfessionalLocation(req: AuthedRequest, res: Response, actio
 router.post('/professional/locations', auth, (req: AuthedRequest, res: Response) => saveProfessionalLocation(req, res, 'create'));
 router.put('/professional/locations/:id', auth, (req: AuthedRequest, res: Response) => saveProfessionalLocation(req, res, 'edit'));
 router.delete('/professional/locations/:id', auth, (req: AuthedRequest, res: Response) => saveProfessionalLocation(req, res, 'remove'));
+router.patch('/professional/locations/:id/status',auth,async(req:AuthedRequest,res:Response)=>{
+ if(!await verifiedPractitioner(req.userId!))return fail(res,403,'Perfil profissional não está habilitado.');
+ if(typeof req.body?.active!=='boolean')return fail(res,400,'Informe se o local está ativo.');
+ const result=await prisma.$transaction(async tx=>{
+  const user=await tx.user.update({where:{id:req.userId!},data:{updatedAt:new Date()},select:{accountData:true}});
+  const items=professionalLocations(user.accountData),place=items.find(item=>item.id===req.params.id);
+  if(!place)return null;
+  const next={...place,active:req.body.active};
+  await tx.user.update({where:{id:req.userId!},data:{accountData:{...(user.accountData as Prisma.JsonObject),professionalLocations:items.map(item=>item.id===next.id?next:item)}}});return next;
+ });
+ return result?res.json(result):fail(res,404,'Local não encontrado no seu cadastro.');
+});
 
 // A linha do tempo manual (GET/POST /patients/:patientId/events) pertence ao v1Router.
  // Este router trata apenas o workflow profissional/confirmacao do paciente.
@@ -409,6 +432,7 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
         if(!id&&items.length>=500)throw new Error('LIMIT');
         const locationId=String(body.locationId??current?.locationId??'');
         const place=professionalLocations(data).find(item=>item.id===locationId);
+        if(place?.active===false&&locationId!==current?.locationId)throw new Error('LOCATION');
         if(locationId&&!['online','home'].includes(locationId)&&!place&&locationId!==current?.locationId)throw new Error('LOCATION');
         const locationName=locationId==='online'?'Atendimento on-line':locationId==='home'?'Atendimento domiciliar':place?.name??(locationId?current?.locationName??'':'');
         const locationAddress=['online','home'].includes(locationId)?'':place?.address??(locationId?current?.locationAddress??'':'');

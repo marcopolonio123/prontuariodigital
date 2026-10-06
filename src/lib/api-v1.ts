@@ -71,7 +71,7 @@ export interface IncomingAccessRequestV1 {
 
 export interface LocationAddressV1 {postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string}
 export interface LocationAvailabilityV1 {weekday:number;start:string;end:string}
-export interface ProfessionalLocationV1 { id: string; name: string; address: string; fullAddress?:LocationAddressV1|null; availability?:LocationAvailabilityV1[]; }
+export interface ProfessionalLocationV1 { id: string; name: string; address: string; fullAddress?:LocationAddressV1|null; availability?:LocationAvailabilityV1[];active?:boolean;hasAssociations?:boolean; }
 
 export interface ProfessionalConsultationDetailV1 extends HealthEventV1 { patientName: string; editable: boolean; canSubmit: boolean; documents: Array<{ id: string; type: string; originalFilename: string }>; }
 
@@ -214,7 +214,8 @@ export class MyDoctorV1Api {
   listIncomingAccessRequests() { return this.req<IncomingAccessRequestV1[]>('/access-requests/incoming'); }
   decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string, duration?: 'indefinite' | 'until', validUntil?: string) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note, duration, validUntil }) }); }
 
-  listProfessionalLocations() { return this.req<ProfessionalLocationV1[]>('/professional/locations'); }
+  listProfessionalLocations(includeInactive=false) { return this.req<ProfessionalLocationV1[]>('/professional/locations'+(includeInactive?'?includeInactive=1':'')); }
+  setProfessionalLocationActive(id:string,active:boolean){return this.req<ProfessionalLocationV1>('/professional/locations/'+encodeURIComponent(id)+'/status',{method:'PATCH',body:JSON.stringify({active})})}
   createProfessionalLocation(input: { name: string; address: string;fullAddress?:LocationAddressV1|null;availability?:LocationAvailabilityV1[] }) { return this.req<ProfessionalLocationV1>('/professional/locations', { method: 'POST', body: JSON.stringify(input) }); }
   updateProfessionalLocation(id: string, input: { name: string; address: string;fullAddress?:LocationAddressV1|null;availability?:LocationAvailabilityV1[] }) { return this.req<ProfessionalLocationV1>(`/professional/locations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
   removeProfessionalLocation(id: string) { return this.req<{removed:boolean}>(`/professional/locations/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
