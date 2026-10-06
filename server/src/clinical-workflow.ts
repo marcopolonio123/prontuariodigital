@@ -31,7 +31,9 @@ async function verifiedPractitioner(userId: string) {
 }
 
 // Private professional directory. Stored separately from patient records and identity fields.
-type ProfessionalLocation = { id: string; name: string; address: string };
+type LocationAddress={postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string};
+type LocationAvailability={weekday:number;start:string;end:string};
+type ProfessionalLocation = { id: string; name: string; address: string;fullAddress?:LocationAddress|null;availability?:LocationAvailability[] };
 function professionalLocations(data: unknown): ProfessionalLocation[] {
   const items = (data as { professionalLocations?: unknown } | null)?.professionalLocations;
   return Array.isArray(items) ? items.filter((item): item is ProfessionalLocation => !!item && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.address === 'string') : [];
@@ -43,6 +45,7 @@ router.get('/professional/locations', auth, async (req: AuthedRequest, res: Resp
 });
 async function saveProfessionalLocation(req: AuthedRequest, res: Response, action: 'create' | 'edit' | 'remove') {
   if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
+  const body=req.body??{};
   const name = String(req.body?.name ?? '').trim(), address = String(req.body?.address ?? '').trim();
   if (action !== 'remove' && (name.length < 2 || name.length > 150 || address.length > 300)) return fail(res, 400, 'Informe um nome de 2 a 150 caracteres e endereço de até 300 caracteres.');
   try {
@@ -53,13 +56,38 @@ async function saveProfessionalLocation(req: AuthedRequest, res: Response, actio
       const id = action === 'create' ? randomUUID() : req.params.id;
       if (action !== 'create' && !items.some(item => item.id === id)) throw new Error('LOCATION_NOT_FOUND');
       if (action !== 'remove' && items.some(item => item.id !== id && item.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw new Error('LOCATION_DUPLICATE');
-      const location = { id, name, address };
+      const current=items.find(item=>item.id===id);
+      let fullAddress=current?.fullAddress??null;
+      if(body.fullAddress!==undefined){
+        if(body.fullAddress===null)fullAddress=null;
+        else{
+          const input=body.fullAddress;
+          if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('ADDRESS');
+          fullAddress=Object.fromEntries(['postalCode','street','number','complement','neighborhood','city','state','country'].map(key=>[key,String(input[key]??'').trim()])) as LocationAddress;
+          fullAddress.postalCode=fullAddress.postalCode.replace(/\D/g,'');fullAddress.state=fullAddress.state.toUpperCase();
+          if(Object.values(fullAddress).some(value=>value.length>180)||fullAddress.number.length>20||fullAddress.state.length>40||fullAddress.postalCode.length>20)throw new Error('ADDRESS');
+          if(!fullAddress.street||!fullAddress.city||!fullAddress.state||!fullAddress.country)throw new Error('ADDRESS');
+          if(['brasil','br','brazil'].includes(fullAddress.country.toLowerCase())&&((fullAddress.postalCode&&!/^\d{8}$/.test(fullAddress.postalCode))||!/^[A-Z]{2}$/.test(fullAddress.state)))throw new Error('ADDRESS');
+        }
+      }
+      let availability=current?.availability??[];
+      if(body.availability!==undefined){
+        if(!Array.isArray(body.availability)||body.availability.length>14)throw new Error('AVAILABILITY');
+        availability=body.availability.map((slot:any)=>({weekday:Number(slot?.weekday),start:String(slot?.start??''),end:String(slot?.end??'')}));
+        if(availability.some(slot=>!Number.isInteger(slot.weekday)||slot.weekday<0||slot.weekday>6||!/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.end)||slot.start>=slot.end))throw new Error('AVAILABILITY');
+        if(availability.some((slot,i)=>availability.some((other,j)=>j<i&&other.weekday===slot.weekday&&slot.start<other.end&&other.start<slot.end)))throw new Error('AVAILABILITY');
+        availability.sort((a,b)=>a.weekday-b.weekday||a.start.localeCompare(b.start));
+      }
+      const formatted=fullAddress?[fullAddress.street+(fullAddress.number?', '+fullAddress.number:''),fullAddress.complement,fullAddress.neighborhood,fullAddress.city+' / '+fullAddress.state,fullAddress.postalCode,fullAddress.country].filter(Boolean).join(' · '):address;
+      const location = { id, name, address:formatted,fullAddress,availability };
       const next = action === 'create' ? [...items, location] : action === 'remove' ? items.filter(item => item.id !== id) : items.map(item => item.id === id ? location : item);
       await tx.user.update({ where: { id: req.userId! }, data: { accountData: { ...(user.accountData as Prisma.JsonObject), professionalLocations: next } } });
       return action === 'remove' ? { id, removed: true } : location;
     });
     return res.status(action === 'create' ? 201 : 200).json(result);
   } catch (error) {
+    if(error instanceof Error&&error.message==='ADDRESS')return fail(res,400,'Confira endereço, cidade, estado, país e CEP do local.');
+    if(error instanceof Error&&error.message==='AVAILABILITY')return fail(res,400,'Confira dias e horários: o início deve ser anterior ao fim, sem períodos sobrepostos no mesmo dia.');
     if (error instanceof Error && error.message === 'LOCATION_NOT_FOUND') return fail(res, 404, 'Local não encontrado no seu cadastro.');
     if (error instanceof Error && error.message === 'LOCATION_DUPLICATE') return fail(res, 409, 'Já existe um local com esse nome no seu cadastro.');
     throw error;
