@@ -6,10 +6,10 @@ export function pageSlice<T>(items:readonly T[],page:number,size:number){
  return {rows:items.slice((current-1)*size,current*size),current,pages};
 }
 
-export default function PaginatedList<T>({items,children,label='Registros',resetKey=''}:{items:readonly T[];children:(rows:T[])=>ReactNode;label?:string;resetKey?:string}){
+export default function PaginatedList<T>({items,children,label='Registros',resetKey='',preserveAppend=false}:{items:readonly T[];children:(rows:T[])=>ReactNode;label?:string;resetKey?:string;preserveAppend?:boolean}){
  const signature=resetKey+'|'+items.map((item:any)=>item.id??item.at??JSON.stringify(item)).join('|');
  const [state,setState]=useState({signature,page:1,size:10});
- const appended=signature.startsWith(state.signature+'|');
+ const appended=preserveAppend&&signature.startsWith(state.signature+'|');
  if(state.signature!==signature)setState({...state,signature,page:appended?state.page:1});
  const page=state.signature===signature||appended?state.page:1;
  const {rows,current,pages}=pageSlice(items,page,state.size);
