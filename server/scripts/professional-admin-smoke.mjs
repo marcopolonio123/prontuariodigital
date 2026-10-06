@@ -78,8 +78,8 @@ try {
   assert.equal((await call('/professional/access-requests', professional.token)).status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'aprovação concedeu acesso ao paciente');
   const lookup='/practitioners/lookup?'+new URLSearchParams({council:'CRM',registration:profileData.registration,region:'SP'});
-  const found=await call(lookup,patient.token);assert.equal(found.status,200);assert.equal(found.body.id,requested.body.id);assert.equal(found.body.name,'Profissional teste');assert.equal(found.body.specialty,'Teste');
-  assert.deepEqual(Object.keys(found.body).sort(),['id','name','profession','specialty'],'Busca retornou dados privados');
+  const registryFound=await call(lookup,patient.token);assert.equal(registryFound.status,200);assert.equal(registryFound.body.id,requested.body.id);assert.equal(registryFound.body.name,'Profissional teste');assert.equal(registryFound.body.specialty,'Teste');
+  assert.deepEqual(Object.keys(registryFound.body).sort(),['id','name','profession','specialty'],'Busca retornou dados privados');
   assert.equal((await call(lookup.replace('region=SP','region=RJ'),patient.token)).body,null,'UF incorreta identificou profissional');
   assert.equal((await call('/practitioners/lookup?council=CRM',patient.token)).status,400);
   const location = await call('/professional/locations', professional.token, { name: 'Clínica teste', address: 'Rua de teste, 10' });
