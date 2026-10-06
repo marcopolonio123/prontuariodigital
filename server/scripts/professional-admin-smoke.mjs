@@ -177,7 +177,15 @@ try {
   assert.equal(consultation.body.occurredAt, '2026-10-01T20:30:00.000Z');
   assert.equal(consultation.body.payload.specialty, 'Teste');
   assert.equal(consultation.body.payload.homeVisit,true);
-  assert.equal((await call('/professional/locations/' + location.body.id, professional.token, undefined,'DELETE')).status,200);
+  assert.equal((await call('/professional/locations/' + location.body.id, professional.token, undefined,'DELETE')).status,409);
+  assert.equal((await call('/professional/locations/'+location.body.id,professional.token,{name:'Novo nome',address:'Outro'},'PUT')).status,409);
+  assert.equal((await call('/professional/locations/'+location.body.id+'/status',admin.token,{active:false},'PATCH')).status,404);
+  assert.equal((await call('/professional/locations/'+location.body.id+'/status',professional.token,{active:false},'PATCH')).status,200);
+  assert.equal((await call('/professional/locations',professional.token)).body.some(item=>item.id===location.body.id),false);
+  const inactive=(await call('/professional/locations?includeInactive=1',professional.token)).body.find(item=>item.id===location.body.id);assert(inactive.hasAssociations);assert.equal(inactive.active,false);
+  assert.equal((await call('/professional/agenda',professional.token,{title:'Novo no inativo',at:'2027-01-01T10:00:00Z',locationId:location.body.id})).status,400);
+  assert.equal((await call('/professional/locations/'+location.body.id+'/status',professional.token,{active:true},'PATCH')).status,200);
+
   assert.deepEqual((await call('/professional/locations', professional.token)).body,[]);
   assert.equal((await call(encounterPath, professional.token)).body.organizationNameSnapshot,'Consultório teste','Excluir local alterou atendimento histórico');
   assert.equal(consultation.body.payload.symptoms, 'Queixa teste');
