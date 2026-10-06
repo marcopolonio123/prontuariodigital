@@ -30,10 +30,10 @@ try{
   await bottom.getByRole('combobox').selectOption('20');await top.getByText('Página 1 de 2',{exact:true}).waitFor();assert.equal(await page.locator('[data-record-id]').count(),20);
   await top.getByRole('button',{name:'Próxima',exact:true}).click();
   await page.locator('summary').filter({hasText:/^Filtros/}).click();await page.locator('#record-filter-text').fill('Alvo distante');await page.getByRole('button',{name:'Aplicar filtros',exact:true}).click();
-  await page.locator('[data-record-id="record-00"]').waitFor();assert.equal(await page.locator('[data-record-id]').count(),1);await top.getByText('Página 1 de 1',{exact:true}).waitFor();
+  await page.locator('[data-record-id="record-00"]').waitFor();assert.equal(await page.locator('[data-record-id]').count(),1);assert.equal(await top.count(),0);assert.equal(await bottom.count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'/tmp/mydoctor-pagination-'+width+'.png',fullPage:true});
-  await page.getByRole('button',{name:'Limpar filtros',exact:true}).click();assert.equal(await page.locator('[data-record-id]').count(),20);
+  await page.getByRole('button',{name:'Limpar filtros',exact:true}).click();assert.equal(await page.locator('[data-record-id]').count(),20);await top.waitFor();await bottom.waitFor();
   console.log('Paginação, controles sincronizados, 23 registros e filtros OK',width);await page.close();
  }
 }finally{await browser?.close();server.kill()}
