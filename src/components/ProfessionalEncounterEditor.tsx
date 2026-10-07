@@ -10,7 +10,7 @@ const localDate = (date: Date) => new Date(date.getTime()-date.getTimezoneOffset
 export function encounterStatus(status: string) { return status==='draft'?'Rascunho — ainda não enviado':['final','amended'].includes(status)?'Aprovado — somente consulta':status==='cancelled'?'Inativo — somente consulta':status==='rejected_by_patient'?'Recusado pelo paciente':'Aguardando aprovação do paciente'; }
 function fieldsFor(record?: ProfessionalConsultationDetailV1 | null) { return { followUp:localFollowUp(record?.payload.followUp),title: record?.title ?? '', type: record?.type ?? 'consultation', occurredAt: localDate(record ? new Date(record.occurredAt) : new Date()), organizationName: record?.organizationNameSnapshot ?? '', homeVisit: record?.payload.homeVisit === true, onlineVisit: record?.payload.onlineVisit === true, ...Object.fromEntries(FIELDS.map(([key])=>[key,String(record?.payload[key] ?? '')])) } as EncounterFieldsValue; }
 
-export default function ProfessionalEncounterEditor({ api, record, accessRequestId, patientName, profile, onSaved, onClose, onBusy, locations }: { api: MyDoctorV1Api; record?: ProfessionalConsultationDetailV1 | null; accessRequestId?: string; patientName: string; profile: ProfessionalProfileV1 | null; onSaved: () => Promise<void>; onClose?: () => void; onBusy: (busy:boolean)=>void; locations?: Array<{id:string;name:string}> }) {
+export default function ProfessionalEncounterEditor({ api, record, accessRequestId, patientName, profile, onSaved, onClose, onBusy, locations }: { api: MyDoctorV1Api; record?: ProfessionalConsultationDetailV1 | null; accessRequestId?: string; patientName: string; profile: ProfessionalProfileV1 | null; onSaved: () => Promise<void>; onClose?: () => void; onBusy: (busy:boolean)=>void; locations?: Array<{id:string;name:string;address?:string}> }) {
   const [saved,setSaved]=useState(record ?? null),[fields,setFields]=useState(()=>fieldsFor(record)),[files,setFiles]=useState<Record<string,File[]>>({report:[],prescription:[],exam:[]}),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const locked=saved?.status==='final' || saved?.editable===false;
   const dirty=!saved || JSON.stringify(fields)!==JSON.stringify(fieldsFor(saved));
@@ -24,7 +24,7 @@ export default function ProfessionalEncounterEditor({ api, record, accessRequest
     const date=new Date(fields.occurredAt);if(!fields.occurredAt||Number.isNaN(date.getTime()))return setMessage('Informe uma data e hora válidas.');
     begin();let id=saved?.id;
     try {
-      const payload={...fields,followUp:savedFollowUp(fields.followUp),organizationName:fields.onlineVisit?'':fields.organizationName,occurredAt:date.toISOString()};
+      const payload={...fields,followUp:savedFollowUp(fields.followUp),organizationName:fields.onlineVisit||fields.homeVisit?'':fields.organizationName,occurredAt:date.toISOString()};
       const result=id ? await api.updateProfessionalConsultation(id,{...payload,expectedUpdatedAt:saved!.updatedAt}) : await api.createProfessionalConsultation({...payload,accessRequestId:accessRequestId!,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone});
       id=result.id;await refreshRecord(id);
       for(const [category] of CATEGORIES)for(const file of files[category]){await api.uploadHealthEventDocuments(result.patientId,id,category,[file]);setFiles(current=>({...current,[category]:current[category].filter(item=>item!==file)}));}
