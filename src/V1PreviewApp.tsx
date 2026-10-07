@@ -342,7 +342,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     if (!eventTitle.trim()) throw new Error('Informe o atendimento (descrição).');
     const input = {
       type: eventType, title: eventTitle.trim(), occurredAt: new Date(eventDate).toISOString(),
-      organizationName: onlineVisit ? '' : organizationName.trim() || undefined,
+      organizationName: onlineVisit || homeVisit ? '' : organizationName.trim() || undefined,
       practitionerName: practitionerName.trim() || undefined, profession: profession.trim() || undefined,
       council: council.trim() || undefined, registration: registration.trim() || undefined,
       registrationRegion: registrationRegion.trim() || undefined,
