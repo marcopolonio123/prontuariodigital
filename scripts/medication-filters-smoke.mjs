@@ -21,7 +21,7 @@ try{
   });
   await page.goto('http://127.0.0.1:4178/');
   await page.getByRole('button',{name:'Agenda de medicamentos',exact:true}).click();
-  const table=page.locator('table'),rows=table.locator('tbody tr');
+  const table=page.locator('table'),rows=page.locator('[data-medication-id]');
   await table.waitFor();assert.equal(await rows.count(),10);
   const filters=page.locator('details').filter({has:page.locator('summary').filter({hasText:'Filtros de pesquisa'})});
   assert.equal(await filters.getAttribute('open'),null);await filters.locator('summary').click();
@@ -31,7 +31,7 @@ try{
   await top.getByRole('button',{name:'Próxima',exact:true}).click();await top.getByRole('button',{name:'Próxima',exact:true}).click();assert.equal(await rows.count(),3);
   await search.fill('acido');assert.equal(await rows.count(),3,'Pesquisa aplicada antes do botão');
   await search.press('Enter');assert.equal(await rows.count(),1);await rows.getByText('Ácido fólico',{exact:true}).waitFor();
-  assert.equal(await top.count(),0);await filters.getByText('Filtro ativo',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).count(),0); await rows.first().click(); await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).click(); await page.getByRole('button',{name:'Cancelar',exact:true}).click(); assert.equal(await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).count(),1); assert.equal(await top.count(),0);await filters.getByText('Filtro ativo',{exact:true}).waitFor();
   await clear.click();assert.equal(await rows.count(),10);assert.equal(await search.inputValue(),'');
   await page.getByLabel('Dia da semana',{exact:true}).selectOption('0');await page.getByLabel('Tipo de uso',{exact:true}).selectOption('continuous');
   await page.getByLabel('Destinatário dos alertas',{exact:true}).selectOption('r2');await page.getByLabel('Alertas configurados',{exact:true}).selectOption('on');
