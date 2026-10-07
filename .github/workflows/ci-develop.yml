@@ -26,6 +26,7 @@ jobs:
           npx playwright install --with-deps chromium
           node scripts/responsive-navigation-smoke.mjs
           node scripts/pagination-smoke.mjs
+          node scripts/verification-screen-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
