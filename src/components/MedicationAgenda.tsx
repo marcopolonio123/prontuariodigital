@@ -80,8 +80,8 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
       {!agenda && !error && <p className="mt-4 text-sm text-mute">Carregando agenda...</p>}
       {(error || feedback) && <p role="status" className="mt-3 rounded-xl border border-line bg-paper p-3 text-sm">{error || feedback}</p>}
     </section>
-    {agenda&&<details className="rounded-xl border border-line bg-card p-3 sm:p-4">
-      <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-bold text-moss-800"><span>Filtros de pesquisa</span>{activeFilter&&<span className="rounded-md bg-moss-50 px-2 py-1 text-xs">Filtro ativo</span>}<span className="ml-auto text-xs font-normal text-mute">{filteredSchedules.length} de {agenda.schedules.length} medicamentos</span></summary>
+    {agenda&&<details className="group rounded-xl border border-line bg-card p-3 sm:p-4">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-bold text-moss-800"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"><path d="m5 7 5 5 5-5"/></svg><span>Filtros de pesquisa</span>{activeFilter&&<span className="rounded-md bg-moss-50 px-2 py-1 text-xs">Filtro ativo</span>}<span className="ml-auto text-xs font-normal text-mute">{filteredSchedules.length} de {agenda.schedules.length} medicamentos</span></summary>
       <form className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={e=>{e.preventDefault();applyFilters()}}>
         <label className="min-w-0 text-xs font-bold text-mute sm:col-span-2">Pesquisar medicamento, dose ou responsável<input value={filterDraft.text} onChange={e=>setFilterDraft({...filterDraft,text:e.target.value})} className={inputClass}/></label>
         <label className="min-w-0 text-xs font-bold text-mute">Dia da semana<select value={filterDraft.weekday} onChange={e=>setFilterDraft({...filterDraft,weekday:e.target.value})} className={inputClass}><option value="">Todos os dias</option>{days.map(([day,label])=><option key={day} value={day}>{label}</option>)}</select></label>
