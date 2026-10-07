@@ -21,11 +21,11 @@ try{
   await page.getByRole('button',{name:'Entrar',exact:true}).click();
   await page.getByLabel('Código de verificação',{exact:true}).fill('123456');await page.getByRole('button',{name:'Validar e entrar',exact:true}).click();
   await page.getByRole('button',{name:'Prontuário',exact:true}).click();
-  await page.getByText('Registro de teste',{exact:true}).waitFor();
+  await page.locator('[data-record-id="e1"]').waitFor();
   assert.equal(accountStarted,true);
   releaseAccount();
   await page.waitForTimeout(300);
-  await page.getByText('Registro de teste',{exact:true}).waitFor();
+  await page.locator('[data-record-id="e1"]').waitFor();
   assert.equal(await page.getByText('Escolha o que você precisa cuidar hoje.',{exact:true}).count(),0,'Conclusão do login sobrescreveu navegação');
   await page.getByRole('button',{name:'Abrir menu',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Início',exact:true}).count(),0);
