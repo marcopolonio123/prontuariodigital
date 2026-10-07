@@ -294,12 +294,12 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     setMessage('Cadastro concluído. Agora entre com seu e-mail e senha.');
   });
 
-  const startLogin = () => run(async () => {
+  const startLogin = (resend = false) => run(async () => {
     if (!email.trim() || !password) throw new Error('Informe e-mail e senha.');
     const result = await api.startPasswordLogin({ email, password, channel });
     setChallenge(result); setAuthView('verify');
-    if (result.developmentCode) setCode(result.developmentCode);
-    setMessage(`Código enviado para ${result.destinationMasked}.`);
+    setCode(result.developmentCode ?? '');
+    setMessage(`${resend ? 'Novo código' : 'Código'} enviado para ${result.destinationMasked}.${resend ? ' Use o código mais recente.' : ''}`);
   });
 
   const verifyLogin = () => run(async () => {
@@ -492,11 +492,16 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
       <p className="mt-5 text-center text-sm text-mute">Já tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('login'); setShowPassword(false); }}>Entrar</button></p>
     </Card>;
     if (authView === 'verify') return <Card>
-      <button className="mb-4 text-sm font-bold text-moss-700" onClick={() => { setAuthView('login'); setChallenge(null); setCode(''); }}>← Voltar ao login</button>
-      <h2 className="font-display text-2xl font-bold text-ink">Código de verificação</h2>
-      <p className="mt-2 text-sm text-mute">Digite o código enviado para <strong>{challenge?.destinationMasked}</strong>.</p>
-      <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" className="mt-5 block w-full min-w-0 box-border rounded-xl border border-line bg-white px-3 py-3 text-center font-mono text-2xl tracking-[0.25em]" inputMode="numeric" autoComplete="one-time-code" />
-      <button disabled={busy || code.length !== 6} onClick={() => void verifyLogin()} className="mt-5 w-full rounded-xl bg-moss-700 px-4 py-3 font-bold text-white disabled:opacity-50">Validar e entrar</button>
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-moss-50 text-moss-800"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-6 w-6"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/><path d="M12 14v3"/></svg></div>
+      <h2 className="mt-4 text-center font-display text-2xl font-bold text-ink">Confirme seu acesso</h2>
+      <p className="mt-2 text-center text-sm leading-6 text-mute">Enviamos um código de 6 números para<br/><strong className="break-words text-ink">{challenge?.destinationMasked}</strong>.</p>
+      <form onSubmit={e=>{e.preventDefault();if(!busy&&code.length===6)void verifyLogin()}} className="mt-5">
+        <label htmlFor="login-verification-code" className="block text-center text-xs font-bold text-mute">Código de verificação</label>
+        <input id="login-verification-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="000000" maxLength={6} autoFocus disabled={busy} className="mx-auto mt-2 block w-full min-w-0 rounded-xl border border-line bg-paper px-3 py-4 text-center font-mono text-3xl tracking-[0.3em] text-ink outline-none focus:border-moss-500 focus:ring-2 focus:ring-moss-100" inputMode="numeric" autoComplete="one-time-code"/>
+        {challenge?.expiresAt&&<p className="mt-2 text-center text-xs text-mute">Válido até {new Date(challenge.expiresAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} (seu horário local).</p>}
+        <button type="submit" disabled={busy||code.length!==6} className="mt-4 min-h-11 w-full rounded-xl bg-moss-700 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?'Aguarde...':'Validar e entrar'}</button>
+      </form>
+      <div className="mt-5 border-t border-line pt-4 text-center"><p className="text-xs text-mute">Não recebeu ou o código expirou?</p><button type="button" disabled={busy} onClick={()=>void startLogin(true)} className="mt-2 min-h-11 w-full rounded-xl border border-moss-500 px-4 py-2 text-sm font-bold text-moss-800 disabled:opacity-50">Solicitar novo código</button><button type="button" disabled={busy} onClick={()=>{setAuthView('login');setChallenge(null);setCode('');setPassword('');setShowPassword(false);setMessage('')}} className="mt-2 min-h-11 w-full rounded-xl px-4 py-2 text-sm font-semibold text-mute disabled:opacity-50">← Voltar ao login</button></div>
     </Card>;
     return <Card>
       <h2 className="font-display text-2xl font-bold text-ink">Entrar no MyDoctor</h2>
