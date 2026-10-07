@@ -29,7 +29,7 @@ try{
   });
   await page.goto('http://127.0.0.1:4179/');await page.getByRole('button',{name:'Convênios',exact:true}).click();
   await page.locator('[data-insurance-id]').first().waitFor();assert.equal(await page.locator('[data-insurance-id]').count(),10);
-  assert.equal(await page.getByText('Convênio de outra pessoa',{exact:true}).count(),0);
+  assert.equal(await page.getByText('Convênio de outra pessoa',{exact:true}).count(),0); assert.equal(await page.getByRole('button',{name:'Editar',exact:true}).count(),0); await page.getByRole('button',{name:'Ordenar por Operadora / plano',exact:true}).click(); assert.equal(await page.locator('[data-insurance-id]').first().getAttribute('data-insurance-id'),'ins-0'); await page.getByRole('button',{name:'Ordenar por Operadora / plano',exact:true}).click();
   const filters=page.locator('details').filter({hasText:'Filtros de convênios'});
   await filters.locator('summary').click();
   const search=page.getByLabel('Pesquisar operadora, plano, carteirinha ou titular',{exact:true});
