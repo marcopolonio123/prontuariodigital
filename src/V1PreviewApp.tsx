@@ -419,7 +419,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
 
   const selectedVital = VITAL_TYPES.find(([type]) => type === vitalType) ?? VITAL_TYPES[0];
   const vitalEvents = events.filter((event) => event.type === 'vital');
-  const insuranceEvents = events.filter((event) => event.type === 'insurance' && event.status !== 'cancelled' && event.payload.status !== 'inactive');
+  const insuranceEvents = events.filter((event) => event.type === 'insurance' && event.status !== 'cancelled');
   const allClinicalEvents = events.filter((event) => event.patientId === activeProfile?.id && EVENT_TYPES.some(([type]) => type === event.type) && ['final', 'amended', 'cancelled'].includes(event.status));
   const clinicalEvents = allClinicalEvents.filter((event) => showInactiveRecords ? event.status === 'cancelled' : event.status !== 'cancelled');
   const recordFilters = useRecordListFilters(clinicalEvents, activeProfile?.id, recordedSpecialty, EVENT_TYPES);
