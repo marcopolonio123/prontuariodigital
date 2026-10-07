@@ -10,7 +10,7 @@ try{
  for(const width of [390,1440]){
   const page=await browser.newPage({viewport:{width,height:900}});
   await page.addInitScript(()=>sessionStorage.setItem('mydoctor.v1.sessionToken','pagination-fixture'));
-  const events=Array.from({length:23},(_,i)=>({id:'record-'+String(i).padStart(2,'0'),patientId:'p1',type:'consultation',title:'Consulta '+i,status:'final',occurredAt:new Date(Date.UTC(2026,8,i+1,12)).toISOString(),createdAt:'2026-09-01T12:00:00Z',updatedAt:'2026-09-01T12:00:00Z',practitionerNameSnapshot:'Dra. Teste',payload:{specialty:'Clínica',notes:i===0?'Alvo distante':''}}));
+  const events=Array.from({length:23},(_,i)=>({id:'record-'+String(i).padStart(2,'0'),patientId:'p1',type:'consultation',title:'Consulta '+i,status:'final',occurredAt:new Date(Date.UTC(2026,8,i+1,12)).toISOString(),createdAt:'2026-09-01T12:00:00Z',updatedAt:'2026-09-01T12:00:00Z',practitionerNameSnapshot:'Nome histórico',registrationSnapshot:'65000',registrationRegionSnapshot:'SP',councilSnapshot:'CRM',organizationNameSnapshot:'Local histórico',payload:{specialty:'Clínica',notes:i===0?'Alvo distante':''}}));
   await page.route('**/api/v1/**',route=>{
    const path=new URL(route.request().url()).pathname.replace('/api/v1','');
    const data=path==='/practitioners/doctor-fixture/locations'?[{id:'place-fixture',name:'Clínica Registro',address:'Rua teste, 20'}]:path==='/practitioners/lookup'?(new URL(route.request().url()).searchParams.get('region')==='SP'?{id:'doctor-fixture',name:'Dra. Registro',specialty:'Cardiologia',profession:'Médico'}:null):path==='/account'?{id:'u1',name:'Marco teste',email:'fixture@example.test',completed:true}:path==='/profiles'?[{id:'p1',name:'Marco teste',source:'owned',relationship:'self'}]:path==='/patients/p1/events'?events:path==='/admin/session'?{authorized:false}:[];
@@ -59,7 +59,18 @@ try{
   assert.equal(await place.locator('option').filter({hasText:'Clínica Registro'}).count(),0,'Locais do médico anterior permaneceram após trocar UF');
   await place.selectOption('other');assert.equal(await page.getByLabel('Descrição do local',{exact:true}).inputValue(),'');
   await page.screenshot({path:'/tmp/mydoctor-encounter-flow-'+width+'.png',fullPage:true});
-  console.log('Busca automática e especialidade por registro OK',width);
+  await page.getByRole('button',{name:'Cancelar sem salvar',exact:true}).click();
+  await page.locator('[data-record-id="record-22"] summary').click();
+  await page.locator('[data-record-id="record-22"]').locator('button').filter({hasText:/Editar/}).click();
+  await page.getByRole('heading',{name:'Editar Atendimento',exact:true}).waitFor();
+  await page.getByText('Locais cadastrados do profissional carregados.',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Nome do Médico/Fisioterapeuta/Atendente',{exact:true}).inputValue(),'Nome histórico','Busca alterou nome histórico na edição');
+  assert.equal(await page.getByLabel('Especialidade',{exact:true}).inputValue(),'Clínica','Busca alterou especialidade histórica');
+  assert.equal(await page.getByLabel('Descrição do local',{exact:true}).inputValue(),'Local histórico');
+  await page.getByLabel('Local de atendimento',{exact:true}).selectOption('Clínica Registro');
+  await page.getByText('Rua teste, 20',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Cancelar sem salvar',exact:true}).click();
+  console.log('Busca automática, edição com locais e preservação histórica OK',width);
   console.log('Paginação, controles sincronizados, 23 registros e filtros OK',width);await page.close();
  }
 }finally{await browser?.close();server.kill()}
