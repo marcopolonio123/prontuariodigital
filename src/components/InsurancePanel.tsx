@@ -4,7 +4,7 @@ import type {HealthEventV1,MyDoctorV1Api,PatientProfile} from '../lib/api-v1';
 type CardData={provider:string;planName:string;memberNumber:string;holderName:string;validity:string;notes:string;cardFront:string|null;cardBack:string|null};
 const blank=():CardData=>({provider:'',planName:'',memberNumber:'',holderName:'',validity:'',notes:'',cardFront:null,cardBack:null});
 const fields=(event:HealthEventV1):CardData=>({...blank(),...event.payload,validity:String(event.payload.validity??'')}) as CardData;
-const inactive=(event:HealthEventV1)=>event.status==='cancelled'||event.payload.status==='inactive';
+const inactive=(event:HealthEventV1)=>event.status==='cancelled';
 const normalized=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
 const input='mt-1 block w-full min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-sm font-normal text-ink';
 const button='min-h-11 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-moss-800 disabled:opacity-50';
