@@ -1,3 +1,4 @@
+import InsurancePanel from './components/InsurancePanel';
 import PractitionerLookup from './components/PractitionerLookup';
 import PaginatedList from './components/PaginatedList';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -47,17 +48,7 @@ type AppView = 'account' | 'welcome' | 'record' | 'vitals' | 'diary' | 'family-h
 type AuthView = 'login' | 'register' | 'verify';
 type VitalType = (typeof VITAL_TYPES)[number][0];
 
-type InsurancePayload = {
-  provider?: string;
-  planName?: string;
-  memberNumber?: string;
-  holderName?: string;
-  validity?: string;
-  notes?: string;
-  status?: string;
-  cardFront?: string | null;
-  cardBack?: string | null;
-};
+
 
 function Card({ children }: { children: React.ReactNode }) {
   return <section className="min-w-0 overflow-hidden rounded-2xl border border-line bg-card p-4 shadow-lift sm:p-5">{children}</section>;
@@ -166,7 +157,6 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
   useEffect(() => { setConsultantQuestion(''); setConsultantMessages([]); setConsultantConsent(false);setConsultantImages([]);setImageLoading(false);imageGeneration.current++; }, [activeProfile?.id]);
   const [familyHistoryText, setFamilyHistoryText] = useState('');
   const [editingFamilyHistory, setEditingFamilyHistory] = useState(false);
-  const [showInsuranceForm, setShowInsuranceForm] = useState(false);
 
   const [newName, setNewName] = useState('');
   const [newBirthDate, setNewBirthDate] = useState('');
@@ -202,14 +192,6 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
   const [vitalSource, setVitalSource] = useState('manual');
   const [vitalDevice, setVitalDevice] = useState('');
 
-  const [insuranceProvider, setInsuranceProvider] = useState('');
-  const [insurancePlan, setInsurancePlan] = useState('');
-  const [insuranceNumber, setInsuranceNumber] = useState('');
-  const [insuranceHolder, setInsuranceHolder] = useState('');
-  const [insuranceValidity, setInsuranceValidity] = useState('');
-  const [insuranceNotes, setInsuranceNotes] = useState('');
-  const [insuranceFront, setInsuranceFront] = useState<string | null>(null);
-  const [insuranceBack, setInsuranceBack] = useState<string | null>(null);
 
   useEffect(() => { api.setToken(token); }, [api, token]);
 
@@ -324,7 +306,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     window.localStorage.removeItem('mydoctor.v1.activeProfileId');
     api.setToken(''); setUser(null); setToken(''); setChallenge(null); setCode(''); setShowPassword(false);
     setProfiles([]); setActiveProfile(null); setEvents([]); setFamilyHistoryText(''); setView('welcome'); setMenuOpen(false); setAuthView('login');
-    setShowProfileForm(false); setShowRecordForm(false); setShowVitalForm(false); setShowInsuranceForm(false);
+    setShowProfileForm(false); setShowRecordForm(false); setShowVitalForm(false); 
     setMessage('Você saiu com segurança.');
   };
 
@@ -431,13 +413,13 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
 
   useEffect(() => {
     resetRecordForm(); setShowRecordForm(false); setShowVitalForm(false);
-    setDiaryText(''); setShowDiaryForm(false); setShowInsuranceForm(false);
-    setInsuranceFront(null); setInsuranceBack(null); setMessage('');
+    setDiaryText(''); setShowDiaryForm(false); 
+     setMessage('');
   }, [activeProfile?.id]);
 
   const selectedVital = VITAL_TYPES.find(([type]) => type === vitalType) ?? VITAL_TYPES[0];
   const vitalEvents = events.filter((event) => event.type === 'vital');
-  const insuranceEvents = events.filter((event) => event.type === 'insurance');
+  const insuranceEvents = events.filter((event) => event.type === 'insurance' && event.status !== 'cancelled');
   const allClinicalEvents = events.filter((event) => event.patientId === activeProfile?.id && EVENT_TYPES.some(([type]) => type === event.type) && ['final', 'amended', 'cancelled'].includes(event.status));
   const clinicalEvents = allClinicalEvents.filter((event) => showInactiveRecords ? event.status === 'cancelled' : event.status !== 'cancelled');
   const recordFilters = useRecordListFilters(clinicalEvents, activeProfile?.id, recordedSpecialty, EVENT_TYPES);
@@ -456,33 +438,6 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     setVitalValue(''); setVitalSecondaryValue(''); setVitalDevice(''); setVitalDate(localDateTimeInputValue()); setShowVitalForm(false);
     await loadEvents(activeProfile, api); setMessage('Sinal vital salvo no prontuário.');
   });
-
-  const createInsurance = () => run(async () => {
-    if (!activeProfile) throw new Error('Escolha um perfil.');
-    if (!insuranceProvider.trim()) throw new Error('Informe o convênio/operadora.');
-    await api.createHealthEvent(activeProfile.id, {
-      type: 'insurance',
-      title: `Convênio: ${insuranceProvider.trim()}${insurancePlan.trim() ? ` · ${insurancePlan.trim()}` : ''}`,
-      occurredAt: new Date().toISOString(),
-      payload: {
-        provider: insuranceProvider.trim(), planName: insurancePlan.trim(), memberNumber: insuranceNumber.trim(),
-        holderName: insuranceHolder.trim(), validity: insuranceValidity || null, notes: insuranceNotes.trim(), status: 'active',
-        cardFront: insuranceFront, cardBack: insuranceBack,
-      },
-    });
-    setInsuranceProvider(''); setInsurancePlan(''); setInsuranceNumber(''); setInsuranceHolder(''); setInsuranceValidity(''); setInsuranceNotes('');
-    setInsuranceFront(null); setInsuranceBack(null); setShowInsuranceForm(false);
-    await loadEvents(activeProfile, api); setMessage('Convênio e imagens da carteirinha salvos.');
-  });
-
-  const handleCardPhoto = (side: 'front' | 'back', file?: File) => {
-    if (!file) return;
-    void run(async () => {
-      const image = await compressImage(file);
-      if (side === 'front') setInsuranceFront(image); else setInsuranceBack(image);
-      setMessage(`Foto do ${side === 'front' ? 'anverso' : 'verso'} pronta para salvar.`);
-    });
-  };
 
   const passwordField = (autoComplete: 'current-password' | 'new-password') => <div className="relative mt-1 min-w-0">
     <input value={password} onChange={(e) => setPassword(e.target.value)} className={`${inputClass()} pr-12`} type={showPassword ? 'text' : 'password'} autoComplete={autoComplete} />
@@ -591,8 +546,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
 
   const vitalsView = <div className="space-y-5"><Card><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Sinais vitais</p><h2 className="font-display text-2xl font-bold text-ink">{activeProfile?.name ?? 'Escolha um perfil'}</h2></div>{activeProfile && <PrimaryButton onClick={() => setShowVitalForm((v) => !v)}>{showVitalForm ? 'Cancelar' : '+ Incluir medição'}</PrimaryButton>}</div>{!activeProfile ? <p className="mt-4 text-sm text-mute">Escolha um perfil.</p> : vitalEvents.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-line bg-white p-5 text-sm text-mute">Nenhuma medição registrada. Use “+ Incluir medição” para cadastrar.</div> : <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2"><PaginatedList items={vitalEvents} label="Registros">{pageRows=>(<>{pageRows.map((event) => { const payload = vitalPayload(event); return <article key={event.id} className="min-w-0 rounded-xl border border-line bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-moss-700">{String(payload.label ?? 'Sinal vital')}</p><h3 className="mt-1 break-words text-xl font-bold text-ink">{String(payload.value ?? '')}{payload.secondaryValue ? `/${String(payload.secondaryValue)}` : ''} <span className="text-sm font-semibold text-mute">{String(payload.unit ?? '')}</span></h3><p className="mt-1 text-xs text-mute">Origem: {String(payload.source ?? 'manual')}</p><time className="mt-2 block text-xs text-mute">{new Date(event.occurredAt).toLocaleString('pt-BR')}</time></article>; })}</>)}</PaginatedList></div>}</Card>{showVitalForm && activeProfile && <Card><h3 className="font-display text-xl font-bold text-ink">Nova medição</h3><p className="mt-1 text-sm text-mute">A captura automática por Apple Health/Health Connect será habilitada no aplicativo nativo. Aqui o registro é manual.</p><div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"><select value={vitalType} onChange={(e) => setVitalType(e.target.value as VitalType)} className={inputClass()}>{VITAL_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input type="datetime-local" value={vitalDate} onChange={(e) => setVitalDate(e.target.value)} className={inputClass()} /><input value={vitalValue} onChange={(e) => setVitalValue(e.target.value.replace(',', '.'))} inputMode="decimal" placeholder={vitalType === 'blood_pressure' ? 'Sistólica' : `Valor em ${selectedVital[2]}`} className={inputClass()} />{vitalType === 'blood_pressure' && <input value={vitalSecondaryValue} onChange={(e) => setVitalSecondaryValue(e.target.value.replace(',', '.'))} inputMode="decimal" placeholder="Diastólica" className={inputClass()} />}<select value={vitalSource} onChange={(e) => setVitalSource(e.target.value)} className={inputClass()}><option value="manual">Digitado manualmente</option><option value="healthkit">Apple Health / HealthKit</option><option value="health_connect">Android Health Connect</option><option value="bluetooth">Dispositivo Bluetooth</option><option value="institution">Instituição de saúde</option></select><input value={vitalDevice} onChange={(e) => setVitalDevice(e.target.value)} placeholder="Aparelho/dispositivo (opcional)" className={inputClass()} /><div className="sm:col-span-2"><PrimaryButton disabled={busy} onClick={() => void createVital()}>Salvar sinal vital</PrimaryButton></div></div></Card>}</div>;
 
-  const insuranceView = <div className="space-y-5"><Card><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-moss-700">Convênios</p><h2 className="font-display text-2xl font-bold text-ink">{activeProfile?.name ?? 'Escolha um perfil'}</h2></div>{activeProfile && <PrimaryButton onClick={() => setShowInsuranceForm((v) => !v)}>{showInsuranceForm ? 'Cancelar' : '+ Incluir convênio'}</PrimaryButton>}</div>{!activeProfile ? <p className="mt-4 text-sm text-mute">Escolha um perfil.</p> : insuranceEvents.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-line bg-white p-5 text-sm text-mute">Nenhum convênio cadastrado. Use “+ Incluir convênio” para adicionar.</div> : <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2"><PaginatedList items={insuranceEvents} label="Registros">{pageRows=>(<>{pageRows.map((event) => { const payload = event.payload as InsurancePayload; return <article key={event.id} className="min-w-0 overflow-hidden rounded-xl border border-line bg-white p-4"><h3 className="break-words font-display text-lg font-bold text-ink">{payload.provider || event.title}</h3>{payload.planName && <p className="break-words text-sm text-mute">{payload.planName}</p>}<div className="mt-3 space-y-1 break-words text-sm text-ink">{payload.memberNumber && <p><strong>Carteirinha:</strong> {payload.memberNumber}</p>}{payload.holderName && <p><strong>Titular:</strong> {payload.holderName}</p>}{payload.validity && <p><strong>Validade:</strong> {new Date(`${payload.validity}T12:00:00`).toLocaleDateString('pt-BR')}</p>}</div>{(payload.cardFront || payload.cardBack) && <div className="mt-4 grid min-w-0 grid-cols-2 gap-2">{payload.cardFront && <figure className="min-w-0"><img src={payload.cardFront} alt="Frente da carteirinha" className="h-28 w-full rounded-lg border border-line object-cover" /><figcaption className="mt-1 text-center text-[10px] text-mute">Frente</figcaption></figure>}{payload.cardBack && <figure className="min-w-0"><img src={payload.cardBack} alt="Verso da carteirinha" className="h-28 w-full rounded-lg border border-line object-cover" /><figcaption className="mt-1 text-center text-[10px] text-mute">Verso</figcaption></figure>}</div>}</article>; })}</>)}</PaginatedList></div>}</Card>{showInsuranceForm && activeProfile && <Card><h3 className="font-display text-xl font-bold text-ink">Novo convênio</h3><div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"><label className="min-w-0 text-xs font-bold text-mute">Convênio / operadora<input value={insuranceProvider} onChange={(e) => setInsuranceProvider(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 text-xs font-bold text-mute">Plano / categoria<input value={insurancePlan} onChange={(e) => setInsurancePlan(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 text-xs font-bold text-mute">Número da carteirinha<input value={insuranceNumber} onChange={(e) => setInsuranceNumber(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 text-xs font-bold text-mute">Nome do titular<input value={insuranceHolder} onChange={(e) => setInsuranceHolder(e.target.value)} className={`${inputClass()} mt-1`} /></label><label className="min-w-0 overflow-hidden text-xs font-bold text-mute sm:col-span-2">Validade da carteirinha<input type="date" value={insuranceValidity} onChange={(e) => setInsuranceValidity(e.target.value)} className={`${inputClass()} mt-1`} /></label><div className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-2"><label className="min-w-0 rounded-xl border border-line bg-white p-3 text-xs font-bold text-mute">Foto da carteirinha — frente<input type="file" accept="image/*" capture="environment" onChange={(e) => handleCardPhoto('front', e.target.files?.[0])} className="mt-2 block w-full min-w-0 max-w-full text-xs" />{insuranceFront && <img src={insuranceFront} alt="Prévia da frente" className="mt-3 h-32 w-full rounded-lg object-cover" />}</label><label className="min-w-0 rounded-xl border border-line bg-white p-3 text-xs font-bold text-mute">Foto da carteirinha — verso<input type="file" accept="image/*" capture="environment" onChange={(e) => handleCardPhoto('back', e.target.files?.[0])} className="mt-2 block w-full min-w-0 max-w-full text-xs" />{insuranceBack && <img src={insuranceBack} alt="Prévia do verso" className="mt-3 h-32 w-full rounded-lg object-cover" />}</label></div><label className="min-w-0 text-xs font-bold text-mute sm:col-span-2">Observações<textarea value={insuranceNotes} onChange={(e) => setInsuranceNotes(e.target.value)} className={`${inputClass()} mt-1 min-h-20`} /></label><div className="sm:col-span-2"><PrimaryButton disabled={busy} onClick={() => void createInsurance()}>Salvar convênio</PrimaryButton></div></div></Card>}</div>;
-
+  const insuranceView = activeProfile ? <InsurancePanel key={activeProfile.id} api={api} profile={activeProfile} events={events} prepareImage={compressImage} onRefresh={()=>loadEvents(activeProfile,api)}/> : <Card>Escolha um perfil.</Card>;
 
   const attachConsultantImages = async (files:File[]) => {
     const generation=++imageGeneration.current;
