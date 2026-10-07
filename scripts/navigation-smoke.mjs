@@ -174,7 +174,7 @@ try {
   await click('+ Adicionar Atendimento');
   const clinicalField=label=>[...document.querySelectorAll('label')].find(item=>item.textContent.startsWith(label)).querySelector('input');
   await settle(()=>Simulate.change(clinicalField('Atendimento (descrição)'),{target:{value:'Consulta domiciliar pessoal'}}));
-  await settle(()=>Simulate.change(clinicalField('Atendimento domiciliar'),{target:{checked:true}}));
+  await settle(()=>Simulate.change(document.querySelector('[aria-label="Modalidade / Tipo de local"]'),{target:{value:'home'}}));
   await click('Salvar Atendimento');
   const savedHome=healthEvents.find(item=>item.id==='home-visit-personal');
   assert.equal(savedHome.patientId,'p1');assert.equal(savedHome.payload.homeVisit,true);assert.equal(savedHome.payload.onlineVisit,false);
