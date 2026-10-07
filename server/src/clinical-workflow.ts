@@ -49,7 +49,7 @@ router.get('/practitioners/lookup', auth, async (req: AuthedRequest, res: Respon
 // Only active practice addresses; never exposes account fields, private agenda or patient data.
 router.get('/practitioners/:id/locations',auth,async(req:AuthedRequest,res:Response)=>{
  const practitioner=await prisma.practitioner.findFirst({where:{id:req.params.id,active:true,verificationStatus:'verified',registrations:{some:{status:'active'}}},select:{userId:true}});
- if(!practitioner)return fail(res,404,'Profissional não encontrado.');
+ if(!practitioner?.userId)return fail(res,404,'Profissional não encontrado.');
  const user=await prisma.user.findUnique({where:{id:practitioner.userId},select:{accountData:true}});
  return res.json(professionalLocations(user?.accountData).filter(place=>place.active!==false).map(({id,name,address})=>({id,name,address})));
 });
