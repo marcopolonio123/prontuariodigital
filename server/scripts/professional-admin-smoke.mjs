@@ -82,8 +82,13 @@ try {
   assert.deepEqual(Object.keys(registryFound.body).sort(),['id','name','profession','specialty'],'Busca retornou dados privados');
   assert.equal((await call(lookup.replace('region=SP','region=RJ'),patient.token)).body,null,'UF incorreta identificou profissional');
   assert.equal((await call('/practitioners/lookup?council=CRM',patient.token)).status,400);
+  assert.equal((await call('/practitioners/'+requested.body.id+'/locations',patient.token)).status,200);
+  assert.equal((await call('/practitioners/missing/locations',patient.token)).status,404);
   const location = await call('/professional/locations', professional.token, { name: 'Clínica teste', address: 'Rua de teste, 10' });
   assert.equal(location.status,201);
+  const directoryPlaces=await call('/practitioners/'+requested.body.id+'/locations',patient.token);
+  assert.deepEqual(directoryPlaces.body,[{id:location.body.id,name:'Clínica teste',address:'Rua de teste, 10'}],'Busca de locais expôs campos privados ou omitiu o local');
+
   assert.equal((await call('/professional/locations', professional.token)).body[0].name,'Clínica teste');
   assert.equal((await call('/professional/locations', patient.token)).status,403);
   const otherPractitioner = await db.practitioner.create({ data: { userId: admin.id, name: 'Outro profissional', profession: 'Médico', verificationStatus: 'verified', active: true } });
@@ -188,6 +193,7 @@ try {
   assert.equal((await call('/professional/locations/'+location.body.id,professional.token,{name:'Novo nome',address:'Outro'},'PUT')).status,409);
   assert.equal((await call('/professional/locations/'+location.body.id+'/status',admin.token,{active:false},'PATCH')).status,404);
   assert.equal((await call('/professional/locations/'+location.body.id+'/status',professional.token,{active:false},'PATCH')).status,200);
+  assert.deepEqual((await call('/practitioners/'+requested.body.id+'/locations',patient.token)).body,[],'Local inativo apareceu na escolha do paciente');
   assert.equal((await call('/professional/locations',professional.token)).body.some(item=>item.id===location.body.id),false);
   const inactive=(await call('/professional/locations?includeInactive=1',professional.token)).body.find(item=>item.id===location.body.id);assert(inactive.hasAssociations);assert.equal(inactive.active,false);
   assert.equal((await call('/professional/agenda',professional.token,{title:'Novo no inativo',at:'2027-01-01T10:00:00Z',locationId:location.body.id})).status,400);
