@@ -1,5 +1,6 @@
-import PaginatedList from './PaginatedList';
-import { useEffect, useState } from 'react';
+import QueryList,{QueryFilters} from './QueryList';
+
+import { useEffect, useRef, useState } from 'react';
 import type { MedicationAgendaV1, MedicationScheduleInput, MedicationScheduleV1, MyDoctorV1Api, PatientProfile } from '../lib/api-v1';
 
 const days: Array<[number, string]> = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']];
@@ -20,6 +21,9 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<MedicationScheduleV1 | null>(null);
   const [form, setForm] = useState<MedicationScheduleInput | null>(null);
+  const [selected,setSelected]=useState<string|null>(null);
+  const editor=useRef<HTMLElement>(null);
+  useEffect(()=>{if(form)editor.current?.scrollIntoView({behavior:'smooth',block:'start'})},[editing?.id,!!form]);
   const [feedback, setFeedback] = useState('');
   const [filterDraft,setFilterDraft]=useState(emptyFilters);
   const [filters,setFilters]=useState(emptyFilters);
@@ -80,9 +84,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
       {!agenda && !error && <p className="mt-4 text-sm text-mute">Carregando agenda...</p>}
       {(error || feedback) && <p role="status" className="mt-3 rounded-xl border border-line bg-paper p-3 text-sm">{error || feedback}</p>}
     </section>
-    {agenda&&<details className="group rounded-xl border border-line bg-card p-3 sm:p-4">
-      <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-bold text-moss-800"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"><path d="m5 7 5 5 5-5"/></svg><span>Filtros de pesquisa</span>{activeFilter&&<span className="rounded-md bg-moss-50 px-2 py-1 text-xs">Filtro ativo</span>}<span className="ml-auto text-xs font-normal text-mute">{filteredSchedules.length} de {agenda.schedules.length} medicamentos</span></summary>
-      <form className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={e=>{e.preventDefault();applyFilters()}}>
+    {agenda&&<QueryFilters title="Filtros de pesquisa" active={activeFilter} count={filteredSchedules.length} total={agenda.schedules.length} noun="medicamentos">      <form className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={e=>{e.preventDefault();applyFilters()}}>
         <label className="min-w-0 text-xs font-bold text-mute sm:col-span-2">Pesquisar medicamento, dose ou responsável<input value={filterDraft.text} onChange={e=>setFilterDraft({...filterDraft,text:e.target.value})} className={inputClass}/></label>
         <label className="min-w-0 text-xs font-bold text-mute">Dia da semana<select aria-label="Dia da semana" value={filterDraft.weekday} onChange={e=>setFilterDraft({...filterDraft,weekday:e.target.value})} className={inputClass}><option value="">Todos os dias</option>{days.map(([day,label])=><option key={day} value={day}>{label}</option>)}</select></label>
         <label className="min-w-0 text-xs font-bold text-mute">Tipo de uso<select aria-label="Tipo de uso" value={filterDraft.use} onChange={e=>setFilterDraft({...filterDraft,use:e.target.value})} className={inputClass}><option value="">Todos</option><option value="continuous">Uso contínuo</option><option value="period">Com período informado</option></select></label>
@@ -95,7 +97,8 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
         {filterError&&<p role="alert" className="text-sm text-danger-600 sm:col-span-2 lg:col-span-4">{filterError}</p>}
         <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4"><button type="submit" className={buttonClass}>Aplicar filtros</button><button type="button" className={secondaryClass} onClick={clearFilters}>Limpar filtros</button></div>
       </form>
-    </details>}
+</QueryFilters>}
+
     {!!agenda?.registeredMedications?.length && <details className="rounded-xl border border-line bg-card p-3 sm:p-4">
       <summary className="cursor-pointer text-sm font-bold text-moss-800">Usar medicamentos do prontuário ({agenda.registeredMedications.length})</summary>
       <p className="mt-2 text-sm text-mute">Escolha um medicamento já registrado para preencher nome e dose. Depois, confirme os horários da prescrição.</p>
@@ -110,7 +113,24 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
         </div>;
       })}</div>
     </details>}
-    {form && agenda?.canEdit && <section className="rounded-xl border border-line bg-card p-3 sm:p-4">
+    {agenda?.schedules.length === 0 && <section className="rounded-2xl border border-dashed border-line p-5 text-sm text-mute">Sua agenda está vazia. Toque em “Novo medicamento” para incluir os dias e horários.</section>}
+    {!!agenda?.schedules.length&&<section className="rounded-xl border border-line bg-card p-3 sm:p-4"><h3 className="mb-3 text-sm font-bold text-ink">Medicamentos agendados</h3>
+      {filteredSchedules.length===0?<p role="status" className="text-sm text-mute">Nenhum medicamento encontrado. Revise ou limpe os filtros.</p>:<QueryList items={filteredSchedules} selected={selected} onSelect={setSelected} label="Registros" dataAttribute="data-medication-id" resetKey={profile.id+JSON.stringify(filters)} columns={[
+       {key:'name',label:'Medicamento e dose',value:item=>item.name,render:item=><span>{item.name}<span className="block text-xs font-normal text-mute">{item.dose||'Dose não informada'}</span></span>},
+       {key:'days',label:'Dias',value:item=>[...item.weekdays].sort().join(','),render:item=>item.weekdays.length===7?'Todos os dias':days.filter(([day])=>item.weekdays.includes(day)).map(([,label])=>label).join(', ')},
+       {key:'times',label:'Horários',value:item=>[...item.times].sort().join(', ')},
+       {key:'period',label:'Período',value:item=>item.continuousUse?'Uso contínuo':item.startsOn,render:item=>item.continuousUse?'Uso contínuo':item.startsOn.split('-').reverse().join('/')+(item.endsOn?' até '+item.endsOn.split('-').reverse().join('/'):' · Sem término')},
+       {key:'alerts',label:'Alertas',value:item=>item.alertsEnabled&&agenda.alertsEnabled?'Configurados':'Desativados'}
+      ]} renderDetails={schedule=><div className="space-y-3"><h4 className="font-bold text-ink">{schedule.name}</h4><p>Dose: {schedule.dose||'Dose não informada'}</p><p>Dias: {schedule.weekdays.length===7?'Todos os dias':days.filter(([day])=>schedule.weekdays.includes(day)).map(([,label])=>label).join(', ')}</p><p>Horários: {schedule.times.join(', ')} · {schedule.timezone.replace('America/','').replace(/_/g,' ')}</p><p>{schedule.continuousUse?'Uso contínuo':schedule.startsOn.split('-').reverse().join('/')+(schedule.endsOn?' até '+schedule.endsOn.split('-').reverse().join('/'):' · Sem término')}</p><p>Alertas: {schedule.alertsEnabled&&agenda.alertsEnabled?'Configurados':'Desativados'}</p><p>Destinatários: {schedule.recipientIds.map(id=>agenda.recipients.find(person=>person.id===id)?.name??'Conta sem acesso vigente').join(', ')||'Sem destinatários'}</p>
+      {agenda.registeredMedications?.some(medicine=>normalized(medicine.name)===normalized(schedule.name)&&normalized(medicine.dose)!==normalized(schedule.dose))&&<p className="text-warn-600">Dose diferente do prontuário. Confira a prescrição.</p>}
+      {agenda.canEdit ? <div className="flex items-center gap-1 whitespace-nowrap">
+                <button className="inline-flex min-h-11 items-center rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-moss-800 hover:bg-moss-50 disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Editar ${schedule.name}`} onClick={() => { setEditing(schedule); setForm({ name: schedule.name, dose: schedule.dose, continuousUse: schedule.continuousUse === true, weekdays: schedule.weekdays, times: schedule.times, timezone: schedule.timezone, startsOn: schedule.startsOn, endsOn: schedule.endsOn, recipientIds: schedule.recipientIds, alertsEnabled: schedule.alertsEnabled }); }}>Editar</button>
+                <button className="inline-flex min-h-11 items-center rounded-md px-2 py-1.5 text-xs font-semibold text-mute hover:bg-paper disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Remover ${schedule.name}`} onClick={() => void run(async () => { if (!window.confirm(`Remover ${schedule.name} da agenda e interromper seus alertas?`)) return; await api.removeMedicationSchedule(profile.id, schedule.id); await refresh(); if (editing?.id === schedule.id) { setEditing(null); setForm(null); } setFeedback('Medicamento removido da agenda.'); })}>Remover</button>
+              </div> : <span className="text-xs text-mute">Consulta</span>}
+      </div>}/>
+      }
+    </section>}
+    {form && agenda?.canEdit && <section ref={editor} className="rounded-xl border border-line bg-card p-3 sm:p-4">
       <h3 className="font-display text-lg font-bold">{editing ? 'Editar medicamento' : 'Novo medicamento'}</h3>
       <div className="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-2">
         
@@ -126,38 +146,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
         <div className="flex flex-wrap gap-2 border-t border-line pt-3 sm:col-span-2"><button className={buttonClass} disabled={busy} onClick={() => void save()}>{busy ? 'Salvando...' : editing ? 'Salvar alterações' : 'Adicionar à agenda'}</button><button className={secondaryClass} disabled={busy} onClick={() => { setForm(null); setEditing(null); }}>Cancelar</button></div>
       </div>
     </section>}
-    {agenda?.schedules.length === 0 && <section className="rounded-2xl border border-dashed border-line p-5 text-sm text-mute">Sua agenda está vazia. Toque em “Novo medicamento” para incluir os dias e horários.</section>}
-    {!!agenda?.schedules.length && <section className="overflow-hidden rounded-xl border border-line bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
-        <h3 className="text-sm font-bold text-ink">Medicamentos agendados</h3>
-        <p className="text-xs text-mute sm:hidden">Deslize a tabela para ver todas as colunas.</p>
-      </div>
-      {filteredSchedules.length===0?<p role="status" className="p-4 text-sm text-mute">Nenhum medicamento encontrado. Revise ou limpe os filtros.</p>:<div className="overflow-x-auto" role="region" aria-label="Tabela da agenda de medicamentos" tabIndex={0}>
-        <PaginatedList items={filteredSchedules} resetKey={profile.id+JSON.stringify(filters)} label="Registros">{pageRows=>(<table className="w-full min-w-[740px] border-collapse text-left text-sm">
-          <caption className="sr-only">Agenda de medicamentos de {profile.name}</caption>
-          <thead className="border-b border-line bg-paper text-xs font-bold uppercase tracking-wide text-mute">
-            <tr>{['Medicamento e dose', 'Dias', 'Horários', 'Período', 'Alertas', 'Ações'].map(title => <th key={title} scope="col" className="px-3 py-2">{title}</th>)}</tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {pageRows.map(schedule => <tr key={schedule.id} className="align-middle transition-colors even:bg-paper/40 hover:bg-moss-50/50">
-              <th scope="row" className="max-w-[200px] px-3 py-2 font-normal">
-                <span className="block break-words font-bold text-ink">{schedule.name}</span>
-                <span className="mt-1 block text-xs text-mute">{schedule.dose || 'Dose não informada'}</span>
-                {agenda.registeredMedications?.some(medicine => normalized(medicine.name) === normalized(schedule.name) && normalized(medicine.dose) !== normalized(schedule.dose)) && <span className="mt-2 block text-xs text-warn-600">Dose diferente do prontuário. Confira a prescrição.</span>}
-              </th>
-              <td className="max-w-[140px] px-3 py-2 text-ink">{schedule.weekdays.length === 7 ? 'Todos os dias' : days.filter(([day]) => schedule.weekdays.includes(day)).map(([, label]) => label).join(', ')}</td>
-              <td className="px-3 py-2"><div className="flex flex-wrap gap-1">{schedule.times.map(time => <span key={time} className="rounded-md bg-moss-50 px-1.5 py-0.5 text-xs font-bold tabular-nums text-moss-800">{time}</span>)}</div></td>
-              <td className="px-3 py-2 text-xs text-mute">{schedule.continuousUse ? <span className="inline-block rounded-md bg-moss-50 px-1.5 py-0.5 font-semibold text-moss-800">Uso contínuo</span> : <><span className="block whitespace-nowrap">{schedule.startsOn.split('-').reverse().join('/')}</span><span className="mt-1 block whitespace-nowrap">{schedule.endsOn ? 'até ' + schedule.endsOn.split('-').reverse().join('/') : 'Sem término'}</span><span className="mt-1 block">{schedule.timezone.replace('America/', '').replace(/_/g, ' ')}</span></>}</td>
-              <td className="max-w-[180px] px-3 py-2"><span className={`inline-block rounded-md px-1.5 py-0.5 text-xs font-semibold ${schedule.alertsEnabled && agenda.alertsEnabled ? 'bg-moss-50 text-moss-800' : 'bg-paper text-mute'}`}>{schedule.alertsEnabled && agenda.alertsEnabled ? 'Configurados' : 'Desativados'}</span><p className="mt-1 text-xs text-mute">{schedule.recipientIds.map(id => agenda.recipients.find(person => person.id === id)?.name ?? 'Conta sem acesso vigente').join(', ') || 'Sem destinatários'}</p></td>
-              <td className="px-3 py-2">{agenda.canEdit ? <div className="flex items-center gap-1 whitespace-nowrap">
-                <button className="inline-flex min-h-11 items-center rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-moss-800 hover:bg-moss-50 disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Editar ${schedule.name}`} onClick={() => { setEditing(schedule); setForm({ name: schedule.name, dose: schedule.dose, continuousUse: schedule.continuousUse === true, weekdays: schedule.weekdays, times: schedule.times, timezone: schedule.timezone, startsOn: schedule.startsOn, endsOn: schedule.endsOn, recipientIds: schedule.recipientIds, alertsEnabled: schedule.alertsEnabled }); }}>Editar</button>
-                <button className="inline-flex min-h-11 items-center rounded-md px-2 py-1.5 text-xs font-semibold text-mute hover:bg-paper disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Remover ${schedule.name}`} onClick={() => void run(async () => { if (!window.confirm(`Remover ${schedule.name} da agenda e interromper seus alertas?`)) return; await api.removeMedicationSchedule(profile.id, schedule.id); await refresh(); if (editing?.id === schedule.id) { setEditing(null); setForm(null); } setFeedback('Medicamento removido da agenda.'); })}>Remover</button>
-              </div> : <span className="text-xs text-mute">Consulta</span>}</td>
-            </tr>)}
-          </tbody>
-        </table>)}</PaginatedList>
-      </div>}
-    </section>}
+
   </div>;
 }
 
