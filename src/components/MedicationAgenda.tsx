@@ -8,6 +8,7 @@ const buttonClass = 'min-h-11 rounded-lg bg-pine-900 px-3 py-2 md:min-h-0 text-s
 const secondaryClass = 'min-h-11 rounded-lg border border-line px-3 py-2 md:min-h-0 text-sm font-bold text-moss-800 disabled:opacity-50';
 const checkboxStyle = { width: 16, minWidth: 16, maxWidth: 16, height: 16, padding: 0, flex: '0 0 16px' };
 function normalized(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' '); }
+const emptyFilters=()=>({text:'',weekday:'',fromTime:'',toTime:'',use:'',alerts:'',recipient:'',date:''});
 function blank(): MedicationScheduleInput {
   const now = new Date();
   const date = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -20,6 +21,28 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
   const [editing, setEditing] = useState<MedicationScheduleV1 | null>(null);
   const [form, setForm] = useState<MedicationScheduleInput | null>(null);
   const [feedback, setFeedback] = useState('');
+  const [filterDraft,setFilterDraft]=useState(emptyFilters);
+  const [filters,setFilters]=useState(emptyFilters);
+  const [filterError,setFilterError]=useState('');
+  const activeFilter=Object.values(filters).some(Boolean);
+  const filteredSchedules=(agenda?.schedules??[]).filter(schedule=>{
+    const recipientNames=schedule.recipientIds.map(id=>agenda?.recipients.find(person=>person.id===id)?.name??'').join(' ');
+    if(filters.text&&!normalized(schedule.name+' '+schedule.dose+' '+recipientNames).includes(normalized(filters.text)))return false;
+    if(filters.weekday!==''&&!schedule.weekdays.includes(Number(filters.weekday)))return false;
+    if((filters.fromTime||filters.toTime)&&!schedule.times.some(time=>(!filters.fromTime||time>=filters.fromTime)&&(!filters.toTime||time<=filters.toTime)))return false;
+    if(filters.use==='continuous'&&!schedule.continuousUse||filters.use==='period'&&schedule.continuousUse)return false;
+    const configured=schedule.alertsEnabled&&agenda?.alertsEnabled;
+    if(filters.alerts==='on'&&!configured||filters.alerts==='off'&&configured)return false;
+    if(filters.recipient&&!schedule.recipientIds.includes(filters.recipient))return false;
+    if(filters.date&&!schedule.continuousUse&&(schedule.startsOn>filters.date||!!schedule.endsOn&&schedule.endsOn<filters.date))return false;
+    return true;
+  });
+  const applyFilters=()=>{
+    if(filterDraft.fromTime&&filterDraft.toTime&&filterDraft.fromTime>filterDraft.toTime){setFilterError('O horário final deve ser igual ou posterior ao inicial.');return;}
+    setFilters({...filterDraft,text:filterDraft.text.trim()});setFilterError('');
+  };
+  const clearFilters=()=>{setFilterDraft(emptyFilters());setFilters(emptyFilters());setFilterError('')};
+  useEffect(()=>{setFilterDraft(emptyFilters());setFilters(emptyFilters());setFilterError('')},[profile.id]);
   const refresh = async () => setAgenda(await api.getMedicationAgenda(profile.id));
   useEffect(() => {
     let current = true;
@@ -57,6 +80,22 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
       {!agenda && !error && <p className="mt-4 text-sm text-mute">Carregando agenda...</p>}
       {(error || feedback) && <p role="status" className="mt-3 rounded-xl border border-line bg-paper p-3 text-sm">{error || feedback}</p>}
     </section>
+    {agenda&&<details className="group rounded-xl border border-line bg-card p-3 sm:p-4">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-bold text-moss-800"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"><path d="m5 7 5 5 5-5"/></svg><span>Filtros de pesquisa</span>{activeFilter&&<span className="rounded-md bg-moss-50 px-2 py-1 text-xs">Filtro ativo</span>}<span className="ml-auto text-xs font-normal text-mute">{filteredSchedules.length} de {agenda.schedules.length} medicamentos</span></summary>
+      <form className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={e=>{e.preventDefault();applyFilters()}}>
+        <label className="min-w-0 text-xs font-bold text-mute sm:col-span-2">Pesquisar medicamento, dose ou responsável<input value={filterDraft.text} onChange={e=>setFilterDraft({...filterDraft,text:e.target.value})} className={inputClass}/></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Dia da semana<select aria-label="Dia da semana" value={filterDraft.weekday} onChange={e=>setFilterDraft({...filterDraft,weekday:e.target.value})} className={inputClass}><option value="">Todos os dias</option>{days.map(([day,label])=><option key={day} value={day}>{label}</option>)}</select></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Tipo de uso<select aria-label="Tipo de uso" value={filterDraft.use} onChange={e=>setFilterDraft({...filterDraft,use:e.target.value})} className={inputClass}><option value="">Todos</option><option value="continuous">Uso contínuo</option><option value="period">Com período informado</option></select></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Horário a partir de<input type="time" value={filterDraft.fromTime} onChange={e=>setFilterDraft({...filterDraft,fromTime:e.target.value})} className={inputClass}/></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Horário até<input type="time" value={filterDraft.toTime} onChange={e=>setFilterDraft({...filterDraft,toTime:e.target.value})} className={inputClass}/></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Alertas configurados<select aria-label="Alertas configurados" value={filterDraft.alerts} onChange={e=>setFilterDraft({...filterDraft,alerts:e.target.value})} className={inputClass}><option value="">Todos</option><option value="on">Configurados</option><option value="off">Desativados</option></select></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Destinatário dos alertas<select aria-label="Destinatário dos alertas" value={filterDraft.recipient} onChange={e=>setFilterDraft({...filterDraft,recipient:e.target.value})} className={inputClass}><option value="">Todos</option>{agenda.recipients.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+        <label className="min-w-0 text-xs font-bold text-mute">Data no período de uso<input type="date" value={filterDraft.date} onChange={e=>setFilterDraft({...filterDraft,date:e.target.value})} className={inputClass}/></label>
+        <p className="self-center text-xs text-mute sm:col-span-2 lg:col-span-3">Os filtros são combinados. A data verifica o período cadastrado e inclui medicamentos de uso contínuo; use Dia da semana para restringir os dias.</p>
+        {filterError&&<p role="alert" className="text-sm text-danger-600 sm:col-span-2 lg:col-span-4">{filterError}</p>}
+        <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4"><button type="submit" className={buttonClass}>Aplicar filtros</button><button type="button" className={secondaryClass} onClick={clearFilters}>Limpar filtros</button></div>
+      </form>
+    </details>}
     {!!agenda?.registeredMedications?.length && <details className="rounded-xl border border-line bg-card p-3 sm:p-4">
       <summary className="cursor-pointer text-sm font-bold text-moss-800">Usar medicamentos do prontuário ({agenda.registeredMedications.length})</summary>
       <p className="mt-2 text-sm text-mute">Escolha um medicamento já registrado para preencher nome e dose. Depois, confirme os horários da prescrição.</p>
@@ -93,8 +132,8 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
         <h3 className="text-sm font-bold text-ink">Medicamentos agendados</h3>
         <p className="text-xs text-mute sm:hidden">Deslize a tabela para ver todas as colunas.</p>
       </div>
-      <div className="overflow-x-auto" role="region" aria-label="Tabela da agenda de medicamentos" tabIndex={0}>
-        <PaginatedList items={agenda.schedules} label="Registros">{pageRows=>(<table className="w-full min-w-[740px] border-collapse text-left text-sm">
+      {filteredSchedules.length===0?<p role="status" className="p-4 text-sm text-mute">Nenhum medicamento encontrado. Revise ou limpe os filtros.</p>:<div className="overflow-x-auto" role="region" aria-label="Tabela da agenda de medicamentos" tabIndex={0}>
+        <PaginatedList items={filteredSchedules} resetKey={profile.id+JSON.stringify(filters)} label="Registros">{pageRows=>(<table className="w-full min-w-[740px] border-collapse text-left text-sm">
           <caption className="sr-only">Agenda de medicamentos de {profile.name}</caption>
           <thead className="border-b border-line bg-paper text-xs font-bold uppercase tracking-wide text-mute">
             <tr>{['Medicamento e dose', 'Dias', 'Horários', 'Período', 'Alertas', 'Ações'].map(title => <th key={title} scope="col" className="px-3 py-2">{title}</th>)}</tr>
@@ -117,7 +156,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
             </tr>)}
           </tbody>
         </table>)}</PaginatedList>
-      </div>
+      </div>}
     </section>}
   </div>;
 }
