@@ -43,9 +43,9 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
   });
   const applyFilters=()=>{
     if(filterDraft.fromTime&&filterDraft.toTime&&filterDraft.fromTime>filterDraft.toTime){setFilterError('O horário final deve ser igual ou posterior ao inicial.');return;}
-    setFilters({...filterDraft,text:filterDraft.text.trim()});setFilterError('');
+    setFilters({...filterDraft,text:filterDraft.text.trim()});setSelected(null);setFilterError('');
   };
-  const clearFilters=()=>{setFilterDraft(emptyFilters());setFilters(emptyFilters());setFilterError('')};
+  const clearFilters=()=>{setFilterDraft(emptyFilters());setFilters(emptyFilters());setSelected(null);setFilterError('')};
   useEffect(()=>{setFilterDraft(emptyFilters());setFilters(emptyFilters());setFilterError('')},[profile.id]);
   const refresh = async () => setAgenda(await api.getMedicationAgenda(profile.id));
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
     <section className="rounded-xl border border-line bg-card p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h2 className="font-display text-xl font-bold text-ink">Agenda de medicamentos</h2><p className="mt-1 text-xs text-mute">{profile.name}</p></div>
-        {agenda?.canEdit && <button className={buttonClass} disabled={busy} onClick={() => { setEditing(null); setForm(blank()); setFeedback(''); }}>+ Novo medicamento</button>}
+        {agenda?.canEdit && <button className={buttonClass} disabled={busy} onClick={() => { setSelected(null); setEditing(null); setForm(blank()); setFeedback(''); }}>+ Novo medicamento</button>}
       </div>
       {agenda && <>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
@@ -115,7 +115,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
     </details>}
     {agenda?.schedules.length === 0 && <section className="rounded-2xl border border-dashed border-line p-5 text-sm text-mute">Sua agenda está vazia. Toque em “Novo medicamento” para incluir os dias e horários.</section>}
     {!!agenda?.schedules.length&&<section className="rounded-xl border border-line bg-card p-3 sm:p-4"><h3 className="mb-3 text-sm font-bold text-ink">Medicamentos agendados</h3>
-      {filteredSchedules.length===0?<p role="status" className="text-sm text-mute">Nenhum medicamento encontrado. Revise ou limpe os filtros.</p>:<QueryList items={filteredSchedules} selected={selected} onSelect={setSelected} label="Registros" dataAttribute="data-medication-id" resetKey={profile.id+JSON.stringify(filters)} columns={[
+      {filteredSchedules.length===0?<p role="status" className="text-sm text-mute">Nenhum medicamento encontrado. Revise ou limpe os filtros.</p>:<QueryList items={filteredSchedules} selected={selected} onSelect={id=>{if(busy)return;setForm(null);setEditing(null);setSelected(id)}} label="Registros" dataAttribute="data-medication-id" resetKey={profile.id+JSON.stringify(filters)} columns={[
        {key:'name',label:'Medicamento e dose',value:item=>item.name,render:item=><span>{item.name}<span className="block text-xs font-normal text-mute">{item.dose||'Dose não informada'}</span></span>},
        {key:'days',label:'Dias',value:item=>[...item.weekdays].sort().join(','),render:item=>item.weekdays.length===7?'Todos os dias':days.filter(([day])=>item.weekdays.includes(day)).map(([,label])=>label).join(', ')},
        {key:'times',label:'Horários',value:item=>[...item.times].sort().join(', ')},
