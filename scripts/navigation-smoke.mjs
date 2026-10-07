@@ -44,7 +44,7 @@ try {
   assert.ok(initialDashboard.querySelector('button svg'),'Ícones não renderizados');
   assert.ok([...initialDashboard.querySelectorAll('button')].some(button=>button.textContent==='Prontuário'));
   assert.equal(window.localStorage.getItem('mydoctor.v1.activeProfileId'), 'p1', 'Paciente lembrado de outra conta foi selecionado');
-  await menu(); await click('Prontuário');
+  await menu();assert.equal([...document.querySelectorAll('button')].some(button=>button.textContent.trim()==='Início'),false);await click('Prontuário');
   assert.match(document.body.textContent, /Atendimento próprio/);
   assert.doesNotMatch(document.body.textContent, /Registro de outra conta|family_history|wellbeing_diary|Atendimento pendente/);
   const filterSection=[...document.querySelectorAll('summary')].find(item=>item.textContent.startsWith('Filtros'));assert.ok(filterSection);assert.equal(filterSection.parentElement.open,false);await settle(()=>filterSection.click());assert.equal(filterSection.parentElement.open,true);
@@ -90,7 +90,7 @@ try {
   await settle(()=>Simulate.change(returnDate,{target:{value:'2027-05-20T09:45'}}));assert.equal(returnPeriod.value,'custom');
   await click('Cancelar');
   await menu();await click('Acessos à minha digital');await settle();assert.match(document.body.textContent,/Consultar histórico/);assert.ok(!document.querySelector('[aria-label="Captura da digital por foto"]'));assert.ok(!requests.includes('/utility/usage'),'Histórico criou uso de identificação');await click('← Voltar ao MyDoctor');await menu();await click('Identificar Pessoa');await settle();assert.match(document.body.textContent,/Piloto de captura pela câmera/);assert.doesNotMatch(document.querySelector('main:not(.hidden)').textContent,/Consultar histórico|Atualizar histórico/);assert.ok(requests.includes('/utility/usage'),'Acesso à utilidade não registrado');assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Abrir câmera'));assert.equal(document.querySelector('input[capture=environment]').accept,'image/jpeg,image/png,image/webp');await click('← Voltar ao MyDoctor');
-  await menu(); await click('Início');
+
   const restoreRequests = requests.filter(path => path === '/account').length;
   await menu();
   const lockedClinicar = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Atendimento') && !button.textContent.startsWith('Atendimentos'));
@@ -173,6 +173,16 @@ try {
   assert.equal([...confirmedRecord.querySelectorAll('span,p')].some(item => item.textContent.trim() === 'Médico'), false, 'Profissão exibida como especialidade');
   await click('+ Adicionar Atendimento');
   const clinicalField=label=>[...document.querySelectorAll('label')].find(item=>item.textContent.startsWith(label)).querySelector('input');
+  const writesBeforeCancel=requests.filter(path=>path==='/patients/p1/events').length;
+  await settle(()=>Simulate.change(clinicalField('Atendimento (descrição)'),{target:{value:'Não salvar'}}));
+  await click('Cancelar sem salvar');
+  assert.equal(requests.filter(path=>path==='/patients/p1/events').length,writesBeforeCancel,'Cancelar fez requisição de gravação');
+  assert.doesNotMatch(document.body.textContent,/Novo Atendimento/);
+  await click('+ Adicionar Atendimento');assert.equal(clinicalField('Atendimento (descrição)').value,'');
+  await settle(()=>Simulate.change(clinicalField('Atendimento (descrição)'),{target:{value:'Rascunho descartado ao sair'}}));
+  await menu();await click('Meu Diário');await menu();await click('Prontuário');
+  assert.doesNotMatch(document.body.textContent,/Novo Atendimento/);
+  await click('+ Adicionar Atendimento');assert.equal(clinicalField('Atendimento (descrição)').value,'');
   await settle(()=>Simulate.change(clinicalField('Atendimento (descrição)'),{target:{value:'Consulta domiciliar pessoal'}}));
   await settle(()=>Simulate.change(document.querySelector('[aria-label="Modalidade / Tipo de local"]'),{target:{value:'home'}}));
   await click('Salvar Atendimento');
