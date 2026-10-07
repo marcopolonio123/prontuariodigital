@@ -29,6 +29,7 @@ jobs:
           node scripts/verification-screen-smoke.mjs
           node scripts/login-navigation-race-smoke.mjs
           node scripts/medication-filters-smoke.mjs
+          node scripts/insurance-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
