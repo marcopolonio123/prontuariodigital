@@ -373,7 +373,7 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       return accountView(user, { ...data, ...(user.accountData as object) });
     });
     res.json(result);
-  } catch (error: any) { if (error?.message === 'AGE') return fail(res, 400, 'Remova ou substitua a certidão de nascimento antes de informar uma idade de 18 anos ou mais.'); fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
+  } catch (error: any) { if(error instanceof PersonError)return fail(res,error.status,error.message); if (error?.message === 'AGE') return fail(res, 400, 'Remova ou substitua a certidão de nascimento antes de informar uma idade de 18 anos ou mais.'); fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
 });
 
 /** Perfil profissional opcional da mesma conta. A conta continua sendo paciente normalmente. */
