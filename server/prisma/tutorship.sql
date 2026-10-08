@@ -95,3 +95,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'TutorHis
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PatientIdentityDocument_patientId_fkey') THEN ALTER TABLE "PatientIdentityDocument" ADD CONSTRAINT "PatientIdentityDocument_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Patient"("id") ON DELETE RESTRICT ON UPDATE CASCADE; END IF; END $$;
 
 UPDATE "Patient" SET "tutorUserId"="ownerUserId", "tutorManaged"=true WHERE "tutorManaged"=false AND data->>'relationshipToOwner' IN ('child','parent','guardian','dependent','other');
+
+-- Give existing people a permanent number without changing assigned numbers.
+UPDATE "Patient" SET record='PR-' || upper(replace(id,'-','')) WHERE btrim(coalesce(record,''))='';
+CREATE INDEX IF NOT EXISTS "Patient_record_idx" ON "Patient"(record);
