@@ -116,6 +116,30 @@ async function ownedProfessionalEvent(req: AuthedRequest) {
   return prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, authoredByUserId: req.userId!, practitioner: { userId: req.userId!, active: true, verificationStatus: 'verified' }, status: { in: ['draft', 'pending_patient_confirmation', 'final', 'rejected_by_patient', 'amended', 'cancelled'] } } });
 }
 
+const registrationAttempts=new Map<string,{at:number;count:number}>();
+function limitRegistration(req:Request){const key=req.ip||'unknown',now=Date.now();if(registrationAttempts.size>10000)for(const [k,v]of registrationAttempts)if(now-v.at>3600000)registrationAttempts.delete(k);const old=registrationAttempts.get(key),value=old&&now-old.at<3600000?old:{at:now,count:0};registrationAttempts.set(key,value);return ++value.count<=20}
+async function registrationChallenge(userId:string){
+ const code=randomCode(),codeHash=await bcrypt.hash(code,10),expiresAt=new Date(Date.now()+OTP_TTL_MINUTES*60000);
+ const challenge=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT id FROM "User" WHERE id=${userId} FOR UPDATE`;const user=await tx.user.findUnique({where:{id:userId}});if(user?.emailVerifiedAt)throw new PersonError(409,'E-mail já confirmado. Volte ao login.');const recent=await tx.verificationChallenge.findFirst({where:{userId,purpose:'verify_email'},orderBy:{createdAt:'desc'}});if(recent&&Date.now()-recent.createdAt.getTime()<60000)throw new PersonError(429,'Aguarde um minuto para solicitar outro código.');await tx.verificationChallenge.updateMany({where:{userId,purpose:'verify_email',consumedAt:null},data:{consumedAt:new Date()}});return tx.verificationChallenge.create({data:{userId,purpose:'verify_email',channel:'email',destination:user!.email,codeHash,expiresAt}})});
+ let emailSent=true;try{await sendLoginVerificationEmail({to:challenge.destination,code,expiresInMinutes:OTP_TTL_MINUTES,purpose:'registration'})}catch(error){emailSent=false;console.error('MyDoctor registration email delivery failed');}
+ return {challengeId:challenge.id,channel:'email',destinationMasked:maskEmail(challenge.destination),expiresAt:expiresAt.toISOString(),emailSent,...(process.env.NODE_ENV==='production'?{}:{developmentCode:code})};
+}
+router.post('/auth/registration/resend',async(req:Request,res:Response)=>{try{
+ if(!limitRegistration(req))return fail(res,429,'Aguarde antes de solicitar outro código.');
+ const user=await prisma.user.findUnique({where:{email:String(req.body.email??'').trim().toLowerCase()}});
+ if(!user||!await bcrypt.compare(String(req.body.password??''),user.passwordHash))return fail(res,401,'E-mail ou senha incorretos.');
+ if(!(user.accountData as any)?.emailConfirmationRequired)return fail(res,400,'Volte ao login para validar seu acesso.');
+ return res.json(await registrationChallenge(user.id));
+ }catch(e){return fail(res,e instanceof PersonError?e.status:503,e instanceof PersonError?e.message:'Não foi possível enviar a confirmação. Tente novamente.')}});
+router.post('/auth/registration/verify',async(req:Request,res:Response)=>{try{
+ const challenge=await prisma.verificationChallenge.findUnique({where:{id:String(req.body.challengeId??'')}});
+ if(!challenge||challenge.purpose!=='verify_email'||challenge.consumedAt||challenge.expiresAt.getTime()<=Date.now())return fail(res,400,'Código inválido, utilizado ou expirado. Solicite um novo código.');
+ if(challenge.attempts>=OTP_MAX_ATTEMPTS)return fail(res,429,'Número máximo de tentativas excedido. Solicite novo código.');
+ if(!await bcrypt.compare(String(req.body.code??''),challenge.codeHash)){await prisma.verificationChallenge.updateMany({where:{id:challenge.id,consumedAt:null,attempts:{lt:OTP_MAX_ATTEMPTS}},data:{attempts:{increment:1}}});return fail(res,401,'Código incorreto.');}
+ await prisma.$transaction(async tx=>{const consumed=await tx.verificationChallenge.updateMany({where:{id:challenge.id,purpose:'verify_email',consumedAt:null,expiresAt:{gt:new Date()},attempts:{lt:OTP_MAX_ATTEMPTS}},data:{consumedAt:new Date()}});if(!consumed.count)throw new PersonError(400,'Código inválido, utilizado ou expirado.');await tx.user.update({where:{id:challenge.userId},data:{emailVerifiedAt:new Date()}})});
+ return res.json({confirmed:true});
+ }catch(e){return fail(res,e instanceof PersonError?e.status:503,e instanceof PersonError?e.message:'Não foi possível confirmar o e-mail. Tente novamente.')}});
+
 /** Cadastro nativo da API V1. Cria a conta e o prontuário pessoal no mesmo commit transacional. */
 router.post('/auth/register', async (req: Request, res: Response) => {
   const body = req.body ?? {};
@@ -123,6 +147,8 @@ router.post('/auth/register', async (req: Request, res: Response) => {
   const email = String(body.email ?? '').trim().toLowerCase();
   const phone = String(body.phone ?? '').trim() || null;
   const password = String(body.password ?? '');
+  if(!limitRegistration(req))return fail(res,429,'Aguarde antes de criar outra conta.');
+  if(password!==String(body.passwordConfirmation??''))return fail(res,400,'As senhas não coincidem. Repita a senha.');
 
   if (name.length < 2) return fail(res, 400, 'Informe seu nome.');
   if (!/^\S+@\S+\.\S+$/.test(email)) return fail(res, 400, 'Informe um e-mail válido.');
@@ -137,7 +163,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
   try {
     const user = await prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
-        data: { name, email, phone, passwordHash },
+        data: { name, email, phone, passwordHash,accountData:{emailConfirmationRequired:true} },
       });
 
       await tx.patient.create({
@@ -151,7 +177,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
             name,
             relationshipToOwner: 'self',
             createdByUserId: created.id,
-            isHealthProfessional: body.isHealthProfessional === true,
+            isHealthProfessional: false,
           },
         },
       });
@@ -165,6 +191,8 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       email: user.email,
       phone: user.phone,
       requiresMfaLogin: true,
+      requiresEmailConfirmation:true,
+      ...(await registrationChallenge(user.id)),
     });
   } catch (error: any) {
     if (error?.code === 'P2002') return fail(res, 409, 'E-mail ou celular já cadastrado.');
@@ -188,6 +216,7 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
     return fail(res, 401, 'E-mail ou senha incorretos.');
   }
 
+  if(!user.emailVerifiedAt&&(user.accountData as any)?.emailConfirmationRequired)return res.status(403).json({error:'Confirme seu e-mail antes de entrar. Solicite novo código de confirmação nesta tela.',requiresEmailConfirmation:true});
   console.info('V1 login checkpoint: password verified');
   const selectedChannel = String(channel) === 'sms' ? 'sms' : 'email';
   const destination = selectedChannel === 'sms' ? user.phone : user.email;
@@ -266,6 +295,7 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
   });
 
   if (!challenge || challenge.purpose !== 'login') return fail(res, 400, 'Código de verificação inválido.');
+  if(!challenge.user.emailVerifiedAt&&(challenge.user.accountData as any)?.emailConfirmationRequired)return fail(res,403,'Confirme seu e-mail antes de entrar.');
   if (challenge.consumedAt) return fail(res, 400, 'Este código já foi utilizado.');
   if (challenge.expiresAt.getTime() < Date.now()) return fail(res, 400, 'Código expirado. Solicite um novo código.');
   if (challenge.attempts >= OTP_MAX_ATTEMPTS) return fail(res, 429, 'Número máximo de tentativas excedido.');
@@ -277,6 +307,7 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
   }
 
   await prisma.verificationChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
+  if(!challenge.user.emailVerifiedAt)await prisma.user.update({where:{id:challenge.user.id},data:{emailVerifiedAt:new Date()}});
 
   return res.json({
     token: sign(challenge.user.id),
