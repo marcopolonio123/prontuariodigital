@@ -21,6 +21,8 @@ try{
  const input={...identity,relationship:'child',creationToken:search.body.creationToken};
  const race=await Promise.all([call('/profiles',a,input),call('/profiles',a,input)]);assert.deepEqual(race.map(r=>r.status).sort(),[201,409],'Inclusão concorrente duplicou pessoa');
  const person=race.find(r=>r.status===201).body,id=person.id;assert.equal(person.isTutor,true);
+ const byRecord=await call('/people/search',b,{record:person.record.toLowerCase()});assert.equal(byRecord.status,200);assert.equal(byRecord.body.items[0].id,id);assert.equal(byRecord.body.creationToken,null);assert.equal(byRecord.body.items[0].motherName,undefined);
+ const missingRecord=await call('/people/search',b,{record:'PR-NOTFOUND'});assert.equal(missingRecord.body.items.length,0);assert.equal(missingRecord.body.creationToken,null);
  const searchB=await call('/people/search',b,{...identity,name:'criança ótima'});assert.equal(searchB.body.items.length,1);assert.equal(searchB.body.items[0].hasTutor,true);assert.equal(searchB.body.items[0].motherName,undefined);assert.equal(searchB.body.items[0].tutorUserId,undefined);
  assert.equal((await call('/patients/'+id+'/events',b)).status,403);assert.equal((await call('/people/'+id,b)).status,403);
  assert.equal((await call('/people/'+id+'/document',a,{...pdf,kind:'Certidão de nascimento'})).status,200);
