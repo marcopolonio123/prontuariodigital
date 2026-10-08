@@ -31,7 +31,8 @@ async function main() {
       to_regclass('"TutorDocument"') IS NOT NULL AS tutor_documents_ready,
       to_regclass('"TutorHistory"') IS NOT NULL AS tutor_history_ready,
       to_regclass('"PatientIdentityDocument"') IS NOT NULL AS patient_document_ready,
-      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Patient' AND column_name = 'tutorManaged') AS tutor_patient_ready`);
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Patient' AND column_name = 'tutorManaged') AS tutor_patient_ready,
+      NOT EXISTS (SELECT 1 FROM \"Patient\" WHERE btrim(coalesce(record,''))='') AS record_ready`);
     if (Object.values(ready.rows[0]).every(value => value === true)) {
       await client.query('COMMIT');
       console.info('MyDoctor: schema dos recursos já preparado.');
