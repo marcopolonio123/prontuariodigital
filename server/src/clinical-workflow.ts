@@ -394,7 +394,7 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
   const practitioner=await verifiedPractitioner(req.userId!);
   if(!practitioner)return fail(res,403,'A pesquisa exige perfil profissional aprovado e ativo.');
   const q=String(req.query.q??'').trim();
-  if(q.length<2||q.length>150)return fail(res,400,'Digite pelo menos duas letras do nome (até 150 caracteres).');
+  if(q.length<2||q.length>150)return fail(res,400,'Informe nome ou número do prontuário (de 2 a 150 caracteres).');
   const patients=await prisma.patient.findMany({where:{archived:false},select:{id:true,name:true,record:true},orderBy:[{name:'asc'},{id:'asc'}]});
   const normalized=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const close=(a:string,b:string)=>{
@@ -404,7 +404,7 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
     return previous[b.length]<=1;
   };
   const words=normalized(q).split(' ').filter(Boolean);
-  const matching=patients.filter(patient=>{const name=normalized(patient.name),parts=name.split(' ');return words.length>0&&words.every(word=>name.includes(word)||parts.some(part=>close(word,part)))});
+  const matching=patients.filter(patient=>{const name=normalized(patient.name),parts=name.split(' ');return normalized(patient.record).includes(normalized(q))||words.length>0&&words.every(word=>name.includes(word)||parts.some(part=>close(word,part)))});
   const details=await prisma.patient.findMany({where:{id:{in:matching.slice(0,20).map(patient=>patient.id)},archived:false},select:{id:true,name:true,record:true,data:true,owner:{select:{accountData:true}}}});
   const mask=(value:string)=>value?value.length<=4?'••••':value.slice(0,-4).replace(/./g,'•')+value.slice(-4):'';
   const items=matching.slice(0,20).flatMap(entry=>{
