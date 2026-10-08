@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
+import {managedPatientWhere,managesPatient,personalOwnerIds} from './patient-permissions.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
@@ -39,7 +40,7 @@ router.get('/professional/patients/lookup', auth, async (req: AuthedRequest, res
   if (!user || user.id === req.userId) return res.json(null);
 
   const patient = await prisma.patient.findFirst({
-    where: { ownerUserId: user.id, archived: false },
+    where: { ownerUserId: user.id, archived: false, data:{path:['relationshipToOwner'],equals:'self'} },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true },
   });
@@ -105,7 +106,7 @@ router.post('/professional/access-requests', auth, async (req: AuthedRequest, re
 });
 
 router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Response) => {
-  const owned = await prisma.patient.findMany({ where: { ownerUserId: req.userId!, archived: false }, select: { id: true } });
+  const owned = await prisma.patient.findMany({ where: managedPatientWhere(req.userId!), select: { id: true } });
   const patientIds = owned.map((p) => p.id);
   if (patientIds.length === 0) return res.json([]);
 
@@ -151,7 +152,7 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
     include: { patient: true, practitioner: true },
   });
   if (!request) return fail(res, 404, 'Solicitação não encontrada.');
-  if (request.patient.ownerUserId !== req.userId) return fail(res, 403, 'Somente o titular deste prontuário pode decidir.');
+  if (!managesPatient(request.patient,req.userId!)) return fail(res, 403, 'Somente o titular deste prontuário pode decidir.');
   if (request.status !== 'pending') return fail(res, 409, 'Esta solicitação já foi decidida.');
   if (request.expiresAt && request.expiresAt.getTime() <= Date.now()) {
     await prisma.accessRequest.updateMany({ where: { id: request.id, status: 'pending' }, data: { status: 'expired', decidedAt: new Date(), decidedByUserId: req.userId! } });
@@ -178,6 +179,9 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
   } else if (duration !== undefined) return fail(res, 400, 'Escolha acesso por tempo indeterminado ou até data e horário.');
   try {
   const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Patient" WHERE id=${request.patientId} FOR UPDATE`;
+    const currentPatient=await tx.patient.findUnique({where:{id:request.patientId}});
+    if(!currentPatient||!managesPatient(currentPatient,req.userId!))throw new Error('FORBIDDEN');
     // Lock professional row to serialize approval against suspension/revalidation.
     const verified = await tx.practitioner.updateMany({ where: { id: request.practitionerId ?? '', active: true, verificationStatus: 'verified' }, data: { updatedAt: new Date() } });
     if (!verified.count) throw new Error('UNVERIFIED');
@@ -219,6 +223,7 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
   return res.json({ id: request.id, status: 'approved', decidedAt: now.toISOString(), grantId: result.id, validUntil: result.validUntil?.toISOString() ?? null });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
+    if(code==='FORBIDDEN')return fail(res,403,'A tutoria mudou. Você não pode mais autorizar este prontuário.');
     if (code === 'UNVERIFIED') return fail(res, 403, 'Este profissional não possui validação ativa. Não é possível autorizar o acesso.');
     if (code === 'DECIDED') return fail(res, 409, 'Esta solicitação já foi decidida ou expirou. Atualize a lista.');
     const databaseCode = String((error as { code?: string })?.code ?? 'UNKNOWN');
@@ -234,7 +239,7 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
     await prisma.$transaction(async tx => {
       const request = await tx.accessRequest.findUnique({ where: { id: req.params.id }, include: { patient: true } });
       if (!request) throw new Error('NOT_FOUND');
-      if (request.patient.ownerUserId !== req.userId) throw new Error('FORBIDDEN');
+      if (!managesPatient(request.patient,req.userId!)) throw new Error('FORBIDDEN');
       if (request.status !== 'approved' && request.status !== 'revoked') throw new Error('STATUS');
       await tx.accessRequest.update({ where: { id: request.id }, data: { status: 'revoked' } });
       await tx.accessGrant.updateMany({ where: { sourceRequestId: request.id, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -247,6 +252,7 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
 
 
