@@ -143,6 +143,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       await tx.patient.create({
         data: {
           id: patientId,
+          record: 'PR-'+patientId.replace(/-/g,'').toUpperCase(),
           name,
           ownerUserId: created.id,
           data: {
@@ -360,7 +361,7 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
       if(self)await claimPerson(tx,self.id,{name,birthDate,motherName,cpf});
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
-      else {const created=await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });await claimPerson(tx,created.id,{name,birthDate,motherName,cpf});}
+      else {const id=randomUUID();const created=await tx.patient.create({ data: { id, record:'PR-'+id.replace(/-/g,'').toUpperCase(), ownerUserId: old.id, name, data } });await claimPerson(tx,created.id,{name,birthDate,motherName,cpf});}
       if(referenceChanged)await tx.identificationLog.create({data:{method:'reference',byUserId:old.id,byName:name,result:reference?'reference_registered':'reference_removed',detail:'Foto de referência do piloto; comparação biométrica não ativada.'}});
       if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || normalizeRg(String((old.accountData as any)?.rg ?? '')) !== rg || ((old.accountData as any)?.rgUf ?? '') !== (rgType === 'CIN' ? '' : rgUf) || ((old.accountData as any)?.rgType ?? 'RG') !== rgType || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
