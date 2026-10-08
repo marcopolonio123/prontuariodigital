@@ -196,7 +196,8 @@ try {
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
   await click('Clique aqui para se cadastrar');
-  assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
+  assert.doesNotMatch(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
+  assert.match(document.body.textContent,/Repita a senha/);
   assert.equal(document.querySelector('[aria-label="Menu do MyDoctor"]'),null,'Menu persistiu após logout');
   await build({ entryPoints: ['src/AccessRequestsPanel.tsx'], outfile: '.consent-test.cjs', bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react'] });
   const ConsentPanel = require('../.consent-test.cjs').default;
@@ -215,5 +216,6 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 

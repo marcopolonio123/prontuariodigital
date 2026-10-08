@@ -50,21 +50,15 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-08-tutorship', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-08-registration-confirmation', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
-app.post('/api/auth/register', async (req: Request, res: Response) => {
-  const { name, email, password } = req.body ?? {};
-  if (!name?.trim() || !email?.trim() || !password || String(password).length < 6) return fail(res, 400, 'Informe nome, e-mail e senha com pelo menos 6 caracteres.');
-  const normalized = String(email).trim().toLowerCase();
-  if (await prisma.user.findUnique({ where: { email: normalized } })) return fail(res, 409, 'Este e-mail já possui conta.');
-  const user = await prisma.user.create({ data: { name: String(name).trim(), email: normalized, passwordHash: await bcrypt.hash(String(password), 10) } });
-  res.json({ token: sign(user.id), user: { id: user.id, name: user.name, email: user.email } });
-});
+app.post('/api/auth/register', (_req:Request,res:Response)=>res.redirect(307,'/api/v1/auth/register'));
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body ?? {};
   const user = await prisma.user.findUnique({ where: { email: String(email ?? '').trim().toLowerCase() } });
   if (!user || !(await bcrypt.compare(String(password ?? ''), user.passwordHash))) return fail(res, 401, 'E-mail ou senha incorretos.');
+  if(!user.emailVerifiedAt&&(user.accountData as any)?.emailConfirmationRequired)return fail(res,403,'Confirme seu e-mail antes de entrar.');
   res.json({ token: sign(user.id), user: { id: user.id, name: user.name, email: user.email } });
 });
 

@@ -16,8 +16,9 @@ async function call(path, body, token, method) {
 async function account(name) {
   const email = `medication-${Date.now()}-${accounts.length}@mydoctor.test`;
   const password = 'Teste123!';
-  const created = await call('/auth/register', { name, email, password });
+  const created = await call('/auth/register', { name, email, password,passwordConfirmation:password });
   assert.equal(created.status, 201); accounts.push(created.body.id);
+  const confirmation=await call('/auth/registration/verify',{challengeId:created.body.challengeId,code:created.body.developmentCode});assert.equal(confirmation.status,200);
   const challenge = await call('/auth/login/start', { email, password, channel: 'email' });
   const login = await call('/auth/login/verify', { challengeId: challenge.body.challengeId, code: challenge.body.developmentCode });
   return { id: created.body.id, token: login.body.token, email };

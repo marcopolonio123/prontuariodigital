@@ -30,10 +30,11 @@ assert(health?.ok === true && health?.apiV1 === true, 'API V1 deve estar ativa')
 console.log('2/10 native V1 register');
 const registered = await call('/api/v1/auth/register', {
   method: 'POST',
-  body: JSON.stringify({ name: 'Usuário CI MyDoctor', email, password }),
+  body: JSON.stringify({ name: 'Usuário CI MyDoctor', email, password,passwordConfirmation:password }),
 });
 assert(registered?.id && registered?.requiresMfaLogin === true, 'cadastro V1 inválido');
 
+await call('/api/v1/auth/registration/verify',{method:'POST',body:JSON.stringify({challengeId:registered.challengeId,code:registered.developmentCode})});
 console.log('3/10 MFA start + verify');
 const challenge = await call('/api/v1/auth/login/start', {
   method: 'POST',

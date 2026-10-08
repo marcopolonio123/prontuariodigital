@@ -38,7 +38,8 @@ async function call(path, token, body, method = body ? 'POST' : 'GET') {
 }
 async function account(professional = false) {
   const email = `flow-${Date.now()}-${users.length}@mydoctor.test`; const password = 'Teste123!';
-  const registered = await call('/auth/register', null, { name: 'Pessoa teste', email, password, isHealthProfessional: professional }); assert.equal(registered.status, 201); users.push(registered.body.id);
+  const registered = await call('/auth/register', null, { name: 'Pessoa teste', email, password,passwordConfirmation:password, isHealthProfessional: professional }); assert.equal(registered.status, 201); users.push(registered.body.id);
+  const confirmation=await call('/auth/registration/verify',null,{challengeId:registered.body.challengeId,code:registered.body.developmentCode});assert.equal(confirmation.status,200);
   const start = await call('/auth/login/start', null, { email, password, channel: 'email' });
   const login = await call('/auth/login/verify', null, { challengeId: start.body.challengeId, code: start.body.developmentCode }); assert.equal(login.status, 200);
   return { id: registered.body.id, email, token: login.body.token };
@@ -51,7 +52,7 @@ try {
   assert.equal((await call('/address/cep/01001000', owner.token)).body.logradouro, 'Praça da Sé');
   assert.equal((await call('/address/cep/99999999', owner.token)).body.erro, true);
   assert.equal((await call('/address/cep/00000000', owner.token)).status, 503);
-  let initial = await call('/account', owner.token); assert.equal(initial.body.isHealthProfessional, true); assert.equal(initial.body.completed, false);
+  let initial = await call('/account', owner.token); assert.equal(initial.body.isHealthProfessional, false); assert.equal(initial.body.completed, false);
   const data = { name: 'Nome atualizado', birthDate: '1980-03-12', sex: 'female', city: 'São Paulo', state: 'SP', phone: '', isHealthProfessional: true, cpf: '529.982.247-25', rg: '11.966.756-3', rgUf: 'SP', rgType: 'RG', postalCode: '01310-100', street: 'Avenida teste', number: '120', complement: 'Apto 4', neighborhood: 'Bairro teste', country: 'Brasil', avatarDataUrl: 'data:image/jpeg;base64,' + Buffer.from([255,216,255,224,0,0,255,217]).toString('base64') };
   const legacy = await call('/account', owner.token, { ...data, phone: '+55 (11) 98765.4321', sex: 'Feminino', state: ' sp ' }, 'PUT');
   assert.equal(legacy.status, 200); assert.equal(legacy.body.phone, '+5511987654321'); assert.equal(legacy.body.sex, 'female'); assert.equal(legacy.body.state, 'SP');
