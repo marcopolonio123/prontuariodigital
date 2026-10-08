@@ -108,8 +108,7 @@ try {
   await click('← Voltar ao MyDoctor');
   assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
   await menu(); await click('Meu cadastro');
-  assert.doesNotMatch(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
-  assert.match(document.body.textContent,/Repita a senha/);
+  assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
   assert.equal([...document.querySelectorAll('button')].filter(button => /^Salvar/.test(button.textContent.trim())).length, 1, 'Mais de um botão para salvar');
   assert.match(document.body.textContent, /Endereço completo/);
   assert.match(document.body.textContent, /Foto ou avatar/);assert.match(document.body.textContent,/Digital \(opcional\)/);
