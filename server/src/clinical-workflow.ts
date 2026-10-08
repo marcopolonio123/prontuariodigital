@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from './db.js';
+import {managedPatientWhere,managesPatient,personalOwnerIds} from './patient-permissions.js';
 import { normalizeFollowUp } from './follow-up.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 
@@ -325,7 +326,7 @@ router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Resp
   const items = await prisma.healthEvent.findMany({
     where: {
       status: 'pending_patient_confirmation',
-      patient: { ownerUserId: req.userId!, archived: false },
+      patient: managedPatientWhere(req.userId!),
     },
     include: { documents: { where: { status: { not: 'deleted' } }, select: { id: true, originalFilename: true } }, patient: { select: { id: true, name: true } }, practitioner: { include: { registrations: { include: { authority: true } } } } },
     orderBy: { createdAt: 'desc' },
@@ -356,7 +357,7 @@ router.post('/consultations/:id/decision', auth, async (req: AuthedRequest, res:
   const decision = String(req.body?.decision ?? '');
   if (!['confirm', 'reject'].includes(decision)) return fail(res, 400, 'Decisão inválida.');
   const event = await prisma.healthEvent.findUnique({ where: { id: req.params.id }, include: { patient: true } });
-  if (!event || event.patient.ownerUserId !== req.userId!) return fail(res, 404, 'Atendimento não encontrado.');
+  if (!event || !managesPatient(event.patient,req.userId!)) return fail(res, 404, 'Atendimento não encontrado.');
   if (event.status !== 'pending_patient_confirmation') return fail(res, 409, 'Este atendimento já foi decidido.');
 
   const expected = new Date(req.body?.expectedUpdatedAt ?? event.updatedAt);
@@ -468,6 +469,7 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
 });
 
 export default router;
+
 
 
 
