@@ -126,6 +126,7 @@ export async function sendLoginVerificationEmail(params: {
   to: string;
   code: string;
   expiresInMinutes: number;
+  purpose?: 'registration';
 }): Promise<void> {
   // O smoke/local continua independente de serviços externos.
   if (process.env.NODE_ENV !== 'production') return;
@@ -144,17 +145,17 @@ export async function sendLoginVerificationEmail(params: {
   const message: EmailMessage = {
     from,
     to: params.to,
-    subject: 'Seu código de acesso ao MyDoctor',
+    subject: params.purpose==='registration'?'Confirme seu e-mail no MyDoctor':'Seu código de acesso ao MyDoctor',
     html: `
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#172033">
-        <h2 style="margin-bottom:8px">Código de acesso MyDoctor</h2>
-        <p>Use o código abaixo para concluir sua entrada:</p>
+        <h2 style="margin-bottom:8px">${params.purpose==='registration'?'Confirmação de cadastro MyDoctor':'Código de acesso MyDoctor'}</h2>
+        <p>${params.purpose==='registration'?'Confirme seu endereço de e-mail com o código abaixo. Sua conta só poderá acessar o sistema depois da confirmação.':'Use o código abaixo para concluir sua entrada:'}</p>
         <div style="font-size:32px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</div>
         <p>Este código expira em ${params.expiresInMinutes} minutos.</p>
         <p style="font-size:13px;color:#667085">Se você não tentou entrar no MyDoctor, ignore esta mensagem. Nunca compartilhe este código.</p>
       </div>
     `,
-    text: `Seu código de acesso ao MyDoctor é ${params.code}. Ele expira em ${params.expiresInMinutes} minutos. Se você não tentou entrar, ignore esta mensagem.`,
+    text: `Seu código ${params.purpose==='registration'?'de confirmação do cadastro':'de acesso'} ao MyDoctor é ${params.code}. Ele expira em ${params.expiresInMinutes} minutos. Se você não tentou entrar, ignore esta mensagem.`,
   };
 
   if (resendApiKey) {
@@ -177,3 +178,4 @@ export async function sendLoginVerificationEmail(params: {
   console.warn('MyDoctor email provider: SMTP fallback because RESEND_API_KEY is not configured');
   await sendWithHostingerFallback(message);
 }
+
