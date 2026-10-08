@@ -31,6 +31,7 @@ jobs:
           node scripts/medication-filters-smoke.mjs
           node scripts/insurance-smoke.mjs
           node scripts/tutorship-ui-smoke.mjs
+          node scripts/registration-ui-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
@@ -86,4 +87,5 @@ jobs:
           node scripts/professional-admin-smoke.mjs
           node scripts/account-documents-smoke.mjs
           node scripts/tutorship-smoke.mjs
+          node scripts/registration-smoke.mjs
 
