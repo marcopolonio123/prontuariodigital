@@ -43,9 +43,9 @@ try {
   const owner = await account('Responsável teste');
   const dependentUser = await account('Dependente teste');
   const stranger = await account('Outra conta teste');
-  const input={name:'Dependente teste',relationship:'child',birthDate:'2018-05-16',motherName:'Mãe medicamento teste'};
-  const search=await call('/people/search',input,owner.token);
-  const profile = await call('/profiles', {...input,creationToken:search.body.creationToken}, owner.token);
+  const personInput={name:'Dependente teste',relationship:'child',birthDate:'2018-05-16',motherName:'Mãe medicamento teste'};
+  const search=await call('/people/search',personInput,owner.token);
+  const profile = await call('/profiles', {...personInput,creationToken:search.body.creationToken}, owner.token);
   const patientId = profile.body.id;
   const endpoint = '/patients/' + patientId + '/medications';
   const grant = await db.accessGrant.create({ data: { accountId: dependentUser.id, patientId, level: 'leitura', scope: ['record'] } });
