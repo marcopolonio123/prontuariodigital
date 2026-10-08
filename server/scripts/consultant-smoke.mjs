@@ -54,9 +54,10 @@ try {
   async function account() {
     const email = `consultant-${Date.now()}-${accounts.length}@mydoctor.test`;
     const password = 'Teste123!';
-    const registered = await call('/auth/register', { name: 'Teste Consultor', email, password });
+    const registered = await call('/auth/register', { name: 'Teste Consultor', email, password,passwordConfirmation:password });
     assert.equal(registered.status, 201);
     accounts.push(registered.body.id);
+    const confirmation=await call('/auth/registration/verify',{challengeId:registered.body.challengeId,code:registered.body.developmentCode});assert.equal(confirmation.status,200);
     const challenge = await call('/auth/login/start', { email, password, channel: 'email' });
     const login = await call('/auth/login/verify', { challengeId: challenge.body.challengeId, code: challenge.body.developmentCode });
     const profiles = await call('/profiles', null, login.body.token);
@@ -147,5 +148,6 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
