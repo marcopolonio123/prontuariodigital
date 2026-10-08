@@ -25,6 +25,7 @@ model User {
   phoneVerifiedAt DateTime?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
+  tutoredPatients Patient[] @relation("activeTutor")
   patients        Patient[]               @relation("owner")
   grants          AccessGrant[]           @relation("grantee")
   grantedAccesses AccessGrant[]           @relation("grantor")
@@ -75,6 +76,13 @@ model Patient {
   name           String
   ownerUserId    String
   owner          User            @relation("owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  tutorUserId    String?
+  tutor          User? @relation("activeTutor", fields: [tutorUserId], references: [id], onDelete: Restrict)
+  tutorManaged   Boolean @default(false)
+  identities     PersonIdentity[]
+  tutorRequests  TutorRequest[]
+  tutorHistory   TutorHistory[]
+  identityFile   PatientIdentityDocument?
   archived       Boolean         @default(false) // regra do produto: nunca excluir; apenas arquivar
   medicationAlertsEnabled Boolean @default(false)
   medicationSchedules MedicationSchedule[]
@@ -508,6 +516,72 @@ model UserIdentityDocument {
   id String @id @default(uuid())
   userId String @unique
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind String
+  filename String
+  mimeType String
+  sizeBytes Int
+  sha256 String
+  content Bytes
+  createdAt DateTime @default(now())
+}
+
+
+// Identity keys are unique across accounts, independently of the email used to log in.
+model PersonIdentity {
+  key String @id
+  patientId String
+  patient Patient @relation(fields:[patientId], references:[id], onDelete:Restrict)
+  createdAt DateTime @default(now())
+  @@index([patientId])
+}
+model TutorRequest {
+  id String @id @default(uuid())
+  patientId String
+  patient Patient @relation(fields:[patientId], references:[id], onDelete:Restrict)
+  requesterUserId String
+  expectedTutorId String?
+  kind String @default("ordinary")
+  relationship String
+  reason String @default("")
+  status String @default("pending")
+  note String @default("")
+  decidedByUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  decidedAt DateTime?
+  documents TutorDocument[]
+  @@index([requesterUserId, status])
+  @@index([patientId, status])
+}
+model TutorDocument {
+  id String @id @default(uuid())
+  requestId String
+  request TutorRequest @relation(fields:[requestId], references:[id], onDelete:Restrict)
+  kind String
+  filename String
+  mimeType String
+  sizeBytes Int
+  sha256 String
+  content Bytes
+  createdAt DateTime @default(now())
+  @@index([requestId])
+}
+model TutorHistory {
+  id String @id @default(uuid())
+  patientId String
+  patient Patient @relation(fields:[patientId], references:[id], onDelete:Restrict)
+  actorUserId String
+  oldTutorId String?
+  newTutorId String?
+  action String
+  requestId String?
+  at DateTime @default(now())
+  @@index([patientId, at])
+}
+model PatientIdentityDocument {
+  id String @id @default(uuid())
+  patientId String @unique
+  patient Patient @relation(fields:[patientId], references:[id], onDelete:Restrict)
   kind String
   filename String
   mimeType String
