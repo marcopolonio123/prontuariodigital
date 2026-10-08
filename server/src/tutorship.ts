@@ -20,8 +20,11 @@ const searches=new Map<string,{at:number;count:number}>();
 router.post('/people/search',auth,async(req:AuthRequest,res)=>{try{
  if(searches.size>10000){for(const [id,x]of searches)if(Date.now()-x.at>60000)searches.delete(id)}
  const now=Date.now(),old=searches.get(req.userId!);const rate=old&&now-old.at<60000?old:{at:now,count:0};if(++rate.count>20)throw new PersonError(429,'Aguarde um minuto antes de pesquisar novamente.');searches.set(req.userId!,rate);
- const input=identityInput(req.body);const rows=await findPeople(prisma,input,true);
- const keys=identityKeys(input);res.setHeader('Cache-Control','private, no-store');res.json({items:rows.slice(0,20).map(p=>({id:p.id,name:p.name,record:p.record,document:mask(p.cpf),hasTutor:!!p.tutorUserId,archived:!!p.archived,token:tickets({uid:req.userId,purpose:'tutor-candidate',patientId:p.id})})),more:rows.length>20,creationToken:rows.length?null:tickets({uid:req.userId,purpose:'new-person',keys})});
+ const record=String(req.body.record??'').trim().toUpperCase();
+ if(record&&!/^[A-Z0-9-]{3,64}$/.test(record))throw new PersonError(400,'Informe o número completo do prontuário.');
+ const input=record?null:identityInput(req.body);
+ const rows=record?(await prisma.patient.findMany({where:{record:{equals:record,mode:'insensitive'}},select:{id:true,name:true,record:true,tutorUserId:true,archived:true,data:true,owner:{select:{accountData:true}}},take:20})).map(p=>({...p,cpf:String((p.data as any)?.cpf||((p.data as any)?.relationshipToOwner==='self'?(p.owner.accountData as any)?.cpf:'')||'')})):await findPeople(prisma,input!,true);
+ const keys=input?identityKeys(input):[];res.setHeader('Cache-Control','private, no-store');res.json({items:rows.slice(0,20).map(p=>({id:p.id,name:p.name,record:p.record,document:mask(p.cpf),hasTutor:!!p.tutorUserId,archived:!!p.archived,token:tickets({uid:req.userId,purpose:'tutor-candidate',patientId:p.id})})),more:rows.length>20,creationToken:record||rows.length?null:tickets({uid:req.userId,purpose:'new-person',keys})});
  }catch(e){fail(res,e)}});
 export async function createDependent(userId:string,body:any){
  const input=personData(body),proof=ticket(body.creationToken,userId,'new-person');
