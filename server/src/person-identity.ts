@@ -29,7 +29,7 @@ export function personData(body:any):ReturnType<typeof identityInput>&Record<str
 export function identityKeys(input:ReturnType<typeof identityInput>){
  return [input.cpf?'cpf:'+input.cpf:'',input.name&&input.birthDate&&input.motherName?'birth:'+JSON.stringify([normalizedPerson(input.name),input.birthDate,normalizedPerson(input.motherName)]):''].filter(Boolean).sort();
 }
-const textNormal=(sql:Prisma.Sql)=>Prisma.sql`trim(regexp_replace(lower(translate(${sql},'áàâãäéèêëíìîïóòôõöúùûüçñ','aaaaaeeeeiiiiooooouuuucn')), '\\s+', ' ', 'g'))`;
+const textNormal=(sql:Prisma.Sql)=>Prisma.sql`trim(regexp_replace(translate(lower(${sql}),'áàâãäéèêëíìîïóòôõöúùûüçñ','aaaaaeeeeiiiiooooouuuucn'), '[[:space:]]+', ' ', 'g'))`;
 export async function findPeople(tx:any,input:ReturnType<typeof identityInput>,approximate=false){
  const cpfExpr=Prisma.sql`regexp_replace(COALESCE(p.data->>'cpf', CASE WHEN p.data->>'relationshipToOwner'='self' THEN u."accountData"->>'cpf' END,''),'[^0-9]','','g')`;
  const name=textNormal(Prisma.sql`p.name`),mother=textNormal(Prisma.sql`COALESCE(p.data->>'motherName',CASE WHEN p.data->>'relationshipToOwner'='self' THEN u."accountData"->>'motherName' END,'')`);
