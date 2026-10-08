@@ -33,13 +33,13 @@ function requireOwner(req: OwnerRequest, res: Response, next: NextFunction) {
   try { req.userId = (jwt.verify((req.headers.authorization ?? '').replace(/^Bearer /, ''), process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me') as { uid: string }).uid; next(); }
   catch { res.status(401).json({ error: 'Entre na sua conta para continuar.' }); }
 }
-async function invalidate(tx: any, practitioner: any) {
+export async function invalidate(tx: any, practitioner: any) {
   const changed = await tx.practitioner.updateMany({ where: { id: practitioner.id, updatedAt: practitioner.updatedAt }, data: { updatedAt: new Date(), verificationStatus: practitioner.verificationStatus === 'suspended' ? 'suspended' : 'pending', verifiedAt: null } });
   if (!changed.count) throw new Error('STALE');
   await tx.accessGrant.updateMany({ where: { practitionerId: practitioner.id, revokedAt: null }, data: { revokedAt: new Date() } });
   await tx.accessRequest.updateMany({ where: { practitionerId: practitioner.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
 }
-function validatedUpload(body: any) {
+export function validatedUpload(body: any) {
   const { mimeType, data } = body ?? {};
   const filename = String(body?.filename ?? '').replace(/[\\/\r\n\x00-\x1f]/g, '_').slice(0, 180);
   if (!filename || typeof data !== 'string' || data.length > 4 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return null;
@@ -193,3 +193,4 @@ router.post('/admin/professionals/:id/decision', requireAdmin, async (req: Admin
   }
 });
 export default router;
+
