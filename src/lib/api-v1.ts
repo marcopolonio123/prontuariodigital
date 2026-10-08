@@ -25,12 +25,12 @@ export function subscribeV1SessionToken(listener: (token: string) => void) {
 export interface LoginStartResponse { challengeId: string; channel: MfaChannel; destinationMasked: string; expiresAt: string; developmentCode?: string; }
 export interface FingerprintReferenceMetadata {registeredAt:string;width:number;height:number;finger:'right_index'|'left_index';status:'pending_engine'}
 export interface FingerprintReferenceInput {photo:string;consent:true;finger:'right_index'|'left_index'}
-export interface AccountProfileV1 extends V1User { fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
+export interface AccountProfileV1 extends V1User { motherName?:string; fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
 export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
-export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; }
+export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; isTutor?:boolean;hasTutor?:boolean; }
 export interface ProfessionalRegistrationV1 { id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
 export interface ProfessionalProfileV1 { id: string; name: string; profession: string; specialty?: string | null; verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended' | string; verifiedAt?: string | null; active: boolean; registrations: ProfessionalRegistrationV1[]; }
 export interface UpsertProfessionalProfileInput { profession: string; specialty?: string; council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS'; registration: string; region?: string; }
@@ -153,15 +153,35 @@ export interface UtilityLocation {status:string;latitude?:number;longitude?:numb
 export interface UtilityPhotoDiagnostic {width:number;height:number;brightness:number;sharpness:number}
 export type UtilityPhotoAction='camera_opened'|'camera_failed'|'photo_captured'|'photo_discarded'|'photo_failed';
 export interface UtilityLog {id:string;at:string;method:string;result:string;patientName:string|null;byName:string;location:UtilityLocation;diagnostic?:UtilityPhotoDiagnostic|null}
+export interface PersonV1 {id?:string;name:string;cpf:string;birthDate:string;motherName:string;rg:string;rgUf:string;sex:string;phone:string;postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string;avatarDataUrl:string;canEdit?:boolean;isTutor?:boolean;hasTutor?:boolean;}
+export interface PersonCandidate {id:string;name:string;record:string;document:string;hasTutor:boolean;archived:boolean;token:string;}
+export interface TutorRequestV1 {id:string;patientId:string;patientName:string;record:string;requesterName:string;requesterUserId:string;status:string;kind:string;reason:string;note:string;relationship:string;createdAt:string;canDecide:boolean;mine:boolean;documents:VerificationDocumentV1[];}
+export interface TutorHistoryV1 {id:string;action:string;at:string;actorName:string;oldTutorName:string;newTutorName:string;}
 export class MyDoctorV1Api {
   recordUtilityUsage(method:'open'|'finger'|'finger_photo',location:UtilityLocation,action?:UtilityPhotoAction,diagnostic?:UtilityPhotoDiagnostic){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location,action,diagnostic})})}
   utilityLogs(query:{admin?:boolean;mine?:boolean;identificationOnly?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.mine)params.set('mine','1');if(query.identificationOnly)params.set('identificationOnly','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
 
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
+  searchPeople(input:{cpf:string;name:string;birthDate:string;motherName:string}){return this.req<{items:PersonCandidate[];more:boolean;creationToken:string|null}>('/people/search',{method:'POST',body:JSON.stringify(input)})}
+  createPerson(input:PersonV1,relationship:string,creationToken:string){return this.req<PatientProfile>('/profiles',{method:'POST',body:JSON.stringify({...input,relationship,creationToken})})}
+  getPerson(id:string){return this.req<PersonV1>('/people/'+encodeURIComponent(id))}
+  savePerson(id:string,input:PersonV1){return this.req<{id:string;name:string}>('/people/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(input)})}
+  getPersonDocument(id:string){return this.req<VerificationDocumentV1|null>('/people/'+encodeURIComponent(id)+'/document')}
+  getTutorHistory(id:string){return this.req<TutorHistoryV1[]>('/people/'+encodeURIComponent(id)+'/tutorship-history')}
+  listTutorRequests(admin=false){return this.req<TutorRequestV1[]>((admin?'/admin':'')+'/tutorship/requests')}
+  requestTutorship(input:{token:string;kind:string;relationship:string;reason:string}){return this.req<{id:string;status:string}>('/tutorship/requests',{method:'POST',body:JSON.stringify(input)})}
+  decideTutorship(id:string,decision:string,note:string,admin=false){return this.req((admin?'/admin':'')+'/tutorship/requests/'+encodeURIComponent(id)+'/decision',{method:'POST',body:JSON.stringify({decision,note,checkedDocuments:admin&&decision==='approve'})})}
+  cancelTutorship(id:string){return this.req('/tutorship/requests/'+encodeURIComponent(id)+'/cancel',{method:'POST'})}
+  submitTutorship(id:string){return this.req('/tutorship/requests/'+encodeURIComponent(id)+'/submit',{method:'POST'})}
+  endTutorship(id:string){return this.req('/people/'+encodeURIComponent(id)+'/end-tutorship',{method:'POST',body:JSON.stringify({confirm:true})})}
+  private async uploadPersonFile(path:string,kind:string,file:File){if(file.size>3*1024*1024)throw Error('Cada documento pode ter até 3 MB.');const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file)});return this.req<VerificationDocumentV1>(path,{method:'POST',body:JSON.stringify({kind,filename:file.name,mimeType:file.type,data})})}
+  savePersonDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/people/'+encodeURIComponent(id)+'/document',kind,file)}
+  uploadTutorDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/tutorship/requests/'+encodeURIComponent(id)+'/documents',kind,file)}
+  async openPersonFile(id:string,admin=false,person=false){const path=person?'/people/'+encodeURIComponent(id)+'/document/download':(admin?'/admin':'')+'/tutorship/documents/'+encodeURIComponent(id);const response=await fetch(this.url(path),{headers:{Authorization:'Bearer '+this.token}});if(!response.ok)throw Error('Não foi possível abrir o documento.');const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000)}
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
-  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string;fingerprintReference?:FingerprintReferenceInput|null }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
+  saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; motherName?:string;cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string;fingerprintReference?:FingerprintReferenceInput|null }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
   getIdentityDocument() { return this.req<VerificationDocumentV1 | null>('/account/document'); }
   async saveIdentityDocument(kind: string, file: File, expectedId: string | null) {
     if (file.size > 3 * 1024 * 1024) throw new Error('Cada documento pode ter até 3 MB.');
@@ -305,5 +325,6 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 
 
