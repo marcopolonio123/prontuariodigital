@@ -31,7 +31,7 @@ export async function createDependent(userId:string,body:any){
  const keys=identityKeys(input);if(!proof.keys?.length||!proof.keys.every((key:string)=>keys.includes(key)))throw new PersonError(400,'Os dados de identificação mudaram. Pesquise novamente.');
  const relationship=String(body.relationship??'dependent');if(!relations.has(relationship))throw new PersonError(400,'Selecione a relação com o responsável.');
  return prisma.$transaction(async tx=>{
- const id=randomUUID();const patient=await tx.patient.create({data:{id,record:'PR-'+id.slice(0,8).toUpperCase(),name:input.name,ownerUserId:userId,tutorUserId:userId,tutorManaged:true,data:{...input,relationshipToOwner:relationship,relationshipToTutor:relationship,createdByUserId:userId}}});
+ const id=randomUUID();const patient=await tx.patient.create({data:{id,record:'PR-'+id.replace(/-/g,'').toUpperCase(),name:input.name,ownerUserId:userId,tutorUserId:userId,tutorManaged:true,data:{...input,relationshipToOwner:relationship,relationshipToTutor:relationship,createdByUserId:userId}}});
  await claimPerson(tx,id,input);await tx.tutorHistory.create({data:{patientId:id,actorUserId:userId,newTutorId:userId,action:'created_with_tutor'}});return {id:patient.id,record:patient.record,name:patient.name,relationship,accessLevel:'tutor',source:'owned',isTutor:true};
  },{timeout:20000});
 }
