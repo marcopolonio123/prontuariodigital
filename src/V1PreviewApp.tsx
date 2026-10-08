@@ -117,7 +117,8 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
   const [challenge, setChallenge] = useState<LoginStartResponse | null>(null);
   const [registerName, setRegisterName] = useState('');
   const [registerPhone, setRegisterPhone] = useState('');
-  const [registerProfessional, setRegisterProfessional] = useState(false);
+  const [passwordConfirmation,setPasswordConfirmation]=useState('');
+  const [confirmingRegistration,setConfirmingRegistration]=useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -271,15 +272,21 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
     if (!registerName.trim()) throw new Error('Informe seu nome.');
     if (!email.trim()) throw new Error('Informe seu e-mail.');
     if (password.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres.');
-    await api.register({ name: registerName.trim(), email: email.trim(), password, phone: registerPhone.trim() || undefined, isHealthProfessional: registerProfessional });
-    setRegisterName(''); setRegisterPhone(''); setPassword(''); setShowPassword(false); setAuthView('login');
-    setMessage('Cadastro concluído. Agora entre com seu e-mail e senha.');
+    if(password!==passwordConfirmation)throw new Error('As senhas não coincidem. Repita a senha.');
+    const result=await api.register({name:registerName.trim(),email:email.trim(),password,passwordConfirmation,phone:registerPhone.trim()||undefined});
+    setPasswordConfirmation('');setShowPassword(false);setConfirmingRegistration(true);setChallenge(result);setCode(result.developmentCode??'');setAuthView('verify');
+    setMessage(result.emailSent?'Confirme o e-mail para ativar seu cadastro.':'Sua conta foi criada, mas não conseguimos enviar o código. Solicite novo código após um minuto.');
   });
 
+  const resendRegistration=()=>run(async()=>{
+    if(!email.trim()||!password)throw new Error('Informe e-mail e senha do cadastro para solicitar a confirmação.');
+    const result=await api.resendRegistration(email,password);setConfirmingRegistration(true);setChallenge(result);setCode(result.developmentCode??'');setAuthView('verify');setMessage(result.emailSent?'Novo código de confirmação enviado. Use somente o mais recente.':'Não foi possível enviar. Tente novamente em um minuto.');
+  });
+  const confirmEmail=()=>run(async()=>{if(!challenge)return;await api.confirmRegistration(challenge.challengeId,code);setAuthView('login');setConfirmingRegistration(false);setChallenge(null);setCode('');setPassword('');setPasswordConfirmation('');setMessage('E-mail confirmado. Agora entre com seu e-mail e senha.');});
   const startLogin = (resend = false) => run(async () => {
     if (!email.trim() || !password) throw new Error('Informe e-mail e senha.');
     const result = await api.startPasswordLogin({ email, password, channel });
-    setChallenge(result); setAuthView('verify');
+    setConfirmingRegistration(false);setChallenge(result); setAuthView('verify');
     setCode(result.developmentCode ?? '');
     setMessage(`${resend ? 'Novo código' : 'Código'} enviado para ${result.destinationMasked}.${resend ? ' Use o código mais recente.' : ''}`);
   });
@@ -440,21 +447,22 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
       <label className="mt-3 block text-xs font-bold text-mute">E-mail</label><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputClass()} mt-1`} type="email" autoComplete="email" />
       <label className="mt-3 block text-xs font-bold text-mute">Celular (opcional)</label><input value={registerPhone} onChange={(e) => setRegisterPhone(e.target.value)} className={`${inputClass()} mt-1`} inputMode="tel" autoComplete="tel" />
       <label className="mt-3 block text-xs font-bold text-mute">Crie uma senha</label>{passwordField('new-password')}
-      <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={registerProfessional} onChange={e => setRegisterProfessional(e.target.checked)} style={{ width: 16, height: 16, maxWidth: 16, flex: '0 0 16px' }} />Você é um profissional da saúde e deseja clinicar pelo APP? (Médico, fisioterapeuta, nutricionista...)</label><p className="mt-1 text-xs text-mute">Se marcar, poderá completar os dados profissionais e enviar documentos após entrar.</p>
+      <label htmlFor="register-password-confirmation" className="mt-3 block text-xs font-bold text-mute">Repita a senha</label><input id="register-password-confirmation" type={showPassword?'text':'password'} autoComplete="new-password" value={passwordConfirmation} onChange={e=>setPasswordConfirmation(e.target.value)} className={`${inputClass()} mt-1`}/>
+      <p className="mt-3 text-xs text-mute">Enviaremos um código ao seu e-mail. Confirme-o antes de acessar o sistema.</p>
       <button disabled={busy} onClick={() => void createAccount()} className="mt-5 w-full rounded-xl bg-pine-900 px-4 py-3 font-bold text-white disabled:opacity-50">Cadastrar</button>
       <p className="mt-5 text-center text-sm text-mute">Já tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('login'); setShowPassword(false); }}>Entrar</button></p>
     </Card>;
     if (authView === 'verify') return <Card>
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-moss-50 text-moss-800"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-6 w-6"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/><path d="M12 14v3"/></svg></div>
-      <h2 className="mt-4 text-center font-display text-2xl font-bold text-ink">Confirme seu acesso</h2>
+      <h2 className="mt-4 text-center font-display text-2xl font-bold text-ink">{confirmingRegistration?'Confirme seu e-mail':'Confirme seu acesso'}</h2>
       <p className="mt-2 text-center text-sm leading-6 text-mute">Enviamos um código de 6 números para<br/><strong className="break-words text-ink">{challenge?.destinationMasked}</strong>.</p>
-      <form onSubmit={e=>{e.preventDefault();if(!busy&&code.length===6)void verifyLogin()}} className="mt-5">
+      <form onSubmit={e=>{e.preventDefault();if(!busy&&code.length===6)void (confirmingRegistration?confirmEmail():verifyLogin())}} className="mt-5">
         <label htmlFor="login-verification-code" className="block text-center text-xs font-bold text-mute">Código de verificação</label>
         <input id="login-verification-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="000000" maxLength={6} autoFocus disabled={busy} className="mx-auto mt-2 block w-full min-w-0 rounded-xl border border-line bg-paper px-3 py-4 text-center font-mono text-3xl tracking-[0.3em] text-ink outline-none focus:border-moss-500 focus:ring-2 focus:ring-moss-100" inputMode="numeric" autoComplete="one-time-code"/>
         {challenge?.expiresAt&&<p className="mt-2 text-center text-xs text-mute">Válido até {new Date(challenge.expiresAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} (seu horário local).</p>}
-        <button type="submit" disabled={busy||code.length!==6} className="mt-4 min-h-11 w-full rounded-xl bg-moss-700 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?'Aguarde...':'Validar e entrar'}</button>
+        <button type="submit" disabled={busy||code.length!==6} className="mt-4 min-h-11 w-full rounded-xl bg-moss-700 px-4 py-3 font-bold text-white disabled:opacity-50">{busy?'Aguarde...':confirmingRegistration?'Confirmar e-mail':'Validar e entrar'}</button>
       </form>
-      <div className="mt-5 border-t border-line pt-4 text-center"><p className="text-xs text-mute">Não recebeu ou o código expirou?</p><button type="button" disabled={busy} onClick={()=>void startLogin(true)} className="mt-2 min-h-11 w-full rounded-xl border border-moss-500 px-4 py-2 text-sm font-bold text-moss-800 disabled:opacity-50">Solicitar novo código</button><button type="button" disabled={busy} onClick={()=>{setAuthView('login');setChallenge(null);setCode('');setPassword('');setShowPassword(false);setMessage('')}} className="mt-2 min-h-11 w-full rounded-xl px-4 py-2 text-sm font-semibold text-mute disabled:opacity-50">← Voltar ao login</button></div>
+      <div className="mt-5 border-t border-line pt-4 text-center"><p className="text-xs text-mute">Não recebeu ou o código expirou?</p><button type="button" disabled={busy} onClick={()=>void (confirmingRegistration?resendRegistration():startLogin(true))} className="mt-2 min-h-11 w-full rounded-xl border border-moss-500 px-4 py-2 text-sm font-bold text-moss-800 disabled:opacity-50">Solicitar novo código</button><button type="button" disabled={busy} onClick={()=>{setAuthView('login');setConfirmingRegistration(false);setChallenge(null);setCode('');setPassword('');setShowPassword(false);setMessage('')}} className="mt-2 min-h-11 w-full rounded-xl px-4 py-2 text-sm font-semibold text-mute disabled:opacity-50">← Voltar ao login</button></div>
     </Card>;
     return <Card>
       <h2 className="font-display text-2xl font-bold text-ink">Entrar no MyDoctor</h2>
@@ -464,6 +472,7 @@ export default function V1PreviewApp({ canAdmin = false, onNavigate, recordRefre
       <p className="mt-4 text-xs font-bold uppercase tracking-wide text-mute">Receber código por</p>
       <div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={() => setChannel('email')} className={`rounded-xl border px-3 py-3 text-sm font-bold ${channel === 'email' ? 'border-moss-700 bg-moss-50 text-moss-800' : 'border-line bg-white text-ink'}`}>✉️ E-mail</button><button type="button" onClick={() => setChannel('sms')} className={`rounded-xl border px-3 py-3 text-sm font-bold ${channel === 'sms' ? 'border-moss-700 bg-moss-50 text-moss-800' : 'border-line bg-white text-ink'}`}>💬 SMS</button></div>
       <button disabled={busy} onClick={() => void startLogin()} className="mt-5 w-full rounded-xl bg-pine-900 px-4 py-3 font-bold text-white disabled:opacity-50">Entrar</button>
+      <button type="button" disabled={busy} onClick={()=>void resendRegistration()} className="mt-3 w-full text-sm font-semibold text-moss-700 underline">Confirmar e-mail / reenviar confirmação do cadastro</button>
       <p className="mt-5 text-center text-sm text-mute">Você não tem cadastro? <button className="font-bold text-moss-700 underline" onClick={() => { setAuthView('register'); setShowPassword(false); }}>Clique aqui para se cadastrar</button></p>
     </Card>;
   };
