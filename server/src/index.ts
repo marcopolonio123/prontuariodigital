@@ -11,6 +11,9 @@ import jwt from 'jsonwebtoken';
 import { prisma } from './db.js';
 import clinicalWorkflowRouter from './clinical-workflow.js';
 import v1Router from './v1.js';
+import tutorshipRouter,{createDependent} from './tutorship.js';
+import {managedPatientWhere,managesPatient} from './patient-permissions.js';
+import {PersonError,claimPerson,personData} from './person-identity.js';
 import publicUtilityRouter from './public-utility.js';
 import professionalAccessRouter from './professional-access.js';
 import professionalAdminRouter from './professional-admin.js';
@@ -31,6 +34,7 @@ app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 app.use('/api/v1', clinicalWorkflowRouter);
 app.use('/api/v1', v1Router);
+app.use('/api/v1', tutorshipRouter);
 app.use('/api/v1', publicUtilityRouter);
 app.use('/api/v1', professionalAccessRouter);
 app.use('/api/v1', medicationAgendaRouter);
@@ -46,7 +50,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-06-location-lifecycle', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-08-tutorship', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   const { name, email, password } = req.body ?? {};
@@ -66,7 +70,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 
 async function visiblePatientIds(userId: string): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
-    prisma.patient.findMany({ where: { ownerUserId: userId }, select: { id: true } }),
+    prisma.patient.findMany({ where: managedPatientWhere(userId), select: { id: true } }),
     prisma.accessGrant.findMany({ where: { accountId: userId, permission: { not: 'read_write_consultation' }, validFrom: { lte: new Date() }, revokedAt: null, OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, select: { patientId: true } }),
   ]);
   return new Set([...owned, ...grants].map((x) => ('patientId' in x ? x.patientId : x.id)));
@@ -80,30 +84,23 @@ app.get('/api/patients', auth, async (req: AuthedRequest, res: Response) => {
   res.json(patients.map(toClient));
 });
 
-app.post('/api/patients', auth, async (req: AuthedRequest, res: Response) => {
-  const body = req.body ?? {}; const id = String(body.id ?? crypto.randomUUID());
-  const created = await prisma.patient.create({ data: { id, record: String(body.record ?? ''), name: String(body.name ?? 'Sem nome'), ownerUserId: req.userId!, data: body } });
-  res.json(toClient(created));
-});
-
-app.put('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => {
-  const { id } = req.params; const body = req.body ?? {}; const ids = await visiblePatientIds(req.userId!); const existing = await prisma.patient.findUnique({ where: { id } });
-  if (existing && !ids.has(id)) return fail(res, 403, 'Você não tem acesso a esta ficha.');
-  const saved = await prisma.patient.upsert({ where: { id }, update: { name: String(body.name ?? existing?.name ?? 'Sem nome'), archived: Boolean(body.archived ?? existing?.archived ?? false), data: body }, create: { id, record: String(body.record ?? ''), name: String(body.name ?? 'Sem nome'), ownerUserId: existing?.ownerUserId ?? req.userId!, data: body } });
-  res.json(toClient(saved));
+app.post('/api/patients',auth,async(req:AuthedRequest,res:Response)=>{try{res.status(201).json(await createDependent(req.userId!,req.body??{}))}catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível incluir.'})}});
+app.put('/api/patients/:id',auth,async(req:AuthedRequest,res:Response)=>{
+ try{const saved=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT id FROM "Patient" WHERE id=${req.params.id} FOR UPDATE`;const existing=await tx.patient.findUnique({where:{id:req.params.id}});if(!existing||!managesPatient(existing,req.userId!))throw new PersonError(403,'Sem acesso à ficha.');const identity=personData(req.body);await claimPerson(tx,existing.id,identity);const data={...(existing.data as any),...req.body,...identity,relationshipToOwner:(existing.data as any).relationshipToOwner,createdByUserId:(existing.data as any).createdByUserId};return tx.patient.update({where:{id:existing.id},data:{name:identity.name,data,archived:Boolean(req.body.archived??existing.archived)}})});res.json(toClient(saved))}catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível atualizar.'})}
 });
 
 app.delete('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => {
   const { id } = req.params; const existing = await prisma.patient.findUnique({ where: { id } });
   if (!existing) return fail(res, 404, 'Ficha não encontrada.');
-  if (existing.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono pode arquivar.');
+  if (!managesPatient(existing,req.userId!)) return fail(res, 403, 'Somente o dono pode arquivar.');
   res.json(toClient(await prisma.patient.update({ where: { id }, data: { archived: true } })));
 });
 
 app.post('/api/grants', auth, async (req: AuthedRequest, res: Response) => {
   const { accountId, patientId, level } = req.body ?? {}; const normalizedAccountId = String(accountId); const normalizedPatientId = String(patientId);
   const p = await prisma.patient.findUnique({ where: { id: String(patientId ?? '') } });
-  if (!p || p.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode delegar acesso.');
+  if (!p || !managesPatient(p,req.userId!)) return fail(res, 403, 'Somente o dono da ficha pode delegar acesso.');
+  if(String(level??'leitura')!=='leitura')return fail(res,400,'Para gestão completa, use a solicitação de tutoria.');
   const existingGrant = await prisma.accessGrant.findFirst({ where: { accountId: normalizedAccountId, patientId: normalizedPatientId } });
   const grant = existingGrant ? await prisma.accessGrant.update({ where: { id: existingGrant.id }, data: { level: String(level ?? 'completo'), revokedAt: null } }) : await prisma.accessGrant.create({ data: { accountId: normalizedAccountId, patientId: normalizedPatientId, level: String(level ?? 'completo'), grantedByName: p.name } });
   res.json(grant);
@@ -113,7 +110,7 @@ app.delete('/api/grants/:id', auth, async (req: AuthedRequest, res: Response) =>
   const grant = await prisma.accessGrant.findUnique({ where: { id: req.params.id } });
   if (!grant) return fail(res, 404, 'Delegação não encontrada.');
   const patient = await prisma.patient.findUnique({ where: { id: grant.patientId } });
-  if (patient?.ownerUserId !== req.userId) return fail(res, 403, 'Somente o dono da ficha pode revogar.');
+  if (!patient || !managesPatient(patient,req.userId!)) return fail(res, 403, 'Somente o dono da ficha pode revogar.');
   await prisma.accessGrant.update({ where: { id: grant.id }, data: { revokedAt: new Date() } }); res.status(204).end();
 });
 
@@ -148,6 +145,7 @@ app.listen(PORT, '0.0.0.0', () => {
   // derrubar o query engine e interromper login/prontuário.
   console.log('My Doctor: migração de schema em runtime desativada.');
 });
+
 
 
 

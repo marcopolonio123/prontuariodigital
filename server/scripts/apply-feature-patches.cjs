@@ -25,13 +25,20 @@ async function main() {
       to_regclass('"ProfessionalVerificationDecision"') IS NOT NULL AS admin_ready,
       to_regclass('"ProfessionalVerificationDocument"') IS NOT NULL AS documents_ready,
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'User' AND column_name = 'accountData') AS account_ready,
-      to_regclass('"UserIdentityDocument"') IS NOT NULL AS identity_ready`);
+      to_regclass('"UserIdentityDocument"') IS NOT NULL AS identity_ready,
+      to_regclass('"PersonIdentity"') IS NOT NULL AS person_identity_ready,
+      to_regclass('"TutorRequest"') IS NOT NULL AS tutor_ready,
+      to_regclass('"TutorDocument"') IS NOT NULL AS tutor_documents_ready,
+      to_regclass('"TutorHistory"') IS NOT NULL AS tutor_history_ready,
+      to_regclass('"PatientIdentityDocument"') IS NOT NULL AS patient_document_ready,
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Patient' AND column_name = 'tutorManaged') AS tutor_patient_ready,
+      NOT EXISTS (SELECT 1 FROM \"Patient\" WHERE btrim(coalesce(record,''))='') AS record_ready`);
     if (Object.values(ready.rows[0]).every(value => value === true)) {
       await client.query('COMMIT');
       console.info('MyDoctor: schema dos recursos já preparado.');
       return;
     }
-    for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql', 'professional-documents.sql', 'account-details.sql']) {
+    for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql', 'professional-documents.sql', 'account-details.sql', 'tutorship.sql']) {
       await client.query(fs.readFileSync(path.join(__dirname, '..', 'prisma', filename), 'utf8'));
     }
     await client.query('COMMIT');
@@ -45,3 +52,4 @@ main().catch(() => {
   console.error('MyDoctor: não foi possível preparar o banco. Build interrompido; verifique conexão e permissões.');
   process.exitCode = 1;
 });
+

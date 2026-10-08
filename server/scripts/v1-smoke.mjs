@@ -55,10 +55,12 @@ const self = Array.isArray(initialProfiles) ? initialProfiles.find((p) => p.rela
 assert(self?.id && self?.name === 'Usuário CI MyDoctor', 'perfil próprio não foi criado no cadastro');
 
 console.log('5/10 create dependent profile');
+const personInput={ name:'Filho Teste CI',birthDate:'2018-04-12',motherName:'Mãe Teste CI',relationship:'child' };
+const personSearch=await call('/api/v1/people/search',{method:'POST',headers:auth,body:JSON.stringify(personInput)});
 const profile = await call('/api/v1/profiles', {
   method: 'POST',
   headers: auth,
-  body: JSON.stringify({ name: 'Filho Teste CI', relationship: 'child' }),
+  body: JSON.stringify({...personInput,creationToken:personSearch.creationToken}),
 });
 assert(profile?.id && profile?.relationship === 'child', 'perfil dependente inválido');
 
@@ -200,6 +202,7 @@ try {
 }
 await db.$disconnect();
 console.log('✅ Diary retention, deletion and Consultant consent OK');
+
 
 
 

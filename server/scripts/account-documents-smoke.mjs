@@ -1,3 +1,4 @@
+import {cleanupTutorshipFixtures} from './tutorship-fixtures.mjs';
 import assert from 'node:assert/strict';
 process.env.PORT = '8794'; process.env.MYDOCTOR_ADMIN_EMAILS = '';
 await import('../dist/index.js');
@@ -135,9 +136,11 @@ try {
   assert.deepEqual((await db.patient.findUnique({ where: { id: self.id } })).data.allergies, ['Registro preservado']);
   console.log('✅ Cadastro e documentos: primeiro acesso, flag profissional, edição, preservação de prontuário, anexos privados, análise administrativa e nova validação OK.');
 } finally {
+  await cleanupTutorshipFixtures(db,users);
   await db.identificationLog.deleteMany({where:{byUserId:{in:users}}});
   await db.practitioner.deleteMany({ where: { userId: { in: users } } }); await db.user.deleteMany({ where: { id: { in: users } } }); await db.$disconnect();
 }
 process.exit(0);
+
 
 

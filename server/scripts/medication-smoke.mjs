@@ -1,3 +1,4 @@
+import {cleanupTutorshipFixtures} from './tutorship-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 process.env.PORT = '8789';
@@ -42,7 +43,9 @@ try {
   const owner = await account('Responsável teste');
   const dependentUser = await account('Dependente teste');
   const stranger = await account('Outra conta teste');
-  const profile = await call('/profiles', { name: 'Dependente teste', relationship: 'child' }, owner.token);
+  const personInput={name:'Dependente teste',relationship:'child',birthDate:'2018-05-16',motherName:'Mãe medicamento teste'};
+  const search=await call('/people/search',personInput,owner.token);
+  const profile = await call('/profiles', {...personInput,creationToken:search.body.creationToken}, owner.token);
   const patientId = profile.body.id;
   const endpoint = '/patients/' + patientId + '/medications';
   const grant = await db.accessGrant.create({ data: { accountId: dependentUser.id, patientId, level: 'leitura', scope: ['record'] } });
@@ -106,9 +109,11 @@ try {
   assert.equal((await call(endpoint, null, owner.token)).body.registeredMedications.length, 1);
   console.log('✅ Agenda: validação, fuso/DST, dependente e responsável, concorrência, desligamento, revogação, edição e remoção OK (e-mail simulado).');
 } finally {
+  await cleanupTutorshipFixtures(db,accounts);
   await db.user.deleteMany({ where: { id: { in: accounts } } });
   await db.$disconnect();
 }
 process.exit(0);
+
 
 

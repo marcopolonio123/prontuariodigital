@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from './db.js';
+import {managedPatientWhere,managesPatient,personalOwnerIds} from './patient-permissions.js';
 import { normalizeFollowUp } from './follow-up.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 
@@ -325,7 +326,7 @@ router.get('/consultations/incoming', auth, async (req: AuthedRequest, res: Resp
   const items = await prisma.healthEvent.findMany({
     where: {
       status: 'pending_patient_confirmation',
-      patient: { ownerUserId: req.userId!, archived: false },
+      patient: managedPatientWhere(req.userId!),
     },
     include: { documents: { where: { status: { not: 'deleted' } }, select: { id: true, originalFilename: true } }, patient: { select: { id: true, name: true } }, practitioner: { include: { registrations: { include: { authority: true } } } } },
     orderBy: { createdAt: 'desc' },
@@ -356,7 +357,7 @@ router.post('/consultations/:id/decision', auth, async (req: AuthedRequest, res:
   const decision = String(req.body?.decision ?? '');
   if (!['confirm', 'reject'].includes(decision)) return fail(res, 400, 'Decisão inválida.');
   const event = await prisma.healthEvent.findUnique({ where: { id: req.params.id }, include: { patient: true } });
-  if (!event || event.patient.ownerUserId !== req.userId!) return fail(res, 404, 'Atendimento não encontrado.');
+  if (!event || !managesPatient(event.patient,req.userId!)) return fail(res, 404, 'Atendimento não encontrado.');
   if (event.status !== 'pending_patient_confirmation') return fail(res, 409, 'Este atendimento já foi decidido.');
 
   const expected = new Date(req.body?.expectedUpdatedAt ?? event.updatedAt);
@@ -393,7 +394,7 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
   const practitioner=await verifiedPractitioner(req.userId!);
   if(!practitioner)return fail(res,403,'A pesquisa exige perfil profissional aprovado e ativo.');
   const q=String(req.query.q??'').trim();
-  if(q.length<2||q.length>150)return fail(res,400,'Digite pelo menos duas letras do nome (até 150 caracteres).');
+  if(q.length<2||q.length>150)return fail(res,400,'Informe nome ou número do prontuário (de 2 a 150 caracteres).');
   const patients=await prisma.patient.findMany({where:{archived:false},select:{id:true,name:true,record:true},orderBy:[{name:'asc'},{id:'asc'}]});
   const normalized=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const close=(a:string,b:string)=>{
@@ -403,7 +404,7 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
     return previous[b.length]<=1;
   };
   const words=normalized(q).split(' ').filter(Boolean);
-  const matching=patients.filter(patient=>{const name=normalized(patient.name),parts=name.split(' ');return words.length>0&&words.every(word=>name.includes(word)||parts.some(part=>close(word,part)))});
+  const matching=patients.filter(patient=>{const name=normalized(patient.name),parts=name.split(' ');return normalized(patient.record).includes(normalized(q))||words.length>0&&words.every(word=>name.includes(word)||parts.some(part=>close(word,part)))});
   const details=await prisma.patient.findMany({where:{id:{in:matching.slice(0,20).map(patient=>patient.id)},archived:false},select:{id:true,name:true,record:true,data:true,owner:{select:{accountData:true}}}});
   const mask=(value:string)=>value?value.length<=4?'••••':value.slice(0,-4).replace(/./g,'•')+value.slice(-4):'';
   const items=matching.slice(0,20).flatMap(entry=>{
@@ -468,6 +469,7 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
 });
 
 export default router;
+
 
 
 

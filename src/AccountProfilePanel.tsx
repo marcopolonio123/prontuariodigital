@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatCpf, formatCep, formatRg, validCpf, rgError, BRAZIL_UFS } from '../server/src/document-validation';
 import type { AccountProfileV1, MyDoctorV1Api, VerificationDocumentV1 } from './lib/api-v1';
 const field = 'mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-sm';
-function formatPhone(value: string) {
+export function formatPhone(value: string) {
   const digits = value.replace(/\D/g, '').slice(0,15);
   if (!digits) return value.trim().startsWith('+') ? '+' : '';
   const international = value.trim().startsWith('+');
@@ -74,6 +74,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     const cepIssue = data.postalCode && data.postalCode.replace(/\D/g,'').length !== 8 ? 'CEP deve ter 8 números.' : '';
     if (cpfIssue || rgIssue || cepIssue) { setMessage(cpfIssue || rgIssue || cepIssue); window.document.getElementById(cpfIssue ? 'account-cpf' : rgIssue ? 'account-rg' : 'account-postalCode')?.focus(); return; }
     if (data.rgType === 'CIN' && data.rg && data.cpf && data.rg.replace(/\D/g,'') !== data.cpf.replace(/\D/g,'')) return setMessage('Os dois campos de CPF devem conter o mesmo número.');
+    if(!data.cpf&&(data.motherName??'').trim().length<3)return setMessage('Sem CPF, informe o nome completo da mãe.');
     if(digitalPhoto&&!digitalConsent)return setMessage('Autorize o cadastro opcional da foto da digital ou descarte a foto.');
     setBusy(true); setMessage('');
     try {
@@ -108,7 +109,7 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     rg: rgError(data?.rg ?? '', data?.rgUf ?? '', data?.rgType ?? 'RG'),
     postalCode: data?.postalCode && data.postalCode.replace(/\D/g,'').length !== 8 ? 'CEP deve ter 8 números.' : '',
   };
-  function text(label: string, key: 'name' | 'phone' | 'cpf' | 'rg' | 'postalCode' | 'street' | 'number' | 'complement' | 'neighborhood' | 'city' | 'country', maxLength: number, autoComplete?: string, layout = '') {
+  function text(label: string, key: 'motherName' | 'name' | 'phone' | 'cpf' | 'rg' | 'postalCode' | 'street' | 'number' | 'complement' | 'neighborhood' | 'city' | 'country', maxLength: number, autoComplete?: string, layout = '') {
     if (!data) return null;
     const mask = (value: string) => key === 'phone' ? formatPhone(value) : key === 'cpf' ? formatCpf(value) : key === 'postalCode' ? formatCep(value) : key === 'rg' ? formatRg(value, data.rgUf ?? '', data.rgType ?? 'RG') : value;
     const issue = key === 'cpf' || key === 'rg' || key === 'postalCode' ? (touched[key] ? errors[key] : '') : '';
@@ -127,6 +128,8 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
         {text('Nome completo *', 'name', 150, 'name')}<label className="text-xs font-bold">E-mail de acesso<input readOnly value={data.email} className={field} /></label>
         <label className="text-xs font-bold">Data de nascimento *<input required type="date" min="1900-01-01" max={new Date().toISOString().slice(0,10)} value={data.birthDate} onChange={e => setData({ ...data, birthDate: e.target.value })} className={field} /></label>
         {text('Celular (país + DDD + número)', 'phone', 25, 'tel')}
+        {text('Nome completo da mãe'+(!data.cpf?' *':''),'motherName',150)}
+        {!data.cpf&&<p className="text-xs text-mute sm:col-span-2">Sem CPF, nome da mãe e nascimento ajudam a verificar possíveis cadastros duplicados.</p>}
         <label className="text-xs font-bold">Sexo<select value={data.sex} onChange={e => setData({ ...data, sex: e.target.value })} className={field}><option value="">Não informado</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option><option value="unknown">Prefiro não informar</option></select></label>
       </fieldset>
       <fieldset disabled={busy} className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-12">
@@ -163,3 +166,4 @@ export default function AccountProfilePanel({ api, onSaved, onContinue, onProfes
     </form> : <p className="mt-3 text-sm">Carregando cadastro...</p>}
   </section>;
 }
+

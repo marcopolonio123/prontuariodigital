@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
+import {managedPatientWhere,managesPatient,personalOwnerIds} from './patient-permissions.js';
 import { parseSchedule } from './medication-schedule.js';
 
 interface AuthedRequest extends Request { userId?: string; }
@@ -16,18 +17,18 @@ export function grantAllowsMedication(scope: unknown) {
   return scope == null || (Array.isArray(scope) && (scope.includes('record') || scope.includes('medications')));
 }
 export async function medicationRecipients(patientId: string) {
-  const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { ownerUserId: true } });
+  const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { ownerUserId: true, tutorUserId:true,tutorManaged:true,data:true } });
   if (!patient) return [];
   const now = new Date();
   const grants = await prisma.accessGrant.findMany({ where: { patientId, practitionerId: null, revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] }, select: { accountId: true, scope: true } });
-  const ids = [patient.ownerUserId, ...grants.filter(grant => grantAllowsMedication(grant.scope)).map(grant => grant.accountId)];
+  const ids = [...personalOwnerIds(patient), ...grants.filter(grant => grantAllowsMedication(grant.scope)).map(grant => grant.accountId)];
   const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, role: true } });
-  return users.filter(user => user.id === patient.ownerUserId || user.role !== 'profissional');
+  return users.filter(user => personalOwnerIds(patient).includes(user.id) || user.role !== 'profissional');
 }
 async function accessible(patientId: string, userId: string) {
   const patient = await prisma.patient.findUnique({ where: { id: patientId } });
   if (!patient || patient.archived) return null;
-  if (patient.ownerUserId === userId) return patient;
+  if (managesPatient(patient,userId)) return patient;
   const now = new Date();
   const grants = await prisma.accessGrant.findMany({ where: { patientId, accountId: userId, permission: { not: 'read_write_consultation' }, revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] }, select: { scope: true } });
   return grants.some(grant => grantAllowsMedication(grant.scope)) ? patient : null;
@@ -42,20 +43,20 @@ router.get('/patients/:patientId/medications', auth, async (req: AuthedRequest, 
     name: item.name.slice(0, 150), dose: typeof item.dose === 'string' ? item.dose.slice(0, 150) : '',
     frequency: typeof item.frequency === 'string' ? item.frequency.slice(0, 300) : '',
   })) : [];
-  res.json({ registeredMedications, schedules, alertsEnabled: patient.medicationAlertsEnabled, canEdit: patient.ownerUserId === req.userId,
+  res.json({ registeredMedications, schedules, alertsEnabled: patient.medicationAlertsEnabled, canEdit: managesPatient(patient,req.userId!),
     deliveryAvailable: false,
-    recipients: recipients.map(user => ({ id: user.id, name: user.name, emailMasked: user.email.replace(/^(.).+(@.*)$/, '$1***$2'), owner: user.id === patient.ownerUserId })) });
+    recipients: recipients.map(user => ({ id: user.id, name: user.name, emailMasked: user.email.replace(/^(.).+(@.*)$/, '$1***$2'), owner: personalOwnerIds(patient).includes(user.id) })) });
 });
 router.put('/patients/:patientId/medications/alerts', auth, async (req: AuthedRequest, res: Response) => {
   const patient = await accessible(req.params.patientId, req.userId!);
-  if (!patient || patient.ownerUserId !== req.userId) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar os alertas.' });
+  if (!patient || !managesPatient(patient,req.userId!)) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar os alertas.' });
   if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Informe se os alertas estão ligados ou desligados.' });
   await prisma.patient.update({ where: { id: patient.id }, data: { medicationAlertsEnabled: req.body.enabled } });
   res.json({ alertsEnabled: req.body.enabled });
 });
 async function save(req: AuthedRequest, res: Response) {
   const patient = await accessible(req.params.patientId, req.userId!);
-  if (!patient || patient.ownerUserId !== req.userId) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar a agenda.' });
+  if (!patient || !managesPatient(patient,req.userId!)) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar a agenda.' });
   try {
     const input = parseSchedule(req.body);
     const recipients = await medicationRecipients(patient.id);
@@ -76,11 +77,12 @@ router.post('/patients/:patientId/medications', auth, save);
 router.put('/patients/:patientId/medications/:scheduleId', auth, save);
 router.delete('/patients/:patientId/medications/:scheduleId', auth, async (req: AuthedRequest, res: Response) => {
   const patient = await accessible(req.params.patientId, req.userId!);
-  if (!patient || patient.ownerUserId !== req.userId) return res.status(403).json({ error: 'Somente o titular/responsável pode remover esta agenda.' });
+  if (!patient || !managesPatient(patient,req.userId!)) return res.status(403).json({ error: 'Somente o titular/responsável pode remover esta agenda.' });
   const result = await prisma.medicationSchedule.updateMany({ where: { id: req.params.scheduleId, patientId: patient.id, active: true }, data: { active: false, alertsEnabled: false } });
   return result.count ? res.json({ ok: true }) : res.status(404).json({ error: 'Agenda não encontrada.' });
 });
 export default router;
+
 
 
 
