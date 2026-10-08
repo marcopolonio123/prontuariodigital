@@ -7,6 +7,9 @@ import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
+import {managedPatientWhere,managesPatient} from './patient-permissions.js';
+import {claimPerson,PersonError} from './person-identity.js';
+import {createDependent} from './tutorship.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 import { consultantPolicy, getConsultantUsage, reserveConsultantResponse, completeConsultantResponse, releaseConsultantResponse } from './consultant-usage.js';
 import { validCpf, normalizeCpf, normalizeRg, rgError, BRAZIL_UFS } from './document-validation.js';
@@ -91,9 +94,9 @@ function randomCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
-export async function visiblePatientIds(userId: string, includeProfessional = false): Promise<Set<string>> {
+export async function visiblePatientIds(userId: string, includeProfessional = false, requireWrite = false): Promise<Set<string>> {
   const [owned, grants] = await Promise.all([
-    prisma.patient.findMany({ where: { ownerUserId: userId, archived: false }, select: { id: true } }),
+    prisma.patient.findMany({ where: managedPatientWhere(userId), select: { id: true } }),
     prisma.accessGrant.findMany({
       where: {
         accountId: userId,
@@ -106,7 +109,7 @@ export async function visiblePatientIds(userId: string, includeProfessional = fa
       select: { patientId: true },
     }),
   ]);
-  return new Set([...owned.map((p) => p.id), ...grants.map((g) => g.patientId)]);
+  return new Set([...owned.map((p) => p.id), ...(requireWrite?[]:grants.map((g) => g.patientId))]);
 }
 
 async function ownedProfessionalEvent(req: AuthedRequest) {
@@ -288,7 +291,7 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
 function accountView(user: { id: string; name: string; email: string; phone: string | null }, data: any) {
   return { fingerprintReference: referenceMetadata(data?.fingerprintReference), id: user.id, name: user.name, email: user.email, phone: user.phone,
     rgUf: data?.rgUf ?? '', rgType: data?.rgType ?? 'RG', avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
-    birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
+    motherName:data?.motherName??'', birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
 router.get('/address/cep/:cep', auth, async (req: AuthedRequest, res: Response) => {
   const cep = req.params.cep;
@@ -320,6 +323,8 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   const rawSex = String(body.sex ?? '').trim().toLowerCase();
   const sex = ({ feminino: 'female', f: 'female', masculino: 'male', m: 'male', outro: 'other', 'não informado': '', 'nao informado': '' } as Record<string, string>)[rawSex] ?? rawSex;
   const city = String(body.city ?? '').trim(); const state = String(body.state ?? '').trim().toUpperCase();
+  const motherName=String(body.motherName??'').trim();
+  if(motherName.length>150||(!body.cpf&&motherName.length<3))return fail(res,400,'Sem CPF, informe o nome completo da mãe.');
   const cpf = normalizeCpf(String(body.cpf ?? ''));
   const rg = normalizeRg(String(body.rg ?? ''));
   const rgType = String(body.rgType ?? 'RG').toUpperCase(); const rgUf = String(body.rgUf ?? '').trim().toUpperCase();
@@ -349,12 +354,13 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
       const identity = await tx.userIdentityDocument.findUnique({ where: { userId: old.id }, select: { kind: true } });
       if (identity?.kind === 'Certidão de nascimento' && !isUnder18(birthDate)) throw new Error('AGE');
-      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...(referenceChanged?{fingerprintReference:reference}:{}), ...address, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
+      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...(referenceChanged?{fingerprintReference:reference}:{}), ...address, motherName, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
       const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
       const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
+      if(self)await claimPerson(tx,self.id,{name,birthDate,motherName,cpf});
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
-      else await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });
+      else {const created=await tx.patient.create({ data: { id: randomUUID(), ownerUserId: old.id, name, data } });await claimPerson(tx,created.id,{name,birthDate,motherName,cpf});}
       if(referenceChanged)await tx.identificationLog.create({data:{method:'reference',byUserId:old.id,byName:name,result:reference?'reference_registered':'reference_removed',detail:'Foto de referência do piloto; comparação biométrica não ativada.'}});
       if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || normalizeRg(String((old.accountData as any)?.rg ?? '')) !== rg || ((old.accountData as any)?.rgUf ?? '') !== (rgType === 'CIN' ? '' : rgUf) || ((old.accountData as any)?.rgType ?? 'RG') !== rgType || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
@@ -511,6 +517,7 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
       })),
     });
   } catch (error) {
+    if(error instanceof PersonError)return fail(res,error.status,error.message);
     if (error instanceof Error && error.message === 'PROFESSIONAL_REGISTRATION_IN_USE') {
       return fail(res, 409, 'Este registro profissional já está associado a outra conta.');
     }
@@ -523,10 +530,10 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
 router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
   const userId = req.userId!;
   // Não selecionar colunas de recursos novos para listar perfis antigos.
-  const profileSelect = { id: true, record: true, name: true, ownerUserId: true, archived: true, data: true } as const;
+  const profileSelect = { id: true, record: true, name: true, ownerUserId: true, archived: true, data: true, tutorUserId:true, tutorManaged:true } as const;
   try {
   const [owned, grants] = await Promise.all([
-    prisma.patient.findMany({ where: { ownerUserId: userId, archived: false }, orderBy: { name: 'asc' }, select: profileSelect }),
+    prisma.patient.findMany({ where: managedPatientWhere(userId), orderBy: { name: 'asc' }, select: profileSelect }),
     prisma.accessGrant.findMany({
       where: {
         accountId: userId,
@@ -545,8 +552,10 @@ router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
       id: p.id,
       record: p.record,
       name: p.name,
-      relationship: (p.data as any)?.relationshipToOwner ?? 'self',
-      accessLevel: 'owner',
+      relationship: p.ownerUserId===userId&&(p.data as any)?.relationshipToOwner==='self'?'self':p.tutorUserId===userId?((p.data as any)?.relationshipToTutor??(p.data as any)?.relationshipToOwner??'dependent'):((p.data as any)?.relationshipToOwner??'self'),
+      accessLevel: p.tutorUserId===userId?'tutor':'owner',
+      isTutor: p.tutorUserId===userId,
+      hasTutor: !!p.tutorUserId,
       source: 'owned',
     })),
     ...grants
@@ -570,38 +579,10 @@ router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
   }
 });
 
-/** Cria um perfil dependente sem exigir credenciais próprias. */
-router.post('/profiles', auth, async (req: AuthedRequest, res: Response) => {
-  const body = req.body ?? {};
-  const name = String(body.name ?? '').trim();
-  const relationship = String(body.relationship ?? 'dependent');
-  if (!name) return fail(res, 400, 'Informe o nome da pessoa.');
-
-  const id = randomUUID();
-  const patient = await prisma.patient.create({
-    data: {
-      id,
-      record: String(body.record ?? ''),
-      name,
-      ownerUserId: req.userId!,
-      data: {
-        ...body,
-        id,
-        name,
-        relationshipToOwner: relationship,
-        createdByUserId: req.userId!,
-      },
-    },
-  });
-
-  res.status(201).json({
-    id: patient.id,
-    record: patient.record,
-    name: patient.name,
-    relationship,
-    accessLevel: 'owner',
-    source: 'owned',
-  });
+/** Creating a person requires a prior search and a globally unique identity. */
+router.post('/profiles',auth,async(req:AuthedRequest,res:Response)=>{
+ try{res.status(201).json(await createDependent(req.userId!,req.body??{}))}
+ catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível cadastrar. Consulte novamente antes de incluir.'})}
 });
 
 /** Linha do tempo clínica de um perfil autorizado. */
@@ -620,7 +601,7 @@ router.get('/patients/:patientId/events', auth, async (req: AuthedRequest, res: 
 
 /** Inclui evento manual do usuário/responsável na linha do tempo. */
 router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
 
   const body = req.body ?? {};
@@ -678,7 +659,7 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
 
 /** Edita um evento manual preservando snapshot anterior na proveniência. */
 router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
@@ -753,7 +734,7 @@ function consultantContent(text:string,images:string[]){return images.length?[{t
 function imageProviderError(res:Response,images:string[],status:number){return fail(res,status===429?503:502,images.length&&[400,404,415,422].includes(status)?'O modelo de IA configurado não aceitou as imagens. Tente sem anexos ou contate o administrador para ativar um modelo com visão. Nenhum uso foi descontado.':'Não foi possível analisar a pergunta. Tente novamente; nenhum uso foi descontado.')}
 
 router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const question = String(req.body?.question ?? '').trim();
   if (!question || question.length > 4000) return fail(res, 400, 'Escreva uma pergunta com até 4.000 caracteres.');
@@ -846,7 +827,7 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
 
 /** Exclusão definitiva de um relato do Diário, sem preservar cópia do texto. */
 router.delete('/patients/:patientId/diary/:eventId/entries/:entryIndex', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const index = Number(req.params.entryIndex);
   if (!Number.isInteger(index) || index < 0) return fail(res, 400, 'Relato inválido.');
@@ -874,7 +855,7 @@ router.delete('/patients/:patientId/diary/:eventId/entries/:entryIndex', auth, a
 });
 
 router.post('/patients/:patientId/events/:eventId/inactivate', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const reason = String(req.body?.reason ?? '').trim();
   if (!reason) return fail(res, 400, 'Informe o motivo da inativação.');
@@ -890,7 +871,7 @@ router.post('/patients/:patientId/events/:eventId/inactivate', auth, async (req:
 });
 
 router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
@@ -931,7 +912,7 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
   const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!event) return fail(res, 404, 'Atendimento não encontrado.');
   if (event.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status) && !ownEvent) return fail(res, 403, 'Anexos deste atendimento devem ser alterados pelo profissional em Clinicar.');
-  const personal = await visiblePatientIds(req.userId!);
+  const personal = await visiblePatientIds(req.userId!,false,true);
   if (event.authoredByUserId === req.userId && event.practitionerId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status)) return fail(res, 403, 'Este atendimento já foi aprovado e está disponível somente para consulta.');
   if (!personal.has(req.params.patientId) && (event.authoredByUserId !== req.userId || !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status))) return fail(res, 403, 'Em Clinicar, anexos só podem ser enviados ao seu atendimento ainda não aprovado.');
   const category = String(req.body?.category ?? '');
@@ -994,7 +975,7 @@ router.get('/patients/:patientId/events/:eventId/documents/:documentId/download'
 });
 
 router.post('/patients/:patientId/events/:eventId/documents/:documentId/inactivate', auth, async (req: AuthedRequest, res: Response) => {
-  const ids = await visiblePatientIds(req.userId!);
+  const ids = await visiblePatientIds(req.userId!,false,true);
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (event?.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(event.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
@@ -1013,5 +994,6 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
