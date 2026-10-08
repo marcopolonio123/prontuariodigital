@@ -14,8 +14,9 @@ async function call(path, token, body, method = body ? 'POST' : 'GET') {
 async function account(name) {
   const email = 'admin-test-' + Date.now() + '-' + accounts.length + '@mydoctor.test';
   const password = 'Teste123!';
-  const registered = await call('/auth/register', null, { name, email, password });
+  const registered = await call('/auth/register', null, { name, email, password,passwordConfirmation:password });
   assert.equal(registered.status, 201); accounts.push(registered.body.id);
+  const confirmation=await call('/auth/registration/verify',null,{challengeId:registered.body.challengeId,code:registered.body.developmentCode});assert.equal(confirmation.status,200);
   const start = await call('/auth/login/start', null, { email, password, channel: 'email' });
   const login = await call('/auth/login/verify', null, { challengeId: start.body.challengeId, code: start.body.developmentCode });
   assert.equal(login.status, 200);
@@ -337,5 +338,6 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
