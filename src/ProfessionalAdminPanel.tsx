@@ -1,3 +1,4 @@
+import TutorRequestsPanel from './components/TutorRequestsPanel';
 import PaginatedList from './components/PaginatedList';
 import { useEffect, useRef, useState } from 'react';
 import type { AdminProfessionalV1, MyDoctorV1Api } from './lib/api-v1';
@@ -36,7 +37,7 @@ export default function ProfessionalAdminPanel({ api }: { api: MyDoctorV1Api }) 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível registrar a decisão.'); }
     finally { setBusy(false); }
   }
-  return <div className="space-y-3">
+  return <div className="space-y-3"><TutorRequestsPanel api={api} admin/>
     <section className="rounded-xl border border-line bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">Validação de profissionais</h2><p className="mt-1 text-xs text-mute">Confira a identidade e o registro no conselho antes de aprovar. As conferências são manuais.</p></div><button disabled={busy} onClick={() => void load()} className="rounded-lg border border-line px-3 py-2 text-sm">Atualizar</button></div>
       <label className="mt-3 block text-xs font-bold">Filtrar por status<select value={filter} onChange={e => setFilter(e.target.value)} className={field}><option value="all">Todos</option>{Object.entries(statusText).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
@@ -61,4 +62,5 @@ export default function ProfessionalAdminPanel({ api }: { api: MyDoctorV1Api }) 
     </section>}
   </div>;
 }
+
 
