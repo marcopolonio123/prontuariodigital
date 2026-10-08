@@ -28,7 +28,7 @@ export interface FingerprintReferenceInput {photo:string;consent:true;finger:'ri
 export interface AccountProfileV1 extends V1User { motherName?:string; fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
 export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
-export interface RegisterResponse extends V1User { requiresMfaLogin: true; }
+export interface RegisterResponse extends V1User, LoginStartResponse { requiresMfaLogin: true; requiresEmailConfirmation:true; emailSent:boolean; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
 export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; isTutor?:boolean;hasTutor?:boolean; }
 export interface ProfessionalRegistrationV1 { id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
@@ -222,7 +222,9 @@ export class MyDoctorV1Api {
     return (await response.json()) as T;
   }
 
-  register(input: { name: string; email: string; password: string; phone?: string; isHealthProfessional?: boolean }) { return this.req<RegisterResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) }); }
+  resendRegistration(email:string,password:string){return this.req<LoginStartResponse & {emailSent:boolean}>('/auth/registration/resend',{method:'POST',body:JSON.stringify({email,password})})}
+  confirmRegistration(challengeId:string,code:string){return this.req<{confirmed:boolean}>('/auth/registration/verify',{method:'POST',body:JSON.stringify({challengeId,code})})}
+  register(input: { name: string; email: string; password: string; passwordConfirmation:string; phone?: string }) { return this.req<RegisterResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) }); }
   startPasswordLogin(input: { email: string; password: string; channel: MfaChannel }) { return this.req<LoginStartResponse>('/auth/login/start', { method: 'POST', body: JSON.stringify(input) }); }
   verifyPasswordLogin(input: { challengeId: string; code: string }) { return this.req<LoginVerifyResponse>('/auth/login/verify', { method: 'POST', body: JSON.stringify(input) }); }
   lookupPractitioner(council:string,registration:string,region:string){return this.req<{id:string;name:string;specialty:string|null;profession:string}|null>('/practitioners/lookup?'+new URLSearchParams({council,registration,region}))}
