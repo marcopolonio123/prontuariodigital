@@ -163,7 +163,7 @@ export class MyDoctorV1Api {
 
   constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
 
-  searchPeople(input:{cpf:string;name:string;birthDate:string;motherName:string}){return this.req<{items:PersonCandidate[];more:boolean;creationToken:string|null}>('/people/search',{method:'POST',body:JSON.stringify(input)})}
+  searchPeople(input:{cpf:string;name:string;birthDate:string;motherName:string;record?:string}){return this.req<{items:PersonCandidate[];more:boolean;creationToken:string|null}>('/people/search',{method:'POST',body:JSON.stringify(input)})}
   createPerson(input:PersonV1,relationship:string,creationToken:string){return this.req<PatientProfile>('/profiles',{method:'POST',body:JSON.stringify({...input,relationship,creationToken})})}
   getPerson(id:string){return this.req<PersonV1>('/people/'+encodeURIComponent(id))}
   savePerson(id:string,input:PersonV1){return this.req<{id:string;name:string}>('/people/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(input)})}
