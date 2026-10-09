@@ -37,7 +37,7 @@ export async function findPeople(tx:any,input:ReturnType<typeof identityInput>,a
  let condition:Prisma.Sql;
  if(input.cpf)condition=Prisma.sql`${cpfExpr}=${input.cpf} OR EXISTS(SELECT 1 FROM "PersonIdentity" i WHERE i."patientId"=p.id AND i.key=${'cpf:'+input.cpf})`;
  else {const n=normalizedPerson(input.name),m=normalizedPerson(input.motherName);condition=Prisma.sql`${birth}=${input.birthDate} AND ${mother}=${m} AND ${approximate?Prisma.sql`strpos(${name},${n})>0`:Prisma.sql`${name}=${n}`}`;}
- return tx.$queryRaw(Prisma.sql`SELECT p.id,p.name,p.record,p.archived,p."ownerUserId",p."tutorUserId",p."tutorManaged",p.data,${cpfExpr} AS cpf FROM "Patient" p JOIN "User" u ON u.id=p."ownerUserId" WHERE (${condition}) ORDER BY p.name,p.id LIMIT 21`) as Promise<any[]>;
+ return tx.$queryRaw(Prisma.sql`SELECT p.id,p.name,p."recordNumber"::text AS record,p.archived,p."ownerUserId",p."tutorUserId",p."tutorManaged",p.data,${cpfExpr} AS cpf FROM "Patient" p JOIN "User" u ON u.id=p."ownerUserId" WHERE (${condition}) ORDER BY p.name,p.id LIMIT 21`) as Promise<any[]>;
 }
 // Locks the global keys before checking both old JSON registrations and the unique registry.
 export async function claimPerson(tx:any,patientId:string,input:ReturnType<typeof identityInput>){

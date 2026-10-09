@@ -20,9 +20,11 @@ try{
  const search=await call('/people/search',a,identity);assert.equal(search.status,200);assert.equal(search.body.items.length,0);
  const input={...identity,relationship:'child',creationToken:search.body.creationToken};
  const race=await Promise.all([call('/profiles',a,input),call('/profiles',a,input)]);assert.deepEqual(race.map(r=>r.status).sort(),[201,409],'Inclusão concorrente duplicou pessoa');
- const person=race.find(r=>r.status===201).body,id=person.id;assert.equal(person.isTutor,true);
+ const person=race.find(r=>r.status===201).body,id=person.id;assert.equal(person.isTutor,true);assert.match(person.record,/^[1-9][0-9]{0,8}$/);
+ assert.equal((await call('/people/search',b,{record:'PR-NOTFOUND'})).status,400);
+ assert.equal((await call('/account',a)).body.userNumber,(await db.user.findUniqueOrThrow({where:{id:a.id}})).userNumber);
  const byRecord=await call('/people/search',b,{record:person.record.toLowerCase()});assert.equal(byRecord.status,200);assert.equal(byRecord.body.items[0].id,id);assert.equal(byRecord.body.creationToken,null);assert.equal(byRecord.body.items[0].motherName,undefined);
- const missingRecord=await call('/people/search',b,{record:'PR-NOTFOUND'});assert.equal(missingRecord.body.items.length,0);assert.equal(missingRecord.body.creationToken,null);
+ const missingRecord=await call('/people/search',b,{record:'999999999'});assert.equal(missingRecord.body.items.length,0);assert.equal(missingRecord.body.creationToken,null);
  const searchB=await call('/people/search',b,{...identity,name:'criança ótima'});assert.equal(searchB.body.items.length,1);assert.equal(searchB.body.items[0].hasTutor,true);assert.equal(searchB.body.items[0].motherName,undefined);assert.equal(searchB.body.items[0].tutorUserId,undefined);
  assert.equal((await call('/patients/'+id+'/events',b)).status,403);assert.equal((await call('/people/'+id,b)).status,403);
  assert.equal((await call('/people/'+id+'/document',a,{...pdf,kind:'Certidão de nascimento'})).status,200);
@@ -34,7 +36,7 @@ try{
  assert.equal((await call('/tutorship/requests/'+requestB.body.id+'/decision',b,{decision:'approve'})).status,403);
  assert.equal((await call('/tutorship/requests/'+requestB.body.id+'/decision',c,{decision:'approve'})).status,403);
  const decisions=await Promise.all([call('/tutorship/requests/'+requestB.body.id+'/decision',a,{decision:'approve'}),call('/tutorship/requests/'+requestC.body.id+'/decision',a,{decision:'approve'})]);assert.deepEqual(decisions.map(r=>r.status).sort(),[200,409],'Duas transferências foram confirmadas');
- const p=await db.patient.findUniqueOrThrow({where:{id}}),winner=p.tutorUserId===b.id?b:c,loser=winner===b?c:b;assert.ok([b.id,c.id].includes(p.tutorUserId));
+ const p=await db.patient.findUniqueOrThrow({where:{id}}),winner=p.tutorUserId===b.id?b:c,loser=winner===b?c:b;assert.ok([b.id,c.id].includes(p.tutorUserId));assert.equal(String(p.recordNumber),person.record);
  assert.equal((await call('/profiles',a)).body.some(p=>p.id===id),false,'Tutor anterior permaneceu na lista');
  assert.equal((await call('/patients/'+id+'/events',a)).status,403,'Tutor anterior lê prontuário');
  assert.equal((await call('/patients/'+id+'/events',winner)).body.some(e=>e.id===event.body.id),true,'Transferência perdeu o atendimento');

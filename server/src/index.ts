@@ -50,7 +50,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-08-registration-confirmation', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-09-sequential-identifiers', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', (_req:Request,res:Response)=>res.redirect(307,'/api/v1/auth/register'));
 
@@ -70,7 +70,7 @@ async function visiblePatientIds(userId: string): Promise<Set<string>> {
   return new Set([...owned, ...grants].map((x) => ('patientId' in x ? x.patientId : x.id)));
 }
 
-const toClient = (p: { id: string; record: string; archived: boolean; data: unknown }) => ({ ...(p.data as object), id: p.id, record: p.record, archived: p.archived });
+const toClient = (p: { id: string; recordNumber: number; archived: boolean; data: unknown }) => ({ ...(p.data as object), id: p.id, record: String(p.recordNumber), archived: p.archived });
 
 app.get('/api/patients', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);

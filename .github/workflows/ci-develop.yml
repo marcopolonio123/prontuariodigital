@@ -66,6 +66,7 @@ jobs:
       - run: npx prisma db push --skip-generate
       - name: Feature patches are additive and idempotent
         run: |
+          node scripts/sequential-identifiers-smoke.mjs
           NODE_ENV=production node scripts/apply-feature-patches.cjs
           NODE_ENV=production node scripts/apply-feature-patches.cjs
       - run: npm run build
