@@ -169,7 +169,6 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       await tx.patient.create({
         data: {
           id: patientId,
-          record: 'PR-'+patientId.replace(/-/g,'').toUpperCase(),
           name,
           ownerUserId: created.id,
           data: {
@@ -320,8 +319,8 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
   });
 });
 
-function accountView(user: { id: string; name: string; email: string; phone: string | null }, data: any) {
-  return { fingerprintReference: referenceMetadata(data?.fingerprintReference), id: user.id, name: user.name, email: user.email, phone: user.phone,
+function accountView(user: { userNumber: number; id: string; name: string; email: string; phone: string | null }, data: any) {
+  return { fingerprintReference: referenceMetadata(data?.fingerprintReference), id: user.id, userNumber: user.userNumber, name: user.name, email: user.email, phone: user.phone,
     rgUf: data?.rgUf ?? '', rgType: data?.rgType ?? 'RG', avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
     motherName:data?.motherName??'', birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
@@ -339,7 +338,7 @@ router.get('/address/cep/:cep', auth, async (req: AuthedRequest, res: Response) 
 });
 router.get('/account', auth, async (req: AuthedRequest, res: Response) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
+    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, userNumber: true, name: true, email: true, phone: true, accountData: true } });
     if (!user) return fail(res, 401, 'Entre novamente.');
     const patients = await prisma.patient.findMany({ where: { ownerUserId: user.id, archived: false }, select: { data: true } });
     const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
@@ -386,13 +385,13 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
       const identity = await tx.userIdentityDocument.findUnique({ where: { userId: old.id }, select: { kind: true } });
       if (identity?.kind === 'Certidão de nascimento' && !isUnder18(birthDate)) throw new Error('AGE');
-      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...(referenceChanged?{fingerprintReference:reference}:{}), ...address, motherName, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, name: true, email: true, phone: true, accountData: true } });
+      const user = await tx.user.update({ where: { id: old.id }, data: { name, phone, accountData: { ...((old.accountData as object) ?? {}), ...(referenceChanged?{fingerprintReference:reference}:{}), ...address, motherName, cpf, rg, rgType, rgUf: rgType === 'CIN' ? '' : rgUf, avatarDataUrl: avatar, birthDate, sex, city, state, isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() }, ...(old.phone !== phone ? { phoneVerifiedAt: null } : {}) }, select: { id: true, userNumber: true, name: true, email: true, phone: true, accountData: true } });
       const patients = await tx.patient.findMany({ where: { ownerUserId: old.id, archived: false }, select: { id: true, data: true } });
       const self = patients.find(p => (p.data as any)?.relationshipToOwner === 'self');
       const data = { ...((self?.data as object) ?? {}), name, birthDate, sex, city, state, relationshipToOwner: 'self', isHealthProfessional: body.isHealthProfessional === true, accountCompletedAt: new Date().toISOString() };
       if(self)await claimPerson(tx,self.id,{name,birthDate,motherName,cpf});
       if (self) await tx.patient.update({ where: { id: self.id }, data: { name, data } });
-      else {const id=randomUUID();const created=await tx.patient.create({ data: { id, record:'PR-'+id.replace(/-/g,'').toUpperCase(), ownerUserId: old.id, name, data } });await claimPerson(tx,created.id,{name,birthDate,motherName,cpf});}
+      else {const id=randomUUID();const created=await tx.patient.create({ data: { id, ownerUserId: old.id, name, data } });await claimPerson(tx,created.id,{name,birthDate,motherName,cpf});}
       if(referenceChanged)await tx.identificationLog.create({data:{method:'reference',byUserId:old.id,byName:name,result:reference?'reference_registered':'reference_removed',detail:'Foto de referência do piloto; comparação biométrica não ativada.'}});
       if (old.name !== name || ((old.accountData as any)?.cpf ?? '') !== cpf || normalizeRg(String((old.accountData as any)?.rg ?? '')) !== rg || ((old.accountData as any)?.rgUf ?? '') !== (rgType === 'CIN' ? '' : rgUf) || ((old.accountData as any)?.rgType ?? 'RG') !== rgType || ((old.accountData as any)?.birthDate ?? birthDate) !== birthDate) {
         const practitioner = await tx.practitioner.findUnique({ where: { userId: old.id } });
@@ -562,7 +561,7 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
 router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
   const userId = req.userId!;
   // Não selecionar colunas de recursos novos para listar perfis antigos.
-  const profileSelect = { id: true, record: true, name: true, ownerUserId: true, archived: true, data: true, tutorUserId:true, tutorManaged:true } as const;
+  const profileSelect = { id: true, recordNumber: true, name: true, ownerUserId: true, archived: true, data: true, tutorUserId:true, tutorManaged:true } as const;
   try {
   const [owned, grants] = await Promise.all([
     prisma.patient.findMany({ where: managedPatientWhere(userId), orderBy: { name: 'asc' }, select: profileSelect }),
@@ -582,7 +581,7 @@ router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
   const items = [
     ...owned.map((p) => ({
       id: p.id,
-      record: p.record,
+      record: String(p.recordNumber),
       name: p.name,
       relationship: p.ownerUserId===userId&&(p.data as any)?.relationshipToOwner==='self'?'self':p.tutorUserId===userId?((p.data as any)?.relationshipToTutor??(p.data as any)?.relationshipToOwner??'dependent'):((p.data as any)?.relationshipToOwner??'self'),
       accessLevel: p.tutorUserId===userId?'tutor':'owner',
@@ -594,7 +593,7 @@ router.get('/profiles', auth, async (req: AuthedRequest, res: Response) => {
       .filter((g) => !g.patient.archived && g.patient.ownerUserId !== userId)
       .map((g) => ({
         id: g.patient.id,
-        record: g.patient.record,
+        record: String(g.patient.recordNumber),
         name: g.patient.name,
         relationship: (g.patient.data as any)?.relationshipToGrantee ?? 'delegate',
         accessLevel: g.level,
