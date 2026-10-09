@@ -13,6 +13,7 @@ datasource db {
 }
 
 model User {
+  userNumber Int @unique @default(autoincrement())
   id              String                  @id @default(uuid())
   name            String
   email           String                  @unique
@@ -71,6 +72,7 @@ model VerificationChallenge {
 }
 
 model Patient {
+  recordNumber Int @unique @default(autoincrement())
   id             String          @id
   record         String          @default("")
   name           String
