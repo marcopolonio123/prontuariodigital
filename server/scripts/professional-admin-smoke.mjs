@@ -157,7 +157,9 @@ try {
   const agendaPatients=await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),professional.token);
   assert((await call('/professional/agenda/patients?q='+encodeURIComponent(patient.name.slice(0,2)),admin.token)).body.items.some(item=>item.id===patient.patientId));
   assert.equal(agendaPatients.status,200);assert(agendaPatients.body.items.some(item=>item.id===patient.patientId));assert(agendaPatients.body.items.every(item=>Object.keys(item).sort().join(',')==='documentNumber,documentType,id,name,record'));
-  const found=agendaPatients.body.items.find(item=>item.id===patient.patientId);assert.equal(found.record,'PR-123');assert.equal(found.documentNumber,'•••••••4725');
+  const found=agendaPatients.body.items.find(item=>item.id===patient.patientId);assert.equal(found.record,String(identityFixture.recordNumber));
+  assert.equal((await call('/professional/agenda/patients?q='+identityFixture.recordNumber,professional.token)).body.items[0].id,patient.patientId);
+  assert.equal((await call('/professional/agenda/patients?q=PR-123',professional.token)).body.items.length,0);assert.equal(found.documentNumber,'•••••••4725');
   assert.equal((await call('/professional/agenda/patients?q=PACÍNTE',professional.token)).body.items[0].id,patient.patientId);
   const dependent=await db.patient.create({data:{id:'agenda-dependent-'+Date.now(),ownerUserId:patient.id,name:'Paciente dependente teste',record:'DEP-123',data:{relationshipToOwner:'child'}}});
   await db.accessGrant.create({data:{accountId:professional.id,patientId:dependent.id,practitionerId:requested.body.id,permission:'read_write_consultation',scope:['record'],validFrom:new Date(),grantedByUserId:patient.id,grantedByName:patient.name}});
