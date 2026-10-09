@@ -27,7 +27,7 @@ export interface FingerprintReferenceMetadata {registeredAt:string;width:number;
 export interface FingerprintReferenceInput {photo:string;consent:true;finger:'right_index'|'left_index'}
 export interface AccountProfileV1 extends V1User { motherName?:string; fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
-export interface V1User { id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
+export interface V1User { userNumber?: number; id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User, LoginStartResponse { requiresMfaLogin: true; requiresEmailConfirmation:true; emailSent:boolean; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
 export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; isTutor?:boolean;hasTutor?:boolean; }
