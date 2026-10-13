@@ -33,3 +33,6 @@ assert.deepEqual(options('https://api.openai.com/v1','gpt-4.1-mini',true),{max_t
 assert.deepEqual(options('https://mydoctor-provider.test/v1','mock',false),{max_tokens:700});
 assert.deepEqual(options('https://generativelanguage.googleapis.com.attacker.test/v1','gemini-3.5-flash-lite',true),{max_tokens:20});
 console.log('Gemini request budgets and provider-specific reasoning settings passed.');
+
+assert.deepEqual(options('https://generativelanguage.googleapis.com/v1beta/openai','gemini-3.8-flash',true),{max_tokens:2048,reasoning_effort:'low'});
+assert.equal(options('https://generativelanguage.googleapis.com/v1beta/openai','gemini-3.6-flash',true).reasoning_effort,'minimal');
