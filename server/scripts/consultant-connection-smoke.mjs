@@ -17,3 +17,11 @@ const malformed=await test(base,model,'secret',async()=>new Response('<html>secr
 console.log('Connection diagnostics: model discovery, native/compatible comparison, timeouts and secret redaction passed.');
 
 assert.deepEqual(good.testableModels,[model]);
+
+const {diagnosticProviderDetail}=await import('../dist/consultant-connection.js');
+const safe=diagnosticProviderDetail({error:{message:'Invalid reasoning_effort minimal; key=secret-value; Bearer other-secret; sk-testanothersecret; https://example.test/path?key=secret-value'}},'secret-value');
+assert.match(safe,/reasoning_effort minimal/);assert.ok(!safe.includes('secret-value'));assert.ok(!safe.includes('other-secret'));assert.ok(!safe.includes('sk-testanothersecret'));assert.ok(!safe.includes('?key='));
+assert.equal(diagnosticProviderDetail(null,'secret'),'');
+const badArgument=await test(base,model,'private-test-key',async(url,options)=>String(url).endsWith('/chat/completions')?Response.json({error:{message:'Unsupported reasoning_effort value minimal. private-test-key'}},{status:400}):mock(url,options));
+assert.match(badArgument.steps[2].message,/Unsupported reasoning_effort/);assert.ok(!JSON.stringify(badArgument).includes('private-test-key'));
+console.log('Admin-only provider detail preserves parameter diagnostics while redacting credentials and URLs.');
