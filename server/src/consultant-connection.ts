@@ -20,7 +20,11 @@ export async function testConsultantConnection(base: string, model: string, key:
     }
   };
   const json = async (response: Response) => {
-    if (!response.ok) throw new TestFailure((await consultantProviderFailure(response, false)).message);
+    if (!response.ok) {
+      const body=await response.clone().json().catch(():null=>null);
+      const detail=diagnosticProviderDetail(body,key);
+      throw new TestFailure((await consultantProviderFailure(response,false)).message+(detail?' Detalhe do provedor (teste sem prontuário): '+detail:''));
+    }
     return response.json();
   };
   const modelList = await step('Acesso à API e lista de modelos', async () => {
@@ -58,3 +62,16 @@ export async function testConsultantConnection(base: string, model: string, key:
   return { ok: steps.every(item => item.ok), host: url.hostname, model, steps, availableModels: availableModels.slice(0, 50), testableModels: google ? FREE_TEST_MODELS.filter(id=>availableModels.includes(id)) : [] };
 }
 class TestFailure extends Error {}
+
+/** Only for admin diagnostics with the fixed TESTE_OK prompt, never for clinical requests. */
+export function diagnosticProviderDetail(body: unknown, key: string) {
+  const error=(body as any)?.error;
+  if(!error||typeof error.message!=='string')return '';
+  let text:string=error.message;
+  for(const secret of [key,encodeURIComponent(key)])if(secret)text=text.split(secret).join('[CHAVE OCULTA]');
+  text=text.replace(/\bAIza[\w-]+\b/g,'[CHAVE OCULTA]').replace(/\bsk-[\w-]+\b/g,'[CHAVE OCULTA]')
+    .replace(/Bearer\s+[^\s"',;]+/gi,'Bearer [OCULTO]')
+    .replace(/\b(api[_ -]?key|authorization|password|token|secret)\s*[:=]\s*["']?[^\s"',;]+/gi,'$1=[OCULTO]')
+    .replace(/https?:\/\/[^\s"']+/gi,(match:string)=>{try{return new URL(match).origin.replace(/\/\/[^/]*@/,'//')+'/[ENDEREÇO OMITIDO]'}catch{return '[ENDEREÇO OMITIDO]'}});
+  return text.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,700);
+}
