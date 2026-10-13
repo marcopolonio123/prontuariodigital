@@ -15,3 +15,5 @@ const timeout=await test(base,model,'secret',async()=>{throw new DOMException('s
 const denied=await test(base,model,'secret',async()=>Response.json({error:{code:'invalid_api_key',message:'secret'}},{status:401}));assert.match(denied.steps[0].message,/chave/);assert.ok(!JSON.stringify(denied).includes('secret'));
 const malformed=await test(base,model,'secret',async()=>new Response('<html>secret</html>'));assert.match(malformed.steps[0].message,/formato/);
 console.log('Connection diagnostics: model discovery, native/compatible comparison, timeouts and secret redaction passed.');
+
+assert.deepEqual(good.testableModels,[model]);

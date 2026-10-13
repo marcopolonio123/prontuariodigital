@@ -1,3 +1,5 @@
+// Models with a documented Gemini free tier; only offer those listed for the configured key.
+export const FREE_TEST_MODELS = ['gemini-3.8-flash','gemini-3.6-flash','gemini-3.1-flash-lite','gemini-3.5-flash-lite'] as const;
 import { consultantProviderFailure } from './consultant-errors.js';
 import { consultantGenerationOptions } from './consultant-provider.js';
 type Step = { label: string; ok: boolean; message: string; elapsedMs: number };
@@ -53,6 +55,6 @@ export async function testConsultantConnection(base: string, model: string, key:
     if (typeof body.choices?.[0]?.message?.content !== 'string' || !body.choices[0].message.content.trim()) throw new TestFailure('A integração não retornou texto no formato esperado.');
     return 'A mesma integração do consultor retornou texto para o teste sem prontuário.';
   });
-  return { ok: steps.every(item => item.ok), host: url.hostname, model, steps, availableModels: availableModels.slice(0, 50) };
+  return { ok: steps.every(item => item.ok), host: url.hostname, model, steps, availableModels: availableModels.slice(0, 50), testableModels: google ? FREE_TEST_MODELS.filter(id=>availableModels.includes(id)) : [] };
 }
 class TestFailure extends Error {}
