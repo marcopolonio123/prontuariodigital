@@ -25,3 +25,11 @@ assert.match((await classify(new Response('<html>secret</html>',{status:404}),fa
 const unknown=await classify(error(418,'secret_arbitrary_code',''),false);
 assert.ok(!unknown.message.includes('secret'));assert.match(unknown.message,/IA-418/);
 console.log('Consultant error diagnostics: credentials, billing, limits, model, images, non-JSON and sensitive-data redaction passed.');
+const {consultantGenerationOptions:options}=await import('../dist/consultant-provider.js');
+assert.deepEqual(options('https://generativelanguage.googleapis.com/v1beta/openai','gemini-3.5-flash-lite',true),{max_tokens:2048,reasoning_effort:'minimal'});
+assert.deepEqual(options('https://generativelanguage.googleapis.com/v1beta/openai','gemini-3.5-flash-lite',false),{max_tokens:4096,reasoning_effort:'minimal'});
+assert.deepEqual(options('https://generativelanguage.googleapis.com/v1beta/openai','gemini-2.5-flash-lite',true),{max_tokens:20,reasoning_effort:'none'});
+assert.deepEqual(options('https://api.openai.com/v1','gpt-4.1-mini',true),{max_tokens:20});
+assert.deepEqual(options('https://mydoctor-provider.test/v1','mock',false),{max_tokens:700});
+assert.deepEqual(options('https://generativelanguage.googleapis.com.attacker.test/v1','gemini-3.5-flash-lite',true),{max_tokens:20});
+console.log('Gemini request budgets and provider-specific reasoning settings passed.');
