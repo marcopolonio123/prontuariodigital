@@ -21,7 +21,7 @@ export async function testConsultantConnection(base: string, model: string, key:
   };
   const json = async (response: Response) => {
     if (!response.ok) {
-      const body=await response.clone().json().catch(()=>null);
+      const body=await response.clone().json().catch(():null=>null);
       const detail=diagnosticProviderDetail(body,key);
       throw new TestFailure((await consultantProviderFailure(response,false)).message+(detail?' Detalhe do provedor (teste sem prontuário): '+detail:''));
     }
@@ -67,11 +67,11 @@ class TestFailure extends Error {}
 export function diagnosticProviderDetail(body: unknown, key: string) {
   const error=(body as any)?.error;
   if(!error||typeof error.message!=='string')return '';
-  let text=error.message;
+  let text:string=error.message;
   for(const secret of [key,encodeURIComponent(key)])if(secret)text=text.split(secret).join('[CHAVE OCULTA]');
   text=text.replace(/\bAIza[\w-]+\b/g,'[CHAVE OCULTA]').replace(/\bsk-[\w-]+\b/g,'[CHAVE OCULTA]')
     .replace(/Bearer\s+[^\s"',;]+/gi,'Bearer [OCULTO]')
     .replace(/\b(api[_ -]?key|authorization|password|token|secret)\s*[:=]\s*["']?[^\s"',;]+/gi,'$1=[OCULTO]')
-    .replace(/https?:\/\/[^\s"']+/gi,match=>{try{return new URL(match).origin.replace(/\/\/[^/]*@/,'//')+'/[ENDEREÇO OMITIDO]'}catch{return '[ENDEREÇO OMITIDO]'}});
+    .replace(/https?:\/\/[^\s"']+/gi,(match:string)=>{try{return new URL(match).origin.replace(/\/\/[^/]*@/,'//')+'/[ENDEREÇO OMITIDO]'}catch{return '[ENDEREÇO OMITIDO]'}});
   return text.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,700);
 }
