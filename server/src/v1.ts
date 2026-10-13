@@ -19,7 +19,7 @@ import { prepareReference, referenceMetadata } from './fingerprint-reference.js'
 import { sendLoginVerificationEmail } from './email.js';
 import { consultantProviderFailure } from './consultant-errors.js';
 import { consultantGenerationOptions } from './consultant-provider.js';
-import { testConsultantConnection } from './consultant-connection.js';
+import { testConsultantConnection, FREE_TEST_MODELS } from './consultant-connection.js';
 import { administrator } from './professional-admin.js';
 
 const router = Router();
@@ -745,11 +745,15 @@ router.post('/consultant/connection-test', auth, async (req: AuthedRequest, res:
   try {
     if (!(await administrator(req)).authorized) return fail(res,403,'Teste de conexão restrito à administração.');
     if (!consultantConfigured()) return fail(res,503,'Configure chave, modelo e URL da API antes de testar.');
+    const requested=req.body?.model;
+    if(requested!==undefined&&(typeof requested!=='string'||!requested.trim()||requested.length>120))return fail(res,400,'Escolha um modelo válido para o teste.');
+    const model=typeof requested==='string'?requested.trim():process.env.CONSULTANT_MODEL!;
+    if(model!==process.env.CONSULTANT_MODEL&&(new URL(process.env.CONSULTANT_BASE_URL!).hostname!=='generativelanguage.googleapis.com'||!FREE_TEST_MODELS.some(id=>id===model)))return fail(res,400,'Escolha um dos modelos gratuitos listados para o teste.');
     const now=Date.now();for(const [id,at] of connectionTests)if(now-at>=90000)connectionTests.delete(id);
     if(connectionTests.has(req.userId!))return fail(res,429,'Aguarde 90 segundos entre testes de conexão.');
     connectionTests.set(req.userId!,now);
     res.setHeader('Cache-Control','private, no-store');
-    res.json(await testConsultantConnection(process.env.CONSULTANT_BASE_URL!,process.env.CONSULTANT_MODEL!,process.env.CONSULTANT_API_KEY!));
+    res.json(await testConsultantConnection(process.env.CONSULTANT_BASE_URL!,model,process.env.CONSULTANT_API_KEY!));
   } catch { return fail(res,502,'Não foi possível executar o teste de conexão. Nenhum prontuário foi enviado.'); }
 });
 
