@@ -68,7 +68,7 @@ try {
   const a = await account();
   assert.equal((await call('/consultant/connection-test',{},null)).status,401);
   process.env.MYDOCTOR_ADMIN_EMAILS='';assert.equal((await call('/consultant/connection-test',{},a.token)).status,403);
-  process.env.MYDOCTOR_ADMIN_EMAILS=a.email;const connection=await call('/consultant/connection-test',{},a.token);assert.equal(connection.status,200);assert.equal(connection.body.ok,true);assert.equal((await call('/consultant/connection-test',{},a.token)).status,429);
+  process.env.MYDOCTOR_ADMIN_EMAILS=a.email;assert.equal((await call('/consultant/connection-test',{model:'../model'},a.token)).status,400);assert.equal((await call('/consultant/connection-test',{model:5},a.token)).status,400);assert.equal((await call('/consultant/connection-test',{model:'gemini-4-argon'},a.token)).status,400);const connection=await call('/consultant/connection-test',{},a.token);assert.equal(connection.status,200);assert.equal(connection.body.ok,true);assert.equal((await call('/consultant/connection-test',{},a.token)).status,429);
   assert.equal(await db.consultantUsage.count({where:{userId:a.id}}),0);
 
   const path = '/patients/' + a.patientId + '/consultant';
