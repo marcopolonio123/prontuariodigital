@@ -17,6 +17,7 @@ import { normalizeFollowUp } from './follow-up.js';
 import { isUnder18 } from './identity-policy.js';
 import { prepareReference, referenceMetadata } from './fingerprint-reference.js';
 import { sendLoginVerificationEmail } from './email.js';
+import { consultantProviderFailure } from './consultant-errors.js';
 
 const router = Router();
 const DOCUMENT_ROOT = path.resolve(process.env.DOCUMENT_STORAGE_PATH ?? path.join(process.cwd(), 'private-documents'));
@@ -762,7 +763,7 @@ function consultantImages(input:unknown):string[]{
   });
 }
 function consultantContent(text:string,images:string[]){return images.length?[{type:'text',text},...images.map(url=>({type:'image_url',image_url:{url,detail:'auto'}}))]:text}
-function imageProviderError(res:Response,images:string[],status:number){return fail(res,status===429?503:502,images.length&&[400,404,415,422].includes(status)?'O modelo de IA configurado não aceitou as imagens. Tente sem anexos ou contate o administrador para ativar um modelo com visão. Nenhum uso foi descontado.':'Não foi possível analisar a pergunta. Tente novamente; nenhum uso foi descontado.')}
+async function imageProviderError(res:Response,images:string[],response:globalThis.Response){const error=await consultantProviderFailure(response,images.length>0);return fail(res,error.status,error.message)}
 
 router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!,false,true);
@@ -794,7 +795,7 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
         { role: 'user', content: consultantContent(JSON.stringify({ question, previous }),images) },
       ] }),
     });
-    if (!scopeResponse.ok) {await releaseConsultantResponse(reservationId);reservationId=null;return imageProviderError(res,images,scopeResponse.status);}
+    if (!scopeResponse.ok) {await releaseConsultantResponse(reservationId);reservationId=null;return await imageProviderError(res,images,scopeResponse);}
     const scopeResult = await scopeResponse.json() as { choices?: Array<{ message?: { content?: string } }> };
     const scope = scopeResult.choices?.[0]?.message?.content?.trim();
     if (scope === 'OTHER') {
@@ -834,8 +835,7 @@ router.post('/patients/:patientId/consultant', auth, async (req: AuthedRequest, 
     if (!response.ok) {
       await releaseConsultantResponse(reservationId);
       reservationId = null;
-      if (response.status === 429) return fail(res, 503, 'O provedor de IA está temporariamente no limite de capacidade. Tente mais tarde; seu saldo não será descontado.');
-      return imageProviderError(res,images,response.status);
+      return await imageProviderError(res,images,response);
     }
     const result = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const answer = result.choices?.[0]?.message?.content?.trim();
