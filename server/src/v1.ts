@@ -19,6 +19,8 @@ import { prepareReference, referenceMetadata } from './fingerprint-reference.js'
 import { sendLoginVerificationEmail } from './email.js';
 import { consultantProviderFailure } from './consultant-errors.js';
 import { consultantGenerationOptions } from './consultant-provider.js';
+import { testConsultantConnection } from './consultant-connection.js';
+import { administrator } from './professional-admin.js';
 
 const router = Router();
 const DOCUMENT_ROOT = path.resolve(process.env.DOCUMENT_STORAGE_PATH ?? path.join(process.cwd(), 'private-documents'));
@@ -737,6 +739,19 @@ function consultantConfigured() {
   try { return Boolean(process.env.CONSULTANT_API_KEY && process.env.CONSULTANT_MODEL && base && new URL(base).protocol === 'https:'); }
   catch { return false; }
 }
+
+const connectionTests = new Map<string, number>();
+router.post('/consultant/connection-test', auth, async (req: AuthedRequest, res: Response) => {
+  try {
+    if (!(await administrator(req)).authorized) return fail(res,403,'Teste de conexão restrito à administração.');
+    if (!consultantConfigured()) return fail(res,503,'Configure chave, modelo e URL da API antes de testar.');
+    const now=Date.now();for(const [id,at] of connectionTests)if(now-at>=90000)connectionTests.delete(id);
+    if(connectionTests.has(req.userId!))return fail(res,429,'Aguarde 90 segundos entre testes de conexão.');
+    connectionTests.set(req.userId!,now);
+    res.setHeader('Cache-Control','private, no-store');
+    res.json(await testConsultantConnection(process.env.CONSULTANT_BASE_URL!,process.env.CONSULTANT_MODEL!,process.env.CONSULTANT_API_KEY!));
+  } catch { return fail(res,502,'Não foi possível executar o teste de conexão. Nenhum prontuário foi enviado.'); }
+});
 
 /** Mesmo saldo por conta para web, APK e iOS. Não revela credenciais. */
 router.get('/consultant/usage', auth, async (req: AuthedRequest, res: Response) => {
