@@ -15,7 +15,9 @@ let scopeCalls = [];
 let invalidScope = false;
 globalThis.fetch = async (url, options) => {
   if (String(url).startsWith(process.env.CONSULTANT_BASE_URL)) {
+    if(String(url).endsWith('/models'))return Response.json({data:[{id:'mock'}]});
     const body = JSON.parse(options.body);
+    if(body.messages[0]?.content==='Responda exclusivamente TESTE_OK.')return Response.json({choices:[{message:{content:'TESTE_OK'}}]});
     if(visionFailure)return new Response('{}',{status:400});
     if (body.max_tokens === 20) {
       scopeCalls.push(body);
@@ -61,9 +63,14 @@ try {
     const challenge = await call('/auth/login/start', { email, password, channel: 'email' });
     const login = await call('/auth/login/verify', { challengeId: challenge.body.challengeId, code: challenge.body.developmentCode });
     const profiles = await call('/profiles', null, login.body.token);
-    return { token: login.body.token, id: registered.body.id, patientId: profiles.body[0].id };
+    return { token: login.body.token, id: registered.body.id, patientId: profiles.body[0].id, email };
   }
   const a = await account();
+  assert.equal((await call('/consultant/connection-test',{},null)).status,401);
+  process.env.MYDOCTOR_ADMIN_EMAILS='';assert.equal((await call('/consultant/connection-test',{},a.token)).status,403);
+  process.env.MYDOCTOR_ADMIN_EMAILS=a.email;const connection=await call('/consultant/connection-test',{},a.token);assert.equal(connection.status,200);assert.equal(connection.body.ok,true);assert.equal((await call('/consultant/connection-test',{},a.token)).status,429);
+  assert.equal(await db.consultantUsage.count({where:{userId:a.id}}),0);
+
   const path = '/patients/' + a.patientId + '/consultant';
   const input = { question: 'Estou com gripe', consent: true, messages: [{ role: 'user', content: 'Não tive febre' }] };
   assert.equal((await call('/consultant/usage')).status, 401);
