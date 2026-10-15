@@ -285,7 +285,6 @@ export class MyDoctorV1Api {
   setMedicationAlerts(patientId: string, enabled: boolean) { return this.req<{ alertsEnabled: boolean }>(`/patients/${encodeURIComponent(patientId)}/medications/alerts`, { method: 'PUT', body: JSON.stringify({ enabled }) }); }
   removeMedicationSchedule(patientId: string, scheduleId: string) { return this.req<{ ok: boolean }>(`/patients/${encodeURIComponent(patientId)}/medications/${encodeURIComponent(scheduleId)}`, { method: 'DELETE' }); }
 
-  testConsultantConnection(model?:string) { return this.req<{ok:boolean;host:string;model:string;steps:Array<{label:string;ok:boolean;message:string;elapsedMs:number}>;availableModels:string[];testableModels?:string[]}>('/consultant/connection-test', {method:'POST',body:JSON.stringify(model?{model}:{})}); }
   getConsultantUsage() { return this.req<ConsultantUsageV1>('/consultant/usage'); }
   askConsultant(patientId: string, question: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>, consent: boolean, images: string[] = []) { return this.req<{ answer: string; usage: ConsultantUsageV1 }>(`/patients/${encodeURIComponent(patientId)}/consultant`, { method: 'POST', body: JSON.stringify({ question, messages, consent, images }) }); }
   deleteDiaryEntry(patientId: string, eventId: string, entryIndex: number, expectedAt: string, expectedText: string) { return this.req<{ ok: boolean }>(`/patients/${encodeURIComponent(patientId)}/diary/${encodeURIComponent(eventId)}/entries/${entryIndex}`, { method: 'DELETE', body: JSON.stringify({ expectedAt, expectedText }) }); }
