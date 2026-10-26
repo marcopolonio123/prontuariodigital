@@ -7,6 +7,8 @@ import {managedPatientWhere,managesPatient,personalOwnerIds} from './patient-per
 import { normalizeFollowUp } from './follow-up.js';
 import { purgeExpiredDiary, retainedDiaryEntries } from './diary-retention.js';
 
+import { canReadEvent, grantedSections, scopedRecord } from './access-scope.js';
+
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
 
@@ -166,8 +168,13 @@ router.get('/professional/patients/:patientId/summary', auth, async (req: Authed
       select: { id: true, name: true, dose: true, weekdays: true, times: true, timezone: true, continuousUse: true, startsOn: true, endsOn: true, createdAt: true } }),
   ]);
   const data = patient?.data && typeof patient.data === 'object' && !Array.isArray(patient.data) ? patient.data as Record<string, unknown> : {};
-  const record = Object.fromEntries(['birthDate', 'sex', 'bloodType', 'allergies', 'intolerances', 'conditions', 'medications', 'specialCare', 'emergencyNotes'].map(key => [key, data[key] ?? null]));
-  res.json({ record, schedules, events: events.map(event => event.type === 'wellbeing_diary'
+  // Recheck just before responding so a reduction/revocation is not overwritten by a stale UI.
+  const current = await currentClinicalGrant(req.userId!, practitioner.id, req.params.patientId);
+  if (!current) return fail(res, 403, 'A autorização não está mais ativa.');
+  const sections = grantedSections(current.scope);
+  const record = scopedRecord(data, current.scope);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ sections, record, schedules: sections.includes('medications') ? schedules : [], events: events.filter(event => canReadEvent(current.scope, event.type)).map(event => ({ ...event, payload: event.type === 'insurance' && !sections.includes('documents') ? Object.fromEntries(Object.entries(event.payload as Record<string, unknown>).filter(([key]) => !['cardFront', 'cardBack'].includes(key))) : event.payload, documents: sections.includes('documents') ? event.documents : [] })).map(event => event.type === 'wellbeing_diary'
     ? { ...event, payload: { entries: retainedDiaryEntries(event.payload).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) } } : event) });
 });
 
@@ -469,6 +476,7 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
 });
 
 export default router;
+
 
 
 

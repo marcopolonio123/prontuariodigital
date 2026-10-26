@@ -23,6 +23,7 @@ jobs:
           npm install --no-save --ignore-scripts --package-lock=false jsdom@26 playwright
           node scripts/navigation-smoke.mjs
           node scripts/professional-encounter-smoke.mjs
+          node scripts/access-sections-ui-smoke.mjs
           npx playwright install --with-deps chromium
           node scripts/responsive-navigation-smoke.mjs
           node scripts/pagination-smoke.mjs
@@ -88,7 +89,9 @@ jobs:
           node scripts/consultant-smoke.mjs
           node scripts/medication-smoke.mjs
           node scripts/professional-admin-smoke.mjs
+          node scripts/access-sections-smoke.mjs
           node scripts/account-documents-smoke.mjs
           node scripts/tutorship-smoke.mjs
           node scripts/registration-smoke.mjs
+
 
