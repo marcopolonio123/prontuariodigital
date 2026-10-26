@@ -49,6 +49,7 @@ export interface ProfessionalAccessRequestV1 {
   grantId?: string | null;
   grantValidUntil?: string | null;
   grantRevokedAt?: string | null;
+  grantedSections?: string[];
 }
 export interface IncomingAccessRequestV1 {
   id: string;
@@ -67,6 +68,7 @@ export interface IncomingAccessRequestV1 {
   grantId?: string | null;
   grantValidUntil?: string | null;
   grantRevokedAt?: string | null;
+  grantedSections?: string[];
 }
 
 export interface LocationAddressV1 {postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string}
@@ -107,6 +109,7 @@ export interface IncomingConsultationV1 {
 }
 
 export interface ClinicalSummaryV1 {
+  sections?: string[];
   record: Record<string, unknown>;
   events: Array<HealthEventV1 & { documents: Array<{ id: string; type: string; originalFilename: string }> }>;
   schedules: Array<{ id: string; name: string; dose: string; weekdays: number[]; times: string[]; timezone: string; continuousUse: boolean; startsOn: string; endsOn: string | null; createdAt: string }>;
@@ -236,7 +239,7 @@ export class MyDoctorV1Api {
   listProfessionalAccessRequests() { return this.req<ProfessionalAccessRequestV1[]>('/professional/access-requests'); }
   requestPatientAccess(patientId: string) { return this.req<ProfessionalAccessRequestV1>('/professional/access-requests', { method: 'POST', body: JSON.stringify({ patientId }) }); }
   listIncomingAccessRequests() { return this.req<IncomingAccessRequestV1[]>('/access-requests/incoming'); }
-  decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string, duration?: 'indefinite' | 'until', validUntil?: string) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note, duration, validUntil }) }); }
+  decideAccessRequest(id: string, decision: 'approve' | 'reject', note?: string, duration?: 'indefinite' | 'until', validUntil?: string, sections?: string[]) { return this.req<{ id: string; status: string; decidedAt?: string | null; grantId?: string; validUntil?: string | null }>(`/access-requests/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify({ decision, note, duration, validUntil, sections }) }); }
 
   listProfessionalLocations(includeInactive=false) { return this.req<ProfessionalLocationV1[]>('/professional/locations'+(includeInactive?'?includeInactive=1':'')); }
   setProfessionalLocationActive(id:string,active:boolean){return this.req<ProfessionalLocationV1>('/professional/locations/'+encodeURIComponent(id)+'/status',{method:'PATCH',body:JSON.stringify({active})})}
@@ -245,6 +248,7 @@ export class MyDoctorV1Api {
   removeProfessionalLocation(id: string) { return this.req<{removed:boolean}>(`/professional/locations/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
   revokePatientAccess(id: string) { return this.req<{ status: string }>(`/access-requests/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); }
+  updateAccessAuthorization(id: string, sections: string[], duration: 'indefinite' | 'until', validUntil?: string) { return this.req<{ id: string }>(`/access-requests/${encodeURIComponent(id)}/authorization`, { method: 'PATCH', body: JSON.stringify({ sections, duration, validUntil }) }); }
   getClinicalSummary(patientId: string) { return this.req<ClinicalSummaryV1>(`/professional/patients/${encodeURIComponent(patientId)}/summary`); }
   searchAgendaPatients(name:string) {return this.req<{items:Array<{id:string;name:string;record:string;documentType:string;documentNumber:string}>;total:number}>('/professional/agenda/patients?q='+encodeURIComponent(name))}
   getProfessionalAgenda() {return this.req<Array<{id:string;title:string;at:string;notes:string;patientName:string|null;patientId?:string;source:string;status:string;alert:boolean;updatedAt:string;locationId?:string;locationName?:string;locationAddress?:string}>>('/professional/agenda')}
@@ -327,6 +331,7 @@ export function defaultV1ApiUrl() {
   if (import.meta.env.DEV) return 'http://localhost:8787';
   return window.location.origin;
 }
+
 
 
 

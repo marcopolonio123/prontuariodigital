@@ -1,3 +1,4 @@
+import { canReadEvent, grantedSections } from './access-scope.js';
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import fs from 'node:fs/promises';
@@ -941,6 +942,19 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
   res.json(updated);
 });
 
+// Independent server authorization for document URLs, not just hidden buttons.
+async function canReadProfessionalDocuments(req: AuthedRequest) {
+  const now = new Date();
+  const grant = await prisma.accessGrant.findFirst({ where: {
+    accountId: req.userId!, patientId: req.params.patientId, permission: 'read_write_consultation', revokedAt: null,
+    validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+    practitioner: { userId: req.userId!, active: true, verificationStatus: 'verified' },
+  } });
+  if (!grant || !grantedSections(grant.scope).includes('documents')) return false;
+  const event = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, status: { in: ['final', 'amended'] } }, select: { type: true } });
+  return !!event && canReadEvent(grant.scope, event.type);
+}
+
 /** Documentos clínicos privados vinculados ao atendimento. */
 router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!, true);
@@ -950,6 +964,7 @@ router.get('/patients/:patientId/events/:eventId/documents', auth, async (req: A
   const target = ownEvent ?? await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId }, select: { status: true } });
   if (target?.status === 'draft' && !ownEvent) return fail(res, 403, 'Este atendimento ainda não foi enviado pelo profissional.');
   if (!personal.has(req.params.patientId) && !ownEvent) {
+    if (!await canReadProfessionalDocuments(req)) return fail(res, 403, 'Documentos ou seção do atendimento não autorizados pelo paciente.');
     const readable = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, OR: [{ status: { in: ['final', 'amended'] } }, { status: 'pending_patient_confirmation', authoredByUserId: req.userId! }] }, select: { id: true } });
     if (!readable) return fail(res, 403, 'Este atendimento não está disponível para consulta profissional.');
   }
@@ -1015,6 +1030,7 @@ router.get('/patients/:patientId/events/:eventId/documents/:documentId/download'
   const target = ownEvent ?? await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId }, select: { status: true } });
   if (target?.status === 'draft' && !ownEvent) return fail(res, 403, 'Este atendimento ainda não foi enviado pelo profissional.');
   if (!personal.has(req.params.patientId) && !ownEvent) {
+    if (!await canReadProfessionalDocuments(req)) return fail(res, 403, 'Documentos ou seção do atendimento não autorizados pelo paciente.');
     const readable = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId, OR: [{ status: { in: ['final', 'amended'] } }, { status: 'pending_patient_confirmation', authoredByUserId: req.userId! }] }, select: { id: true } });
     if (!readable) return fail(res, 403, 'Este atendimento não está disponível para consulta profissional.');
   }
@@ -1049,6 +1065,7 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
 

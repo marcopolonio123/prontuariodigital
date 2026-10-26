@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 import {managedPatientWhere,managesPatient,personalOwnerIds} from './patient-permissions.js';
 
+import { ACCESS_SECTIONS, explicitScope, grantedSections, validateSections } from './access-scope.js';
+
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
 const REQUEST_TTL_HOURS = 24;
@@ -55,7 +57,7 @@ router.get('/professional/access-requests', auth, async (req: AuthedRequest, res
 
   const rows = await prisma.accessRequest.findMany({
     where: { requesterUserId: req.userId!, practitionerId: practitioner.id },
-    include: { patient: { select: { name: true } }, grant: { select: { id: true, validUntil: true, revokedAt: true } } },
+    include: { patient: { select: { name: true } }, grant: { select: { id: true, validUntil: true, revokedAt: true, scope: true } } },
     orderBy: { requestedAt: 'desc' },
     take: 50,
   });
@@ -73,6 +75,7 @@ router.get('/professional/access-requests', auth, async (req: AuthedRequest, res
     grantId: row.grant?.id ?? null,
     grantValidUntil: row.grant?.validUntil?.toISOString() ?? null,
     grantRevokedAt: row.grant?.revokedAt?.toISOString() ?? null,
+    grantedSections: row.grant ? grantedSections(row.grant.scope) : [],
   })));
 });
 
@@ -95,7 +98,7 @@ router.post('/professional/access-requests', auth, async (req: AuthedRequest, re
       if (active) throw new Error('ACTIVE');
       const existing = await tx.accessRequest.findFirst({ where: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, orderBy: { requestedAt: 'desc' } });
       if (existing) return { row: existing, created: false };
-      const row = await tx.accessRequest.create({ data: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, requestedScope: ['record', 'documents', 'vitals', 'insurance'], requestedPermission: 'read_write_consultation', status: 'pending', expiresAt: new Date(now.getTime() + REQUEST_TTL_HOURS * 60 * 60 * 1000) } });
+      const row = await tx.accessRequest.create({ data: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, requestedScope: [...ACCESS_SECTIONS], requestedPermission: 'read_write_consultation', status: 'pending', expiresAt: new Date(now.getTime() + REQUEST_TTL_HOURS * 60 * 60 * 1000) } });
       return { row, created: true };
     }, { maxWait: 10000, timeout: 20000 });
     return res.status(result.created ? 201 : 200).json({ id: result.row.id, patientId, patientName: patient.name, status: result.row.status, requestedAt: result.row.requestedAt.toISOString(), expiresAt: result.row.expiresAt?.toISOString() ?? null });
@@ -114,7 +117,7 @@ router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Re
     where: { patientId: { in: patientIds } },
     take: 200,
     include: {
-      grant: { select: { id: true, validUntil: true, revokedAt: true } },
+      grant: { select: { id: true, validUntil: true, revokedAt: true, scope: true } },
       patient: { select: { name: true } },
       requester: { select: { name: true } },
       practitioner: { include: { registrations: { include: { authority: true } } } },
@@ -128,6 +131,7 @@ router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Re
     grantId: row.grant?.id ?? null,
     grantValidUntil: row.grant?.validUntil?.toISOString() ?? null,
     grantRevokedAt: row.grant?.revokedAt?.toISOString() ?? null,
+    grantedSections: row.grant ? grantedSections(row.grant.scope) : [],
     id: row.id,
     patientId: row.patientId,
     patientName: row.patient.name,
@@ -168,6 +172,8 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
     return res.json({ id: rejected.id, status: rejected.status, decidedAt: rejected.decidedAt?.toISOString() ?? null });
   }
 
+  const sections = req.body?.sections === undefined ? [...ACCESS_SECTIONS] : validateSections(req.body.sections);
+  if (!sections) return fail(res, 400, 'Selecione ao menos uma seção válida para autorizar.');
   let validUntil: Date | null = new Date(now.getTime() + GRANT_TTL_HOURS * 60 * 60 * 1000);
   const duration = req.body?.duration;
   if (duration === 'indefinite') validUntil = null;
@@ -208,7 +214,7 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
       practitionerId: request.practitionerId,
       sourceRequestId: request.id,
       level: 'completo',
-      scope: request.requestedScope,
+      scope: explicitScope(sections),
       permission: request.requestedPermission,
       validFrom: now,
       validUntil,
@@ -234,6 +240,39 @@ router.post('/access-requests/:id/decision', auth, async (req: AuthedRequest, re
   }
 });
 
+// Patient/tutor edits the existing authorization in the same screen.
+router.patch('/access-requests/:id/authorization', auth, async (req: AuthedRequest, res: Response) => {
+  const sections = validateSections(req.body?.sections);
+  if (!sections) return fail(res, 400, 'Selecione ao menos uma seção válida para autorizar.');
+  const duration = req.body?.duration;
+  let validUntil: Date | null = null;
+  if (duration === 'until') {
+    const raw = req.body?.validUntil;
+    if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(raw)) return fail(res, 400, 'Informe data, horário e fuso do término do acesso.');
+    validUntil = new Date(raw);
+    if (!Number.isFinite(validUntil.getTime()) || validUntil.getTime() <= Date.now()) return fail(res, 400, 'Escolha uma data e horário no futuro.');
+  } else if (duration !== 'indefinite') return fail(res, 400, 'Escolha a duração do acesso.');
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const request = await tx.accessRequest.findUnique({ where: { id: req.params.id } });
+      if (!request) throw new Error('NOT_FOUND');
+      await tx.$queryRaw`SELECT id FROM "Patient" WHERE id=${request.patientId} FOR UPDATE`;
+      const patient = await tx.patient.findUnique({ where: { id: request.patientId } });
+      if (!patient || !managesPatient(patient, req.userId!)) throw new Error('FORBIDDEN');
+      if (request.status !== 'approved') throw new Error('INACTIVE');
+      const now = new Date();
+      const changed = await tx.accessGrant.updateMany({ where: { sourceRequestId: request.id, revokedAt: null, validFrom: { lte: now }, OR: [{ validUntil: null }, { validUntil: { gt: now } }] }, data: { scope: explicitScope(sections), validUntil } });
+      if (!changed.count) throw new Error('INACTIVE');
+      return { id: request.id, sections, validUntil: validUntil?.toISOString() ?? null };
+    });
+    return res.json(result);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    return fail(res, code === 'NOT_FOUND' ? 404 : code === 'FORBIDDEN' ? 403 : code === 'INACTIVE' ? 409 : 503,
+      code === 'FORBIDDEN' ? 'Somente o paciente ou tutor atual pode alterar a autorização.' : code === 'INACTIVE' ? 'A autorização não está ativa. Atualize a lista.' : 'Não foi possível alterar a autorização.');
+  }
+});
+
 router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res: Response) => {
   try {
     await prisma.$transaction(async tx => {
@@ -252,6 +291,7 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
 
 
