@@ -157,6 +157,10 @@ try {
   assert.equal((await call('/professional/consultations',professional.token,{accessRequestId:access.body.id,title:'Local alheio',type:'consultation',occurredAt,locationId:'foreign-location'})).status,400);
   const personalVisit=await call('/patients/'+patient.patientId+'/events',patient.token,{title:'Consulta registrada pelo paciente',type:'consultation',occurredAt,practitionerName:'Profissional teste',locationId:location.body.id,payload:{}});
   assert.equal(personalVisit.status,201);assert.equal(personalVisit.body.locationId,location.body.id);
+  const historicalNameVisit=await call('/patients/'+patient.patientId+'/events',patient.token,{title:'Nome histórico com registro correto',type:'consultation',occurredAt,practitionerName:'Nome histórico',council:'CRM',registration:profileData.registration,registrationRegion:'SP',locationId:location.body.id,payload:{}});
+  assert.equal(historicalNameVisit.status,201,'Registry match should preserve historical name');
+  assert.equal((await call('/patients/'+patient.patientId+'/events',patient.token,{title:'Registro diferente',type:'consultation',occurredAt,practitionerName:'Profissional teste',council:'CRM',registration:'wrong',registrationRegion:'SP',locationId:location.body.id,payload:{}})).status,400);
+
 
   const encounterPath = '/professional/consultations/' + consultation.body.id;
   assert.equal(consultation.body.payload.followUp.at,'2026-10-31T20:30:00.000Z');

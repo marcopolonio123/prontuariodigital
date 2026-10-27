@@ -28,15 +28,20 @@ export async function encounterLocation(tx: Db, userId: string, body: {locationI
   return place.location;
 }
 
-export async function patientEncounterLocation(tx: Db, body: {locationId?:unknown;payload?:any;practitionerName?:unknown}, existingId?: string|null) {
+export async function patientEncounterLocation(tx: Db, body: {locationId?:unknown;payload?:any;practitionerName?:unknown;council?:unknown;registration?:unknown;registrationRegion?:unknown}, existingId?: string|null) {
   if(body.payload?.homeVisit===true||body.payload?.onlineVisit===true)return null;
   const id=String(body.locationId??'');
   if(!id)return null;
   const owner=await tx.professionalLocation.findUnique({where:{id},select:{userId:true}});
   if(!owner)throw new Error('LOCATION');
   await lockDirectory(tx,owner.userId);
-  const place=await tx.professionalLocation.findUnique({where:{id},include:{location:true,user:{select:{practitioner:{select:{name:true,active:true,verificationStatus:true}}}}}});
+  const place=await tx.professionalLocation.findUnique({where:{id},include:{location:true,user:{select:{practitioner:{select:{name:true,active:true,verificationStatus:true,registrations:{include:{authority:true}}}}}}}});
   if(!place||!place.user.practitioner?.active||place.user.practitioner.verificationStatus!=='verified'||(!place.active&&id!==existingId))throw new Error('LOCATION');
-  if(body.practitionerName&&String(body.practitionerName).trim().toLowerCase()!==place.user.practitioner.name.trim().toLowerCase())throw new Error('LOCATION');
+  const practitioner=place.user.practitioner;
+  const registration=String(body.registration??'').trim(), region=String(body.registrationRegion??'').trim().toUpperCase();
+  if(registration&&region){
+    const council=String(body.council??'').trim().toUpperCase();
+    if(!practitioner.registrations.some(item=>item.status==='active'&&item.registration===registration&&item.region?.toUpperCase()===region&&(!council||item.authority.code.toUpperCase()===council)))throw new Error('LOCATION');
+  }else if(body.practitionerName&&String(body.practitionerName).trim().toLowerCase()!==practitioner.name.trim().toLowerCase())throw new Error('LOCATION');
   return place.location;
 }
