@@ -68,6 +68,7 @@ jobs:
       - name: Feature patches are additive and idempotent
         run: |
           node scripts/sequential-identifiers-smoke.mjs
+          node scripts/integrity-migration-smoke.mjs
           NODE_ENV=production node scripts/apply-feature-patches.cjs
           NODE_ENV=production node scripts/apply-feature-patches.cjs
       - run: npm run build

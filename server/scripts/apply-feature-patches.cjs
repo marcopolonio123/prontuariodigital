@@ -2,6 +2,24 @@
 // antes de carregar o Prisma e de iniciar o servidor HTTP.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+
+async function applyManagedMigrations(client) {
+  await client.query('CREATE TABLE IF NOT EXISTS "_MyDoctorSchemaMigration" (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, "appliedAt" TIMESTAMPTZ NOT NULL DEFAULT now())');
+  const directory=path.join(__dirname,'..','prisma','migrations-managed');
+  for(const filename of fs.readdirSync(directory).filter(name=>name.endsWith('.sql')).sort()) {
+    const sql=fs.readFileSync(path.join(directory,filename),'utf8');
+    const checksum=crypto.createHash('sha256').update(sql).digest('hex');
+    const applied=await client.query('SELECT checksum FROM "_MyDoctorSchemaMigration" WHERE name=$1',[filename]);
+    if(applied.rows.length) {
+      if(applied.rows[0].checksum!==checksum)throw new Error('Applied schema migration changed: '+filename);
+      continue;
+    }
+    await client.query(sql);
+    await client.query('INSERT INTO "_MyDoctorSchemaMigration"(name,checksum) VALUES($1,$2)',[filename,checksum]);
+    console.info('MyDoctor: migração de integridade aplicada: '+filename);
+  }
+}
 
 async function main() {
   if (!process.env.DATABASE_URL || (process.env.NODE_ENV !== 'production' && !process.argv.includes('--startup'))) {
@@ -35,6 +53,7 @@ async function main() {
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Patient' AND column_name = 'recordNumber') AS record_ready,
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'User' AND column_name = 'userNumber') AS user_number_ready`);
     if (Object.values(ready.rows[0]).every(value => value === true)) {
+      await applyManagedMigrations(client);
       await client.query('COMMIT');
       console.info('MyDoctor: schema dos recursos já preparado.');
       return;
@@ -42,6 +61,7 @@ async function main() {
     for (const filename of ['consultant-usage.sql', 'medication-agenda.sql', 'professional-admin.sql', 'professional-documents.sql', 'account-details.sql', 'tutorship.sql', 'sequential-identifiers.sql']) {
       await client.query(fs.readFileSync(path.join(__dirname, '..', 'prisma', filename), 'utf8'));
     }
+    await applyManagedMigrations(client);
     await client.query('COMMIT');
     console.info('MyDoctor: patches aditivos do Consultor e Agenda aplicados.');
   } catch (error) {
@@ -53,4 +73,5 @@ main().catch(() => {
   console.error('MyDoctor: não foi possível preparar o banco. Build interrompido; verifique conexão e permissões.');
   process.exitCode = 1;
 });
+
 

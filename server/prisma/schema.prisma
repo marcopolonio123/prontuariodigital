@@ -189,6 +189,8 @@ model AccessGrant {
   revokedAt           DateTime?
   events              HealthEvent[]
 
+  // Composite patient-boundary FK from HealthEvent is managed by migrations-managed.
+  @@unique([id, patientId])
   @@index([accountId, patientId, revokedAt])
   @@index([patientId, validUntil, revokedAt])
   @@index([practitionerId, revokedAt])
@@ -358,6 +360,8 @@ model HealthEvent {
   updatedAt         DateTime       @updatedAt
   documents         ClinicalDocument[]
 
+  // Composite patient-boundary FK from ClinicalDocument is managed by migrations-managed.
+  @@unique([id, patientId])
   @@index([patientId, occurredAt])
   @@index([patientId, type, occurredAt])
   @@index([practitionerId, occurredAt])
@@ -592,3 +596,4 @@ model PatientIdentityDocument {
   content Bytes
   createdAt DateTime @default(now())
 }
+
