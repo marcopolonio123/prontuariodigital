@@ -115,6 +115,7 @@ export interface ClinicalSummaryV1 {
   schedules: Array<{ id: string; name: string; dose: string; weekdays: number[]; times: string[]; timezone: string; continuousUse: boolean; startsOn: string; endsOn: string | null; createdAt: string }>;
 }
 export interface HealthEventV1 {
+  locationId?:string|null;
   id: string; patientId: string; type: string; status: string; title: string; occurredAt: string; endedAt?: string | null; timezone: string;
   practitionerNameSnapshot?: string | null; professionSnapshot?: string | null; councilSnapshot?: string | null; registrationSnapshot?: string | null;
   registrationRegionSnapshot?: string | null; organizationNameSnapshot?: string | null; locationNameSnapshot?: string | null;
@@ -253,11 +254,11 @@ export class MyDoctorV1Api {
   searchAgendaPatients(name:string) {return this.req<{items:Array<{id:string;name:string;record:string;documentType:string;documentNumber:string}>;total:number}>('/professional/agenda/patients?q='+encodeURIComponent(name))}
   getProfessionalAgenda() {return this.req<Array<{id:string;title:string;at:string;notes:string;patientName:string|null;patientId?:string;source:string;status:string;alert:boolean;updatedAt:string;locationId?:string;locationName?:string;locationAddress?:string}>>('/professional/agenda')}
   saveProfessionalAgenda(input:Record<string,unknown>) {return this.req('/professional/agenda',{method:'POST',body:JSON.stringify(input)})}
-  createProfessionalConsultation(input: { followUp?:unknown;accessRequestId: string; title: string; occurredAt: string; timezone?: string; type?: string; organizationName?: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms?: string; diagnosis?: string; exams?: string; prescriptions?: string; notes?: string }) {
+  createProfessionalConsultation(input: { followUp?:unknown;accessRequestId: string; title: string; occurredAt: string; timezone?: string; type?: string; locationId?: string; organizationName?: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms?: string; diagnosis?: string; exams?: string; prescriptions?: string; notes?: string }) {
     return this.req<HealthEventV1>('/professional/consultations', { method: 'POST', body: JSON.stringify(input) });
   }
   getProfessionalConsultation(id: string) { return this.req<ProfessionalConsultationDetailV1>(`/professional/consultations/${encodeURIComponent(id)}`); }
-  updateProfessionalConsultation(id: string, input: { followUp?:unknown;title: string; type: string; occurredAt: string; organizationName: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms: string; diagnosis: string; exams: string; prescriptions: string; notes: string; expectedUpdatedAt: string }) { return this.req<HealthEventV1>(`/professional/consultations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
+  updateProfessionalConsultation(id: string, input: { followUp?:unknown;title: string; type: string; occurredAt: string; locationId?:string; organizationName: string; homeVisit?: boolean; onlineVisit?: boolean; symptoms: string; diagnosis: string; exams: string; prescriptions: string; notes: string; expectedUpdatedAt: string }) { return this.req<HealthEventV1>(`/professional/consultations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
   submitProfessionalConsultation(id: string, expectedUpdatedAt: string) { return this.req<{ id: string; status: string }>(`/professional/consultations/${encodeURIComponent(id)}/submit`, { method: 'POST', body: JSON.stringify({ expectedUpdatedAt }) }); }
   removeProfessionalConsultationDocument(id: string, documentId: string) { return this.req<{ status: string }>(`/professional/consultations/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}/inactivate`, { method: 'POST' }); }
   listIncomingConsultations() { return this.req<IncomingConsultationV1[]>('/consultations/incoming'); }

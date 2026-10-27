@@ -39,6 +39,8 @@ model User {
   subscriptions   Subscription[]
   consultantUsage ConsultantUsage[]
   medicationDeliveries MedicationReminderDelivery[]
+  professionalLocations ProfessionalLocation[]
+  professionalAppointments ProfessionalAppointment[]
 }
 
 // Apenas metadados de consumo. Não armazena perguntas, respostas ou dados clínicos.
@@ -96,6 +98,7 @@ model Patient {
   logs           IdentificationLog[]
   events         HealthEvent[]
   documents      ClinicalDocument[]
+  appointments   ProfessionalAppointment[]
 
   @@index([ownerUserId, archived])
   @@index([name])
@@ -293,6 +296,10 @@ model Location {
   city           String?
   state          String?
   postalCode     String?
+  number         String?
+  neighborhood   String?
+  formattedAddress String?
+  professionalLocation ProfessionalLocation?
   country        String        @default("BR")
   latitude       Float?
   longitude      Float?
@@ -359,6 +366,7 @@ model HealthEvent {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   documents         ClinicalDocument[]
+  followUpState     ProfessionalFollowUpState?
 
   // Composite patient-boundary FK from ClinicalDocument is managed by migrations-managed.
   @@unique([id, patientId])
@@ -597,3 +605,56 @@ model PatientIdentityDocument {
   createdAt DateTime @default(now())
 }
 
+
+// Professional directory extends the shared Location address; no clinical data in User JSON.
+model ProfessionalLocation {
+  id String @id
+  userId String
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  location Location @relation(fields:[id], references:[id], onDelete:Cascade)
+  normalizedName String
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  availability ProfessionalLocationAvailability[]
+  appointments ProfessionalAppointment[]
+  @@unique([userId,normalizedName])
+  @@unique([id,userId])
+}
+model ProfessionalLocationAvailability {
+  locationId String
+  location ProfessionalLocation @relation(fields:[locationId], references:[id], onDelete:Cascade)
+  weekday Int
+  startMinute Int
+  endMinute Int
+  @@id([locationId,weekday,startMinute])
+}
+model ProfessionalAppointment {
+  id String @id
+  userId String
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  patientId String?
+  patient Patient? @relation(fields:[patientId], references:[id], onDelete:SetNull)
+  locationId String?
+  location ProfessionalLocation? @relation(fields:[locationId,userId], references:[id,userId], onDelete:NoAction)
+  modality String @default("unspecified")
+  patientName String @default("")
+  locationName String @default("")
+  locationAddress String @default("")
+  title String
+  at DateTime @db.Timestamptz(3)
+  notes String @default("")
+  status String @default("scheduled")
+  alert Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  @@index([userId,at])
+}
+// Status override only. Return date continues to belong to the clinical encounter.
+model ProfessionalFollowUpState {
+  eventId String @id
+  event HealthEvent @relation(fields:[eventId], references:[id], onDelete:Cascade)
+  at DateTime @db.Timestamptz(3)
+  status String
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}

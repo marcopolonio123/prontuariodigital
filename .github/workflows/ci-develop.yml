@@ -69,6 +69,7 @@ jobs:
         run: |
           node scripts/sequential-identifiers-smoke.mjs
           node scripts/integrity-migration-smoke.mjs
+          node scripts/professional-directory-migration-smoke.mjs
           NODE_ENV=production node scripts/apply-feature-patches.cjs
           NODE_ENV=production node scripts/apply-feature-patches.cjs
       - run: npm run build

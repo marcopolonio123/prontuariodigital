@@ -30,8 +30,8 @@ try {
   assert.equal(button('Enviar para aprovação'),undefined);
   await settle(()=>Simulate.change(field('Atendimento (descrição)'),{target:{value:'Consulta teste'}}));
   const locationSelect=[...document.querySelectorAll('label')].find(x=>x.textContent.startsWith('Local de atendimento')).querySelector('select');
-  await settle(()=>Simulate.change(locationSelect,{target:{value:'Consultório teste'}}));
-  assert.equal(locationSelect.value,'Consultório teste');
+  await settle(()=>Simulate.change(locationSelect,{target:{value:'loc1'}}));
+  assert.equal(locationSelect.value,'loc1');
   const modality=document.querySelector('[aria-label="Modalidade / Tipo de local"]');
   await settle(()=>Simulate.change(modality,{target:{value:'home'}}));
   assert.equal(document.querySelector('[aria-label="Local de atendimento"]'),null);
@@ -61,4 +61,5 @@ try {
   assert.equal(button('Salvar alterações'),undefined);assert.equal(document.querySelector('textarea'),null);assert.equal(document.querySelector('input[type=file]'),null);
   console.log('✅ Atendimento: salvar sem enviar, versão persistida, edição pendente e bloqueio após aprovação OK.');
 } finally {await settle(()=>root.unmount());await fs.unlink(outfile);}
+
 
