@@ -1,3 +1,4 @@
+import { patientEncounterLocation } from './professional-directory.js';
 import { canReadEvent, grantedSections } from './access-scope.js';
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
@@ -650,7 +651,10 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
 
   if(body.payload?.followUp!==undefined){try{body.payload.followUp=normalizeFollowUp(body.payload.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}}
   const actor = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true } });
-  const event = await prisma.healthEvent.create({
+  let event;
+  try { event=await prisma.$transaction(async tx=>{
+    const place=await patientEncounterLocation(tx,body);
+    return tx.healthEvent.create({
     data: {
       patientId: req.params.patientId,
       type,
@@ -661,14 +665,14 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
       timezone: String(body.timezone ?? 'America/Sao_Paulo'),
       practitionerId: body.practitionerId ? String(body.practitionerId) : null,
       organizationId: body.organizationId ? String(body.organizationId) : null,
-      locationId: body.locationId ? String(body.locationId) : null,
+      locationId: place?.id??null,
       sourceSystemId: body.sourceSystemId ? String(body.sourceSystemId) : null,
       practitionerNameSnapshot: body.practitionerName ? String(body.practitionerName) : null,
       professionSnapshot: body.profession ? String(body.profession) : null,
       councilSnapshot: body.council ? String(body.council) : null,
       registrationSnapshot: body.registration ? String(body.registration) : null,
       registrationRegionSnapshot: body.registrationRegion ? String(body.registrationRegion) : null,
-      organizationNameSnapshot: body.organizationName ? String(body.organizationName) : null,
+      organizationNameSnapshot: place?.name ?? (body.organizationName ? String(body.organizationName) : null),
       locationNameSnapshot: body.locationName ? String(body.locationName) : null,
       payload: type === 'wellbeing_diary' ? { ...(body.payload ?? {}), entries: retainedDiaryEntries(body.payload) } : body.payload ?? {},
       provenance: {
@@ -678,7 +682,8 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
         createdAt: new Date().toISOString(),
       },
     },
-  });
+    });
+  }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'O local não corresponde ao profissional selecionado ou não está ativo. Escolha novamente ou informe Outros.');throw error; }
 
   // Confirma a persistencia antes de informar sucesso ao frontend.
   const persisted = await prisma.healthEvent.findUnique({
@@ -713,9 +718,13 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
     registrationSnapshot: current.registrationSnapshot, registrationRegionSnapshot: current.registrationRegionSnapshot,
     organizationNameSnapshot: current.organizationNameSnapshot,
   };
-  const updated = await prisma.healthEvent.update({
+  let updated;
+  try { updated=await prisma.$transaction(async tx=>{
+    const place=body.locationId===undefined ? undefined : await patientEncounterLocation(tx,body,current.locationId);
+    return tx.healthEvent.update({
     where: { id: current.id },
     data: {
+      locationId:place===undefined?current.locationId:place?.id??null,
       status: 'amended',
       title: body.title !== undefined ? String(body.title).trim() : current.title,
       type: body.type !== undefined ? String(body.type) : current.type,
@@ -725,11 +734,12 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
       councilSnapshot: body.council !== undefined ? String(body.council).trim() || null : current.councilSnapshot,
       registrationSnapshot: body.registration !== undefined ? String(body.registration).trim() || null : current.registrationSnapshot,
       registrationRegionSnapshot: body.registrationRegion !== undefined ? String(body.registrationRegion).trim() || null : current.registrationRegionSnapshot,
-      organizationNameSnapshot: body.organizationName !== undefined ? String(body.organizationName).trim() || null : current.organizationNameSnapshot,
+      organizationNameSnapshot: place?.name ?? (body.organizationName !== undefined ? String(body.organizationName).trim() || null : current.organizationNameSnapshot),
       payload: isDiary ? { ...(body.payload ?? current.payload), entries: retainedDiaryEntries(body.payload ?? current.payload) } : body.payload ?? current.payload,
       provenance: isDiary ? {} : { source: 'mydoctor_manual', action: 'amended', actorUserId: req.userId!, amendedAt: new Date().toISOString(), previous },
     },
   });
+  }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'O local não corresponde ao profissional selecionado ou não está ativo. Escolha novamente ou informe Outros.');throw error; }
   res.json(updated);
 });
 

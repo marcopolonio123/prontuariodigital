@@ -110,6 +110,9 @@ try {
   assert.equal((await call('/professional/locations',admin.token)).body.some(place=>place.id===location.body.id),false,'Local/disponibilidade de outro profissional vazou');
   assert.equal((await call('/professional/locations/'+saturday.body.id,professional.token,undefined,'DELETE')).status,200);
 
+  const storedPlace=await db.professionalLocation.findUnique({where:{id:location.body.id},include:{location:true,availability:true}});
+  assert.equal(storedPlace.userId,professional.id);assert.equal(storedPlace.location.number,address.number);assert.equal(storedPlace.availability.length,weekly.length);
+  assert.equal((await db.user.findUnique({where:{id:professional.id}})).accountData?.professionalLocations,undefined,'Location still written into account JSON');
   row = await reviewRow(); assert.equal(row.history.length, 1); assert.equal(row.history[0].actorName, 'Administrador teste');
   await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "test_legacy_grant_pair_unique" ON "AccessGrant" ("accountId", "patientId")');
   const legacyGrant = await db.accessGrant.create({ data: { accountId: professional.id, patientId: patient.patientId, level: 'leitura', revokedAt: new Date() } });
@@ -147,6 +150,18 @@ try {
   const consultation = await call('/professional/consultations', professional.token, { accessRequestId: access.body.id, title: 'Consulta completa', type: 'therapy', occurredAt, followUp:{enabled:true,period:'30',at:'2026-10-31T17:30:00-03:00',alert:true}, homeVisit: true, organizationName:'Consultório teste', symptoms: 'Queixa teste', diagnosis: 'Hipótese teste', exams: 'Exame teste', prescriptions: 'Prescrição teste', notes: 'Observação teste' });
   assert.equal(consultation.status, 201);
   assert.equal(consultation.body.status, 'draft');
+  assert.equal((await db.healthEvent.findUnique({where:{id:consultation.body.id}})).locationId,null,'Home visit was linked to clinic');
+  const clinicVisit=await call('/professional/consultations',professional.token,{accessRequestId:access.body.id,title:'Consulta em local cadastrado',type:'consultation',occurredAt,locationId:location.body.id,organizationName:'Nome adulterado'});
+  assert.equal(clinicVisit.status,201);assert.equal((await db.healthEvent.findUnique({where:{id:clinicVisit.body.id}})).locationId,location.body.id);
+  assert.equal((await db.healthEvent.findUnique({where:{id:clinicVisit.body.id}})).organizationNameSnapshot,'Consultório teste');
+  assert.equal((await call('/professional/consultations',professional.token,{accessRequestId:access.body.id,title:'Local alheio',type:'consultation',occurredAt,locationId:'foreign-location'})).status,400);
+  const personalVisit=await call('/patients/'+patient.patientId+'/events',patient.token,{title:'Consulta registrada pelo paciente',type:'consultation',occurredAt,practitionerName:'Profissional teste',locationId:location.body.id,payload:{}});
+  assert.equal(personalVisit.status,201);assert.equal(personalVisit.body.locationId,location.body.id);
+  const historicalNameVisit=await call('/patients/'+patient.patientId+'/events',patient.token,{title:'Nome histórico com registro correto',type:'consultation',occurredAt,practitionerName:'Nome histórico',council:'CRM',registration:profileData.registration,registrationRegion:'SP',locationId:location.body.id,payload:{}});
+  assert.equal(historicalNameVisit.status,201,'Registry match should preserve historical name');
+  assert.equal((await call('/patients/'+patient.patientId+'/events',patient.token,{title:'Registro diferente',type:'consultation',occurredAt,practitionerName:'Profissional teste',council:'CRM',registration:'wrong',registrationRegion:'SP',locationId:location.body.id,payload:{}})).status,400);
+
+
   const encounterPath = '/professional/consultations/' + consultation.body.id;
   assert.equal(consultation.body.payload.followUp.at,'2026-10-31T20:30:00.000Z');
   assert.equal((await call('/professional/agenda',patient.token)).status,403);
@@ -172,6 +187,8 @@ try {
   assert.equal(typeof agenda[0].patientName,'string');
   assert.equal((await call('/professional/agenda',professional.token,{title:'Planejamento particular',patientId:patient.patientId,patientName:'Nome adulterado',locationId:location.body.id,at:'2026-11-02T09:00:00-03:00',alert:true})).status,200);
   agenda=(await call('/professional/agenda',professional.token)).body;
+  assert.equal(await db.professionalAppointment.count({where:{userId:professional.id}}),1);
+  assert.equal((await db.user.findUnique({where:{id:professional.id}})).accountData?.professionalAgenda,undefined,'Agenda still written into account JSON');
   const ownAppointment=agenda.find(item=>item.source==='manual');assert(ownAppointment);assert.equal(ownAppointment.locationName,'Consultório teste');assert.equal(ownAppointment.locationId,location.body.id);assert.equal(ownAppointment.patientId,patient.patientId);assert.equal(ownAppointment.patientName,patient.name);
   assert.equal((await call('/professional/agenda',professional.token,{title:'Local alheio',at:'2026-11-02T09:00:00Z',locationId:'nao-pertence'})).status,400);
   const otherAgenda=await call('/professional/agenda',admin.token);if(otherAgenda.status===200)assert.equal(otherAgenda.body.some(item=>item.id===ownAppointment.id||item.id==='return:'+consultation.body.id),false,'Agenda vazou para outro profissional');
@@ -245,6 +262,9 @@ try {
   assert.equal(agenda.filter(item=>item.id===returnItem.id).length,1,'Edição/ aprovação duplicou retorno');
   assert.equal((await call('/professional/agenda',professional.token,{id:returnItem.id,action:'status',status:'completed',expectedUpdatedAt:returnItem.updatedAt})).status,200);
   assert.equal((await call(encounterPath,professional.token)).body.updatedAt,detail.body.updatedAt,'Concluir agenda alterou atendimento aprovado');
+  assert.equal((await db.professionalFollowUpState.findUnique({where:{eventId:consultation.body.id}})).status,'completed');
+  assert.equal((await call('/professional/agenda',professional.token,{id:returnItem.id,action:'status',status:'cancelled',expectedUpdatedAt:returnItem.updatedAt})).status,409,'Return status accepted stale version');
+
   assert.equal((await call('/professional/agenda',professional.token,{id:returnItem.id,at:'2027-01-01T00:00:00Z',expectedUpdatedAt:returnItem.updatedAt})).status,400);
   const finalPatient=(await call('/patients/'+patient.patientId+'/events',patient.token)).body.find(item=>item.id===consultation.body.id);
   assert.equal(finalPatient.payload.followUp.enabled,true,'Retorno desapareceu do prontuário aprovado');
@@ -340,6 +360,7 @@ try {
   await db.$disconnect();
 }
 process.exit(0);
+
 
 
 
