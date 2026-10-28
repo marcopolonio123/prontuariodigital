@@ -6,6 +6,8 @@ A integração é compatível com S3 e fica desativada até configurar o provedo
 
 Criar um bucket **privado**, com bloqueio de acesso público e credencial limitada ao bucket e aos prefixos da aplicação. Configurar criptografia, política de recuperação e retenção no provedor. Um backup somente do PostgreSQL não inclui os objetos.
 
+Para o visualizador atual do navegador, configurar CORS do bucket permitindo `GET` e `HEAD` para `https://mydoctor.med.br` (e apenas as demais origens do aplicativo que forem efetivamente usadas). CORS não concede acesso público; o objeto continua exigindo assinatura. Confirmar o download no navegador após a configuração.
+
 No ambiente Node da Hostinger (nunca em variáveis VITE nem no navegador):
 
 | Variável | Valor |

@@ -45,7 +45,7 @@ try{
  corrupt=true;let migration=await migrate(legacy.id);assert.equal(migration.code,1,migration.output);assert((await db.userIdentityDocument.findUnique({where:{id:legacy.id}})).content);corrupt=false;
  migration=await migrate(legacy.id);assert.equal(migration.code,0,migration.output);row=await db.userIdentityDocument.findUnique({where:{id:legacy.id}});assert.equal(row.content,null);assert.equal(row.sha256,sha256);
  const count=objects.size;migration=await migrate(legacy.id);assert.equal(migration.code,0,migration.output);assert.equal(objects.size,count,'Repeat migration duplicated objects');
- const patient=await db.patient.create({data:{ownerUserId:owner.id,name:'Paciente fixture',record:'storage-'+randomUUID(),data:{relationshipToOwner:'child'},tutorUserId:owner.id}});
+ const patient=await db.patient.create({data:{id:randomUUID(),ownerUserId:owner.id,name:'Paciente fixture',record:'storage-'+randomUUID(),data:{relationshipToOwner:'child'},tutorUserId:owner.id}});
  const depResponse=await call('/people/'+patient.id+'/document',owner,input);assert.equal(depResponse.status,200);assert.equal((await db.patientIdentityDocument.findUnique({where:{patientId:patient.id}})).content,null);assert.equal((await call('/people/'+patient.id+'/document/download',other)).status,403);
  const event=await db.healthEvent.create({data:{patientId:patient.id,type:'consultation',title:'Fixture',occurredAt:new Date(),status:'final'}});
  const key=`${patient.id}/${event.id}/fixture.pdf`;await fs.mkdir(path.dirname(path.join(root,key)),{recursive:true});await fs.writeFile(path.join(root,key),bytes);

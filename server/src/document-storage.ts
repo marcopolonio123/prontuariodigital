@@ -23,6 +23,7 @@ export async function checkObjectStorage(){const {client,bucket}=connection();tr
 export async function putPrivateObject(prefix:string,content:Buffer,mimeType:string){
  const {client,bucket}=connection(),key=validKey(prefix+'/'+randomUUID());
  try{await client.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:content,ContentType:mimeType,ContentLength:content.length,CacheControl:'private, no-store',Metadata:{sha256:hash(content)}}));}
+ catch(error){await retireStoredFile(prisma,{storageProvider:'s3',storageBucket:bucket,objectKey:key}).catch(()=>console.error('Falha ao registrar limpeza de envio não confirmado.'));throw error;}
  finally{client.destroy();}
  return {storageProvider:'s3',storageBucket:bucket,objectKey:key};
 }
@@ -57,9 +58,10 @@ export async function storeClinicalFile(prefix:string,buffer:Buffer,mimeType:str
  const absolute=legacyDocumentPath(legacyKey);await fs.mkdir(path.dirname(absolute),{recursive:true});await fs.writeFile(absolute,buffer,{flag:'wx'});
  return {storageProvider:'local_private',storageBucket:null,objectKey:legacyKey};
 }
+let cleaning=false;
 export async function cleanupStoredFiles(){
- if(!objectStorageEnabled())return;
- const {client}=connection();
+ if(!objectStorageEnabled()||cleaning)return;
+ const {client}=connection();cleaning=true;
  try{const jobs=await prisma.storageDeletion.findMany({where:{nextAttemptAt:{lte:new Date()}},orderBy:{nextAttemptAt:'asc'},take:25});
  for(const job of jobs){try{
   // Object keys are immutable and never reused. Retain anything still referenced.
@@ -67,5 +69,5 @@ export async function cleanupStoredFiles(){
   if(linked.some(Boolean))continue;
   await client.send(new DeleteObjectCommand({Bucket:job.bucket,Key:validKey(job.objectKey)}));await prisma.storageDeletion.deleteMany({where:{id:job.id}});
  }catch{await prisma.storageDeletion.updateMany({where:{id:job.id},data:{attempts:{increment:1},nextAttemptAt:new Date(Date.now()+Math.min(86400000,60000*2**Math.min(job.attempts,10)))}});}
- }}finally{client.destroy();}
+ }}finally{client.destroy();cleaning=false;}
 }
