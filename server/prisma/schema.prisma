@@ -520,7 +520,10 @@ model ProfessionalVerificationDocument {
   mimeType String
   sizeBytes Int
   sha256 String
-  content Bytes
+  content Bytes?
+  objectKey String? @unique
+  storageProvider String?
+  storageBucket String?
   createdAt DateTime @default(now())
   @@index([practitionerId, createdAt])
 }
@@ -535,7 +538,10 @@ model UserIdentityDocument {
   mimeType String
   sizeBytes Int
   sha256 String
-  content Bytes
+  content Bytes?
+  objectKey String? @unique
+  storageProvider String?
+  storageBucket String?
   createdAt DateTime @default(now())
 }
 
@@ -576,7 +582,10 @@ model TutorDocument {
   mimeType String
   sizeBytes Int
   sha256 String
-  content Bytes
+  content Bytes?
+  objectKey String? @unique
+  storageProvider String?
+  storageBucket String?
   createdAt DateTime @default(now())
   @@index([requestId])
 }
@@ -601,7 +610,10 @@ model PatientIdentityDocument {
   mimeType String
   sizeBytes Int
   sha256 String
-  content Bytes
+  content Bytes?
+  objectKey String? @unique
+  storageProvider String?
+  storageBucket String?
   createdAt DateTime @default(now())
 }
 
@@ -657,4 +669,16 @@ model ProfessionalFollowUpState {
   at DateTime @db.Timestamptz(3)
   status String
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// Durable cleanup queue; intentionally survives deletion of document metadata.
+model StorageDeletion {
+  id String @id @default(uuid())
+  bucket String
+  objectKey String
+  createdAt DateTime @default(now())
+  nextAttemptAt DateTime @default(now())
+  attempts Int @default(0)
+  @@unique([bucket,objectKey])
+  @@index([nextAttemptAt])
 }
