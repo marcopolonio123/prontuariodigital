@@ -24,6 +24,7 @@ jobs:
           node scripts/navigation-smoke.mjs
           node scripts/professional-encounter-smoke.mjs
           node scripts/access-sections-ui-smoke.mjs
+          node scripts/document-preview-smoke.mjs
           npx playwright install --with-deps chromium
           node scripts/responsive-navigation-smoke.mjs
           node scripts/pagination-smoke.mjs

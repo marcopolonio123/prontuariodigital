@@ -1031,7 +1031,7 @@ router.get('/patients/:patientId/events/:eventId/documents/:documentId/download'
   }});
   if (!doc) return fail(res, 404, 'Documento não encontrado.');
   const metadata=(doc.metadata??{}) as any;
-  if(metadata.storageProvider==='s3'){await serveDocument(res,{...doc,filename:doc.originalFilename,storageProvider:'s3',storageBucket:metadata.storageBucket});return;}
+  if(metadata.storageProvider==='s3'){await serveDocument(res,{...doc,filename:doc.originalFilename,storageProvider:'s3',storageBucket:metadata.storageBucket},String(req.headers.accept??'').includes('application/json'));return;}
   const absolutePath = legacyDocumentPath(doc.objectKey);
   try { await fs.access(absolutePath); } catch { return fail(res, 404, 'Arquivo não encontrado no armazenamento.'); }
   res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');

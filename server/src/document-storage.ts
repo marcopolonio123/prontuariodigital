@@ -35,9 +35,9 @@ export async function signedDocumentUrl(ref:StoredReference,filename:string,mime
  if(ref.storageProvider!=='s3'||!ref.storageBucket||!ref.objectKey)throw Error('Referência de documento incompleta.');
  const {client}=connection();try{return await getSignedUrl(client,new GetObjectCommand({Bucket:ref.storageBucket,Key:validKey(ref.objectKey),ResponseContentType:mimeType,ResponseContentDisposition:`inline; filename*=UTF-8''${encodeURIComponent(filename)}`,ResponseCacheControl:'private, no-store'}),{expiresIn:120});}finally{client.destroy();}
 }
-export async function serveDocument(res:Response,doc:StoredReference&{filename:string;mimeType:string}){
+export async function serveDocument(res:Response,doc:StoredReference&{filename:string;mimeType:string},json=false){
  res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
- if(doc.storageProvider==='s3'){res.redirect(303,await signedDocumentUrl(doc,doc.filename,doc.mimeType));return;}
+ if(doc.storageProvider==='s3'){const url=await signedDocumentUrl(doc,doc.filename,doc.mimeType);if(json)res.json({url,expiresIn:120});else res.redirect(303,url);return;}
  if(!doc.content)throw Error('Conteúdo do documento indisponível.');
  res.setHeader('Content-Disposition',`inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);res.type(doc.mimeType).send(Buffer.from(doc.content));
 }

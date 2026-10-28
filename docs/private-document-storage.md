@@ -6,7 +6,7 @@ A integração é compatível com S3 e fica desativada até configurar o provedo
 
 Criar um bucket **privado**, com bloqueio de acesso público e credencial limitada ao bucket e aos prefixos da aplicação. Configurar criptografia, política de recuperação e retenção no provedor. Um backup somente do PostgreSQL não inclui os objetos.
 
-Para o visualizador atual do navegador, configurar CORS do bucket permitindo `GET` e `HEAD` para `https://mydoctor.med.br` (e apenas as demais origens do aplicativo que forem efetivamente usadas). CORS não concede acesso público; o objeto continua exigindo assinatura. Confirmar o download no navegador após a configuração.
+O visualizador abre uma aba durante o clique e solicita a URL temporária à API com `Accept: application/json`. Após a autorização, navega diretamente para o objeto, sem fazer fetch entre origens. Assim, essa visualização não depende de CORS do bucket. Clientes que busquem os bytes via JavaScript precisam configurar CORS para suas origens; isso não concede acesso público. O comportamento padrão da API sem negociação JSON continua sendo um redirecionamento HTTP.
 
 No ambiente Node da Hostinger (nunca em variáveis VITE nem no navegador):
 
