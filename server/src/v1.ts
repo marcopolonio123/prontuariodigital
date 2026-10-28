@@ -1,3 +1,4 @@
+import {StorageError,quotaTransaction,withManagedQuota} from './storage-quota.js';
 import {storeClinicalFile,legacyDocumentPath,serveDocument,retireStoredFile} from './document-storage.js';
 import { patientEncounterLocation } from './professional-directory.js';
 import { canReadEvent, grantedSections } from './access-scope.js';
@@ -371,7 +372,7 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
   let reference:any;
   try{if(referenceChanged)reference=prepareReference(body.fingerprintReference,req.userId!)}catch(e){return fail(res,400,e instanceof Error?e.message:'Foto da digital inválida.')}
   try {
-    const result = await prisma.$transaction(async tx => {
+    const result = await quotaTransaction(req.userId!,async tx => {
       const old = await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
       const identity = await tx.userIdentityDocument.findUnique({ where: { userId: old.id }, select: { kind: true } });
       if (identity?.kind === 'Certidão de nascimento' && !isUnder18(birthDate)) throw new Error('AGE');
@@ -394,7 +395,7 @@ router.put('/account', auth, async (req: AuthedRequest, res: Response) => {
       return accountView(user, { ...data, ...(user.accountData as object) });
     });
     res.json(result);
-  } catch (error: any) { if(error instanceof PersonError)return fail(res,error.status,error.message); if (error?.message === 'AGE') return fail(res, 400, 'Remova ou substitua a certidão de nascimento antes de informar uma idade de 18 anos ou mais.'); fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
+  } catch (error: any) { if(error instanceof PersonError||error instanceof StorageError)return fail(res,error.status,error.message); if (error?.message === 'AGE') return fail(res, 400, 'Remova ou substitua a certidão de nascimento antes de informar uma idade de 18 anos ou mais.'); fail(res, error?.code === 'P2002' ? 409 : 503, error?.code === 'P2002' ? 'Celular já cadastrado em outra conta.' : 'Não foi possível salvar seu cadastro.'); }
 });
 
 /** Perfil profissional opcional da mesma conta. A conta continua sendo paciente normalmente. */
@@ -636,7 +637,7 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
   if(body.payload?.followUp!==undefined){try{body.payload.followUp=normalizeFollowUp(body.payload.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}}
   const actor = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true } });
   let event;
-  try { event=await prisma.$transaction(async tx=>{
+  try { event=await quotaTransaction((await prisma.patient.findUniqueOrThrow({where:{id:req.params.patientId},select:{ownerUserId:true}})).ownerUserId,async tx=>{
     const place=await patientEncounterLocation(tx,body);
     return tx.healthEvent.create({
     data: {
@@ -667,7 +668,7 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
       },
     },
     });
-  }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'O local não corresponde ao profissional selecionado ou não está ativo. Escolha novamente ou informe Outros.');throw error; }
+  }); } catch(error) { if(error instanceof StorageError)return fail(res,error.status,error.message);if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'O local não corresponde ao profissional selecionado ou não está ativo. Escolha novamente ou informe Outros.');throw error; }
 
   // Confirma a persistencia antes de informar sucesso ao frontend.
   const persisted = await prisma.healthEvent.findUnique({
@@ -703,7 +704,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
     organizationNameSnapshot: current.organizationNameSnapshot,
   };
   let updated;
-  try { updated=await prisma.$transaction(async tx=>{
+  try { updated=await quotaTransaction((await prisma.patient.findUniqueOrThrow({where:{id:req.params.patientId},select:{ownerUserId:true}})).ownerUserId,async tx=>{
     const place=body.locationId===undefined ? undefined : await patientEncounterLocation(tx,body,current.locationId);
     return tx.healthEvent.update({
     where: { id: current.id },
@@ -723,7 +724,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
       provenance: isDiary ? {} : { source: 'mydoctor_manual', action: 'amended', actorUserId: req.userId!, amendedAt: new Date().toISOString(), previous },
     },
   });
-  }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'O local não corresponde ao profissional selecionado ou não está ativo. Escolha novamente ou informe Outros.');throw error; }
+  }); } catch(error) { if(error instanceof StorageError)return fail(res,error.status,error.message);if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'O local não corresponde ao profissional selecionado ou não está ativo. Escolha novamente ou informe Outros.');throw error; }
   res.json(updated);
 });
 
@@ -983,8 +984,10 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
   if (!documentCategories.has(category)) return fail(res, 400, 'Categoria de documento inválida.');
   const files = (req.files ?? []) as Express.Multer.File[];
   if (!files.length) return fail(res, 400, 'Selecione ao menos um arquivo.');
-  const created = [];
-  for (const file of files) {
+  const created:unknown[] = [];
+  const owner=await prisma.patient.findUniqueOrThrow({where:{id:req.params.patientId},select:{ownerUserId:true}});
+  try { for (const file of files) {
+   await withManagedQuota(owner.ownerUserId,file.size,async()=>{
     const id = crypto.randomUUID();
     const extension = file.mimetype === 'application/pdf' ? '.pdf' : file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
     const stored=await storeClinicalFile(`pacientes/${req.params.patientId}/atendimentos/${req.params.eventId}`,file.buffer,file.mimetype,`${req.params.patientId}/${req.params.eventId}/${id}${extension}`);
@@ -1010,7 +1013,9 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
       if (error instanceof Error && error.message === 'APPROVED_MEDICAL_EVENT') return fail(res, 409, 'O atendimento foi aprovado e não pode receber alterações.');
       throw error;
     }
+   });
   }
+  }catch(error){if(error instanceof StorageError)return fail(res,error.status,error.message);throw error;}
   res.status(201).json(created);
 });
 

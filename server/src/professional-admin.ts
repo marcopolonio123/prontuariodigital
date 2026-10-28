@@ -1,3 +1,4 @@
+import {StorageError} from './storage-quota.js';
 import {withStoredFile,retireStoredFile,serveDocument} from './document-storage.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import crypto from 'node:crypto';
@@ -67,9 +68,9 @@ router.post('/account/document', requireOwner, async (req: OwnerRequest, res: Re
       if (old) await retireStoredFile(tx,old);
       if (old) await tx.userIdentityDocument.delete({ where: { id: old.id } });
       return tx.userIdentityDocument.create({ data: { userId: req.userId!, kind, ...stored }, select: documentSelect });
-    }));
+    }),req.userId!);
     res.status(201).json(result);
-  } catch (error) { const code = error instanceof Error ? error.message : ''; res.status(code === 'AGE' ? 400 : code === 'STALE' ? 409 : 503).json({ error: code === 'AGE' ? 'Certidão de nascimento é permitida somente para menores de 18 anos. Confira a data de nascimento.' : 'Não foi possível salvar o documento. Atualize o cadastro e tente novamente.' }); }
+  } catch (error) { if(error instanceof StorageError)return res.status(error.status).json({error:error.message});const code = error instanceof Error ? error.message : ''; res.status(code === 'AGE' ? 400 : code === 'STALE' ? 409 : 503).json({ error: code === 'AGE' ? 'Certidão de nascimento é permitida somente para menores de 18 anos. Confira a data de nascimento.' : 'Não foi possível salvar o documento. Atualize o cadastro e tente novamente.' }); }
 });
 router.delete('/account/documents/:id', requireOwner, async (req: OwnerRequest, res: Response) => {
   try {
@@ -114,9 +115,9 @@ router.post('/professional/documents', requireOwner, async (req: OwnerRequest, r
       await invalidate(tx, practitioner);
       if (await tx.professionalVerificationDocument.count({ where: { practitionerId: practitioner.id } }) >= 6) throw new Error('LIMIT');
       return tx.professionalVerificationDocument.create({ data: { practitionerId: practitioner.id, kind, ...stored }, select: documentSelect });
-    }));
+    }),req.userId!);
     res.status(201).json(result);
-  } catch (error) { const code = error instanceof Error ? error.message : ''; res.status(code === 'STALE' ? 409 : ['PROFILE','LIMIT'].includes(code) ? 400 : 503).json({ error: code === 'PROFILE' ? 'Salve os dados profissionais antes de anexar documentos.' : code === 'LIMIT' ? 'Limite de 6 documentos. Remova um antes de enviar outro.' : code === 'STALE' ? 'O cadastro mudou. Atualize e tente novamente.' : 'Não foi possível enviar o documento.' }); }
+  } catch (error) { if(error instanceof StorageError)return res.status(error.status).json({error:error.message});const code = error instanceof Error ? error.message : ''; res.status(code === 'STALE' ? 409 : ['PROFILE','LIMIT'].includes(code) ? 400 : 503).json({ error: code === 'PROFILE' ? 'Salve os dados profissionais antes de anexar documentos.' : code === 'LIMIT' ? 'Limite de 6 documentos. Remova um antes de enviar outro.' : code === 'STALE' ? 'O cadastro mudou. Atualize e tente novamente.' : 'Não foi possível enviar o documento.' }); }
 });
 router.delete('/professional/documents/:id', requireOwner, async (req: OwnerRequest, res: Response) => {
   try {

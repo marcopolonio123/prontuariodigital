@@ -6,41 +6,19 @@ import type {Prisma} from '@prisma/client';
 import {administrator} from './professional-admin.js';
 import {objectStorageEnabled,putPrivateObject,retireStoredFile,signedDocumentUrl,hash} from './document-storage.js';
 const router=Router();type AuthRequest=Request&{userId?:string};
-export const PERSONAL_FILE_LIMIT=25000000;
-class StorageError extends Error{constructor(public status:number,message:string){super(message);}}
+export {reserveStorage,releaseStorageReservation} from './storage-quota.js';
+import {StorageError,PERSONAL_FILE_LIMIT,ensureAccount,lockStorageAccount,reserveStorage,releaseStorageReservation,managedStorageBytes} from './storage-quota.js';
 const fail=(res:Response,error:unknown)=>{if(error instanceof StorageError)return res.status(error.status).json({error:error.message});if((error as any)?.code==='P2002')return res.status(409).json({error:'Já existe uma pasta com esse nome.'});return res.status(503).json({error:'Não foi possível concluir a operação de armazenamento. Tente novamente.'});};
 function auth(req:AuthRequest,res:Response,next:NextFunction){try{const value=jwt.verify((req.headers.authorization??'').replace(/^Bearer /,''),process.env.JWT_SECRET??'dev-only-mydoctor-jwt-secret-change-me') as {uid:string};if(!value.uid)throw Error();req.userId=value.uid;next();}catch{res.status(401).json({error:'Entre na sua conta para acessar seus arquivos.'});}}
 async function admin(req:AuthRequest,res:Response,next:NextFunction){try{const value=await administrator(req);if(!value.authorized)return res.status(403).json({error:'Acesso restrito à administração.'});req.userId=value.user.id;next();}catch{res.status(401).json({error:'Entre na sua conta.'});}}
 const route=(handler:(req:AuthRequest,res:Response)=>Promise<unknown>)=>(req:AuthRequest,res:Response)=>{void handler(req,res).catch(error=>fail(res,error));};
 const cleanName=(value:unknown,max=180)=>String(value??'').normalize('NFC').replace(/[\\/\r\n\x00-\x1f]/g,'_').trim().slice(0,max);
 const version=(value:unknown)=>{const date=new Date(String(value??''));if(!Number.isFinite(date.getTime()))throw new StorageError(400,'Atualize a consulta antes de salvar.');return date;};
-async function ensureAccount(userId:string){
- const existing=await prisma.storageAccount.findUnique({where:{userId}});if(existing)return existing;
- const user=await prisma.user.findUniqueOrThrow({where:{id:userId},select:{email:true,emailVerifiedAt:true,challenges:{where:{channel:'email',consumedAt:{not:null}},select:{destination:true}}}});
- const adminEmails=(process.env.MYDOCTOR_ADMIN_EMAILS??'').split(',').map(email=>email.trim().toLowerCase());
- const confirmed=!!user.emailVerifiedAt||user.challenges.some(item=>item.destination.toLowerCase()===user.email.toLowerCase());
- return prisma.storageAccount.upsert({where:{userId},create:{userId,uploadsEnabled:confirmed&&adminEmails.includes(user.email.toLowerCase())},update:{}});
-}
-export async function lockStorageAccount(tx:Prisma.TransactionClient,userId:string){await tx.$queryRaw`SELECT "userId" FROM "StorageAccount" WHERE "userId"=${userId} FOR UPDATE`;return tx.storageAccount.findUniqueOrThrow({where:{userId}});}
-export async function reserveStorage(userId:string,sizeBytes:number){
- if(!Number.isInteger(sizeBytes)||sizeBytes<1||sizeBytes>PERSONAL_FILE_LIMIT)throw new StorageError(400,'Envie um arquivo de até 25 MB, com conteúdo.');
- await ensureAccount(userId);
- return prisma.$transaction(async tx=>{
-  const account=await lockStorageAccount(tx,userId);if(!account.uploadsEnabled)throw new StorageError(403,'Novos envios estão suspensos. Você pode consultar, baixar e excluir seus arquivos.');
-  await tx.storageReservation.deleteMany({where:{accountId:userId,expiresAt:{lte:new Date()}}});
-  const reserved=await tx.storageReservation.aggregate({where:{accountId:userId},_sum:{sizeBytes:true},_count:true});
-  const count=await tx.storageFile.count({where:{accountId:userId}});
-  if(count+reserved._count>=account.maxFiles)throw new StorageError(409,'Limite de arquivos atingido. Libere espaço ou solicite ampliação.');
-  if(account.usedBytes+BigInt(reserved._sum.sizeBytes??0)+BigInt(sizeBytes)>account.limitBytes)throw new StorageError(409,'Espaço insuficiente. Exclua arquivos pessoais ou solicite ampliação do plano.');
-  return tx.storageReservation.create({data:{accountId:userId,sizeBytes,expiresAt:new Date(Date.now()+20*60000)}});
- });
-}
-export async function releaseStorageReservation(id:string){await prisma.storageReservation.deleteMany({where:{id}});}
 function pageQuery(req:Request){const page=Math.max(1,Math.min(100000,Number(req.query.page)||1)),size=[10,20,50].includes(Number(req.query.size))?Number(req.query.size):10;return {page:Math.floor(page),size};}
 const fileSelect={id:true,name:true,notes:true,folderId:true,mimeType:true,sizeBytes:true,createdAt:true,updatedAt:true,folder:{select:{id:true,name:true}}} as const;
 router.get('/storage/summary',auth,route(async(req,res)=>{
- const account=await ensureAccount(req.userId!);const [reserved,files,folders,upgrade]=await Promise.all([prisma.storageReservation.aggregate({where:{accountId:req.userId!,expiresAt:{gt:new Date()}},_sum:{sizeBytes:true}}),prisma.storageFile.count({where:{accountId:req.userId!}}),prisma.storageFolder.count({where:{accountId:req.userId!}}),prisma.storageUpgradeRequest.findUnique({where:{accountId:req.userId!}})]);
- res.setHeader('Cache-Control','private, no-store');return res.json({limitBytes:Number(account.limitBytes),usedBytes:Number(account.usedBytes),reservedBytes:reserved._sum.sizeBytes??0,maxFileBytes:PERSONAL_FILE_LIMIT,maxFiles:account.maxFiles,uploadsEnabled:account.uploadsEnabled,files,folders,upgrade:upgrade?{status:upgrade.status,requestedLimitBytes:Number(upgrade.requestedLimitBytes)}:null});
+ const account=await ensureAccount(req.userId!);const [reserved,files,folders,managed]=await Promise.all([prisma.storageReservation.aggregate({where:{accountId:req.userId!,expiresAt:{gt:new Date()}},_sum:{sizeBytes:true}}),prisma.storageFile.count({where:{accountId:req.userId!}}),prisma.storageFolder.count({where:{accountId:req.userId!}}),managedStorageBytes(prisma,req.userId!)]);
+ res.setHeader('Cache-Control','private, no-store');return res.json({limitBytes:Number(account.limitBytes),usedBytes:Number(account.usedBytes+managed),personalBytes:Number(account.usedBytes),managedBytes:Number(managed),reservedBytes:reserved._sum.sizeBytes??0,maxFileBytes:PERSONAL_FILE_LIMIT,maxFiles:account.maxFiles,uploadsEnabled:account.uploadsEnabled,files,folders});
 }));
 router.get('/storage/folders',auth,route(async(req,res)=>{res.setHeader('Cache-Control','private, no-store');return res.json(await prisma.storageFolder.findMany({where:{accountId:req.userId!},select:{id:true,name:true,updatedAt:true,_count:{select:{files:true}}},orderBy:{name:'asc'}}));}));
 router.post('/storage/folders',auth,route(async(req,res)=>{const name=cleanName(req.body.name,80);if(!name)throw new StorageError(400,'Informe o nome da pasta.');await ensureAccount(req.userId!);const result=await prisma.$transaction(async tx=>{await lockStorageAccount(tx,req.userId!);if(await tx.storageFolder.count({where:{accountId:req.userId!}})>=500)throw new StorageError(409,'Limite de 500 pastas atingido.');return tx.storageFolder.create({data:{accountId:req.userId!,name,normalizedName:name.toLocaleLowerCase('pt-BR')},select:{id:true,name:true,updatedAt:true}});});return res.status(201).json(result);}));
@@ -70,7 +48,7 @@ router.post('/storage/files',auth,uploadSlot,multipart,route(async(req,res)=>{
   const mimeType=previewType(file.buffer,file.mimetype);stored=await putPrivateObject(`storage/contas/${req.userId!}/arquivos`,file.buffer,mimeType);
   const result=await prisma.$transaction(async tx=>{
    const account=await lockStorageAccount(tx,req.userId!);const pending=await tx.storageReservation.findFirst({where:{id:reservation.id,accountId:req.userId!,expiresAt:{gt:new Date()}}});
-   if(!account.uploadsEnabled||!pending||account.usedBytes+BigInt(file.buffer.length)>account.limitBytes)throw new StorageError(409,'O envio expirou ou o plano mudou. Atualize a lista e tente novamente.');
+   if(!account.uploadsEnabled||!pending||account.usedBytes+await managedStorageBytes(tx,req.userId!)+BigInt(file.buffer.length)>account.limitBytes)throw new StorageError(409,'O envio expirou ou o plano mudou. Atualize a lista e tente novamente.');
    if(folderId&&!await tx.storageFolder.findFirst({where:{id:folderId,accountId:req.userId!}}))throw new StorageError(409,'A pasta foi excluída. Escolha outra pasta.');
    const saved=await tx.storageFile.create({data:{id:reservation.id,accountId:req.userId!,folderId,name,notes,mimeType,sizeBytes:file.buffer.length,sha256:hash(file.buffer),objectKey:stored!.objectKey,storageBucket:stored!.storageBucket},select:fileSelect});
    await tx.storageAccount.update({where:{userId:req.userId!},data:{usedBytes:{increment:file.buffer.length}}});await tx.storageReservation.delete({where:{id:reservation.id}});return saved;
@@ -89,7 +67,15 @@ router.get('/storage/files/:id/download',auth,route(async(req,res)=>{
  const url=await signedDocumentUrl({...file,storageProvider:'s3'},file.name,file.mimeType,attachment?'attachment':'inline');
  if(String(req.headers.accept??'').includes('application/json'))return res.json({url,expiresIn:120});return res.redirect(303,url);
 }));
-router.post('/storage/upgrade',auth,route(async(req,res)=>{const gb=Number(req.body.gb);if(![5,10,25,50,100].includes(gb))throw new StorageError(400,'Escolha 5, 10, 25, 50 ou 100 GB.');await ensureAccount(req.userId!);await prisma.$transaction(async tx=>{const account=await lockStorageAccount(tx,req.userId!);if(BigInt(gb*1e9)<account.limitBytes||(BigInt(gb*1e9)===account.limitBytes&&account.uploadsEnabled))throw new StorageError(400,'Escolha um espaço maior que o plano atual.');await tx.storageUpgradeRequest.upsert({where:{accountId:req.userId!},create:{accountId:req.userId!,requestedLimitBytes:BigInt(gb*1e9)},update:{requestedLimitBytes:BigInt(gb*1e9),status:'pending'}});});return res.json({requested:true});}));
-router.get('/admin/storage/requests',admin,route(async(req,res)=>{const {page,size}=pageQuery(req),q=String(req.query.q??'').trim().slice(0,150);const where:Prisma.StorageUpgradeRequestWhereInput={status:'pending',...(q?{account:{user:{OR:[{name:{contains:q,mode:'insensitive'}},{email:{contains:q,mode:'insensitive'}}]}}}:{})};const [total,items]=await Promise.all([prisma.storageUpgradeRequest.count({where}),prisma.storageUpgradeRequest.findMany({where,include:{account:{include:{user:{select:{name:true,email:true}}}}},orderBy:{createdAt:'asc'},skip:(page-1)*size,take:size})]);return res.json({total,page,size,items:items.map(row=>({id:row.accountId,name:row.account.user.name,email:row.account.user.email,usedBytes:Number(row.account.usedBytes),limitBytes:Number(row.account.limitBytes),requestedLimitBytes:Number(row.requestedLimitBytes),updatedAt:row.updatedAt}))});}));
-router.post('/admin/storage/requests/:id/decision',admin,route(async(req,res)=>{const decision=String(req.body.decision);if(!['approve','reject'].includes(decision))throw new StorageError(400,'Decisão inválida.');await prisma.$transaction(async tx=>{await lockStorageAccount(tx,req.params.id);const request=await tx.storageUpgradeRequest.findFirst({where:{accountId:req.params.id,status:'pending',updatedAt:version(req.body.expectedUpdatedAt)}});if(!request)throw new StorageError(409,'A solicitação mudou. Atualize a lista.');if(decision==='approve')await tx.storageAccount.update({where:{userId:req.params.id},data:{limitBytes:request.requestedLimitBytes,uploadsEnabled:true}});await tx.storageUpgradeRequest.update({where:{accountId:req.params.id},data:{status:decision==='approve'?'approved':'rejected'}});});return res.json({saved:true});}));
+// Plan prices and the payment provider will be configured later. No client or admin
+// endpoint can mark an order paid or grant capacity without verified payment.
+const plans=[5,10].map(gb=>({gb,priceCents:null as number|null,currency:'BRL',period:null as string|null,purchasable:false}));
+router.get('/storage/plans',auth,route(async(_req,res)=>res.json({plans,checkoutEnabled:false})));
+router.get('/storage/cart',auth,route(async(req,res)=>res.json(await prisma.storageCart.findUnique({where:{accountId:req.userId!}}))));
+router.put('/storage/cart',auth,route(async(req,res)=>{const gb=Number(req.body.gb);if(!plans.some(p=>p.gb===gb))throw new StorageError(400,'Escolha 5 GB ou 10 GB.');const account=await ensureAccount(req.userId!);if(BigInt(gb*1e9)<=account.limitBytes)throw new StorageError(400,'Escolha um plano maior que o atual.');const cart=await prisma.storageCart.upsert({where:{accountId:req.userId!},create:{accountId:req.userId!,gb},update:{gb}});return res.json(cart)}));
+router.delete('/storage/cart',auth,route(async(req,res)=>{await prisma.storageCart.deleteMany({where:{accountId:req.userId!}});return res.json({removed:true})}));
+router.post('/storage/checkout',auth,route(async()=>{throw new StorageError(409,'Pagamento ainda não configurado. Nenhuma cobrança ou liberação de espaço foi realizada.')}));
+router.post('/storage/upgrade',auth,route(async()=>{throw new StorageError(410,'Ampliação disponível pelo carrinho após confirmação do pagamento.')}));
+router.get('/admin/storage/requests',admin,route(async(_req,res)=>res.json({items:[],total:0,page:1,size:10})));
+router.post('/admin/storage/requests/:id/decision',admin,route(async()=>{throw new StorageError(410,'Aprovação administrativa desativada. Espaço adicional depende de pagamento confirmado.')}));
 export default router;
