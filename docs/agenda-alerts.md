@@ -2,7 +2,7 @@
 
 ## Navegação
 
-Minha saúde → Minha agenda consulta o perfil ativo. Profissional → Minha agenda mantém a agenda privada do profissional, com suas regras existentes. Administração → Configuração de alertas define preferências da conta de login, aplicáveis aos perfis atualmente acessíveis.
+Minha saúde → Minha agenda consulta o perfil ativo. Profissional → Minha agenda mantém a agenda privada do profissional, com suas regras existentes. Configurações → Configuração de alertas define preferências da conta de login, aplicáveis aos perfis atualmente acessíveis.
 
 ## Agenda do paciente
 
