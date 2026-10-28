@@ -1,3 +1,4 @@
+import {alertEnabled} from './alerts.js';
 import { randomUUID } from 'node:crypto';
 import prisma from './db.js';
 import { dueSlots, parseSchedule } from './medication-schedule.js';
@@ -15,6 +16,7 @@ export async function dispatchMedicationReminders(now = new Date(), sender?: typ
     try { input = parseSchedule(schedule); } catch { continue; }
     const recipients = (await medicationRecipients(schedule.patientId)).filter(user => input.recipientIds.includes(user.id));
     for (const slot of dueSlots(input, now)) for (const recipient of recipients) {
+      if(!await alertEnabled(recipient.id,'medications'))continue;
       const delivery = await prisma.$transaction(async tx => {
         const key = `${schedule.id}:${recipient.id}:${slot.slotKey}`;
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS locked`;
@@ -50,3 +52,4 @@ export async function dispatchMedicationReminders(now = new Date(), sender?: typ
 export function startMedicationReminders() {
   // Nenhum e-mail ou timer de envio. A integração de notificações mobile é futura.
 }
+

@@ -320,6 +320,12 @@ export class MyDoctorV1Api {
     return openPrivateDocument(this.url(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/download`),this.token,filename);
   }
 
+  getPatientAgenda(patientId:string,from:string,to:string){return this.req<PatientAgendaItem[]>('/patients/'+encodeURIComponent(patientId)+'/agenda?'+new URLSearchParams({from,to}))}
+  savePatientAgenda(patientId:string,input:Record<string,unknown>){return this.req('/patients/'+encodeURIComponent(patientId)+'/agenda',{method:'POST',body:JSON.stringify(input)})}
+  getAlertSettings(){return this.req<AlertSettingsV1>('/alerts/settings')}
+  saveAlertSettings(value:AlertSettingsV1){return this.req('/alerts/settings',{method:'PUT',body:JSON.stringify({enabled:value.enabled,leadMinutes:value.leadMinutes,expectedUpdatedAt:value.updatedAt})})}
+  getAlerts(){return this.req<{items:AlertItemV1[];total:number}>('/alerts')}
+  readAlert(id:string){return this.req('/alerts/read',{method:'POST',body:JSON.stringify({id})})}
   getStorageSummary(){return this.req<StorageSummaryV1>('/storage/summary')}
   listStorageFolders(){return this.req<StorageFolderV1[]>('/storage/folders')}
   saveStorageFolder(name:string,id?:string,expectedUpdatedAt?:string){return this.req('/storage/folders'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify({name,expectedUpdatedAt})})}
@@ -348,3 +354,7 @@ export function defaultV1ApiUrl() {
 
 
 
+
+export interface PatientAgendaItem {id:string;title:string;at:string;professional:string;location:string;notes:string;status:string;alert:boolean;source:string;updatedAt:string}
+export interface AlertSettingsV1 {enabled:Record<string,boolean>;leadMinutes:number;updatedAt:string|null;canReview:boolean}
+export interface AlertItemV1 {id:string;type:string;text:string;at:string}

@@ -21,6 +21,8 @@ model User {
   passwordHash    String
   role            String                  @default("titular") // titular | responsavel | profissional
   accountData     Json                    @default("{}")
+  alertPreference AlertPreference?
+  alertDismissals AlertDismissal[]
   storageAccount StorageAccount?
   identityDocument UserIdentityDocument?
   emailVerifiedAt DateTime?
@@ -100,6 +102,7 @@ model Patient {
   events         HealthEvent[]
   documents      ClinicalDocument[]
   appointments   ProfessionalAppointment[]
+  personalAppointments PatientAppointment[]
 
   @@index([ownerUserId, archived])
   @@index([name])
@@ -751,4 +754,34 @@ model StorageCart {
   gb Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PatientAppointment {
+ id String @id @default(uuid())
+ patientId String
+ patient Patient @relation(fields:[patientId],references:[id],onDelete:Restrict)
+ title String
+ at DateTime @db.Timestamptz(3)
+ professional String @default("")
+ location String @default("")
+ notes String @default("")
+ status String @default("scheduled")
+ alert Boolean @default(true)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([patientId,at])
+}
+model AlertPreference {
+ userId String @id
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ enabled Json @default("{}")
+ leadMinutes Int @default(60)
+ updatedAt DateTime @updatedAt
+}
+model AlertDismissal {
+ userId String
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ alertKey String
+ expiresAt DateTime
+ @@id([userId,alertKey])
 }

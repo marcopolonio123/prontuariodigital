@@ -143,9 +143,9 @@ async function downloadDocument(req: OwnerRequest, res: Response, admin: boolean
 router.get('/professional/documents/:id/download', requireOwner, (req: OwnerRequest, res: Response) => { void downloadDocument(req, res, false); });
 router.get('/admin/documents/:id/download', requireAdmin, (req: AdminRequest, res: Response) => { void downloadDocument(req, res, true); });
 
-router.get('/admin/professionals', requireAdmin, async (_req: AdminRequest, res: Response) => {
+router.get('/admin/professionals', requireAdmin, async (req: AdminRequest, res: Response) => {
   try {
-    const professionals = await prisma.practitioner.findMany({ where: { userId: { not: null } }, orderBy: { updatedAt: 'desc' }, take: 200,
+    const professionals = await prisma.practitioner.findMany({ where: { userId: { not: req.actor!.id } }, orderBy: { updatedAt: 'desc' }, take: 200,
       include: { user: { select: { email: true, identityDocument: { select: documentSelect } } }, registrations: { include: { authority: true } }, verificationDocuments: { select: documentSelect, orderBy: { createdAt: 'desc' } }, verificationDecisions: { orderBy: { createdAt: 'desc' }, take: 10 } } });
     res.json(professionals.map(item => ({ id: item.id, name: item.name, email: item.user?.email, profession: item.profession, specialty: item.specialty,
       verificationStatus: item.verificationStatus, active: item.active, updatedAt: item.updatedAt.toISOString(),

@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS "PatientAppointment" (id TEXT PRIMARY KEY,"patientId" TEXT NOT NULL REFERENCES "Patient"(id) ON DELETE RESTRICT ON UPDATE CASCADE,title TEXT NOT NULL,at TIMESTAMPTZ(3) NOT NULL,professional TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'scheduled',alert BOOLEAN NOT NULL DEFAULT true,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT now(),"updatedAt" TIMESTAMP(3) NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS "PatientAppointment_patientId_at_idx" ON "PatientAppointment"("patientId",at);
+CREATE TABLE IF NOT EXISTS "AlertPreference" ("userId" TEXT PRIMARY KEY REFERENCES "User"(id) ON DELETE CASCADE ON UPDATE CASCADE,enabled JSONB NOT NULL DEFAULT '{}',"leadMinutes" INTEGER NOT NULL DEFAULT 60,"updatedAt" TIMESTAMP(3) NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS "AlertDismissal" ("userId" TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE ON UPDATE CASCADE,"alertKey" TEXT NOT NULL,"expiresAt" TIMESTAMP(3) NOT NULL,PRIMARY KEY("userId","alertKey"));
+DO $checks$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='PatientAppointment_status_check' AND conrelid='"PatientAppointment"'::regclass) THEN ALTER TABLE "PatientAppointment" ADD CONSTRAINT "PatientAppointment_status_check" CHECK(status IN ('scheduled','completed','cancelled'));END IF;
+IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='AlertPreference_lead_check' AND conrelid='"AlertPreference"'::regclass) THEN ALTER TABLE "AlertPreference" ADD CONSTRAINT "AlertPreference_lead_check" CHECK("leadMinutes" IN (0,15,30,60,120,1440));END IF;
+END $checks$;

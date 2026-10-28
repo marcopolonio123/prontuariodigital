@@ -1,3 +1,4 @@
+import AlertCenter from './components/AlertCenter';
 import { useEffect, useMemo, useState } from 'react';
 import ProfessionalAgenda from './components/ProfessionalAgenda';
 import IdentificationHistoryPanel from './IdentificationHistoryPanel';
@@ -48,6 +49,7 @@ export default function V1ProfessionalShell() {
 
   return <>
     <RecordDictationEnhancer />
+    {token&&<AlertCenter key={token} api={api}/> }
     <div className={view === 'app' ? '' : 'hidden'}><V1PreviewApp recordRefresh={recordRefresh} canAdmin={canAdmin} onNavigate={setView} /></div>
     {view !== 'app' && <main className="min-h-screen bg-paper px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -71,4 +73,5 @@ export default function V1ProfessionalShell() {
     </main>}
   </>;
 }
+
 
