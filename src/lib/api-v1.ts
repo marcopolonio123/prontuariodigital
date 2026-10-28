@@ -28,6 +28,11 @@ export interface FingerprintReferenceMetadata {registeredAt:string;width:number;
 export interface FingerprintReferenceInput {photo:string;consent:true;finger:'right_index'|'left_index'}
 export interface AccountProfileV1 extends V1User { motherName?:string; fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
+export interface StorageFolderV1 {id:string;name:string;updatedAt:string;_count:{files:number}}
+export interface StorageFileV1 {id:string;name:string;notes:string;folderId:string|null;folder:{id:string;name:string}|null;mimeType:string;sizeBytes:number;createdAt:string;updatedAt:string}
+export interface StorageSummaryV1 {limitBytes:number;usedBytes:number;reservedBytes:number;maxFileBytes:number;maxFiles:number;uploadsEnabled:boolean;files:number;folders:number;upgrade:{status:string;requestedLimitBytes:number}|null}
+export interface StoragePageV1 {items:StorageFileV1[];total:number;overall:number;page:number;size:number}
+export interface StorageUpgradeV1 {id:string;name:string;email:string;usedBytes:number;limitBytes:number;requestedLimitBytes:number;updatedAt:string}
 export interface V1User { userNumber?: number; id: string; name: string; email: string; phone?: string | null; isHealthProfessional?: boolean; }
 export interface RegisterResponse extends V1User, LoginStartResponse { requiresMfaLogin: true; requiresEmailConfirmation:true; emailSent:boolean; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
@@ -314,6 +319,18 @@ export class MyDoctorV1Api {
     return openPrivateDocument(this.url(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/download`),this.token,filename);
   }
 
+  getStorageSummary(){return this.req<StorageSummaryV1>('/storage/summary')}
+  listStorageFolders(){return this.req<StorageFolderV1[]>('/storage/folders')}
+  saveStorageFolder(name:string,id?:string,expectedUpdatedAt?:string){return this.req('/storage/folders'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify({name,expectedUpdatedAt})})}
+  deleteStorageFolder(id:string){return this.req('/storage/folders/'+encodeURIComponent(id),{method:'DELETE'})}
+  listStorageFiles(query:Record<string,string|number>){return this.req<StoragePageV1>('/storage/files?'+new URLSearchParams(Object.entries(query).map(([key,value])=>[key,String(value)])))}
+  async uploadStorageFile(file:File,folderId:string,notes:string){const body=new FormData();body.append('folderId',folderId);body.append('notes',notes);body.append('file',file);const response=await fetch(this.url('/storage/files'),{method:'POST',headers:{Authorization:'Bearer '+this.token},body});const data=await response.json();if(!response.ok)throw new Error(data.error??'Não foi possível enviar o arquivo.');return data as StorageFileV1}
+  updateStorageFile(file:StorageFileV1){return this.req('/storage/files/'+encodeURIComponent(file.id),{method:'PUT',body:JSON.stringify({name:file.name,notes:file.notes,folderId:file.folderId,expectedUpdatedAt:file.updatedAt})})}
+  deleteStorageFile(id:string){return this.req('/storage/files/'+encodeURIComponent(id),{method:'DELETE'})}
+  openStorageFile(file:StorageFileV1){return openPrivateDocument(this.url('/storage/files/'+encodeURIComponent(file.id)+'/download'),this.token,file.name)}
+  requestStorageUpgrade(gb:number){return this.req('/storage/upgrade',{method:'POST',body:JSON.stringify({gb})})}
+  listStorageUpgradeRequests(query:Record<string,string|number>){return this.req<{items:StorageUpgradeV1[];total:number;page:number;size:number}>('/admin/storage/requests?'+new URLSearchParams(Object.entries(query).map(([key,value])=>[key,String(value)])))}
+  decideStorageUpgrade(row:StorageUpgradeV1,decision:'approve'|'reject'){return this.req('/admin/storage/requests/'+encodeURIComponent(row.id)+'/decision',{method:'POST',body:JSON.stringify({decision,expectedUpdatedAt:row.updatedAt})})}
   inactivateHealthEventDocument(patientId: string, eventId: string, documentId: string) { return this.req<{ id: string; status: string }>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/inactivate`, { method: 'POST' }); }
 
 }

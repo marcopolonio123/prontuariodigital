@@ -21,6 +21,7 @@ model User {
   passwordHash    String
   role            String                  @default("titular") // titular | responsavel | profissional
   accountData     Json                    @default("{}")
+  storageAccount StorageAccount?
   identityDocument UserIdentityDocument?
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
@@ -681,4 +682,64 @@ model StorageDeletion {
   attempts Int @default(0)
   @@unique([bucket,objectKey])
   @@index([nextAttemptAt])
+}
+
+// Personal vault is separate from clinical/identity documents and their retention.
+model StorageAccount {
+  userId String @id
+  user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+  limitBytes BigInt @default(5000000000)
+  usedBytes BigInt @default(0)
+  maxFiles Int @default(10000)
+  uploadsEnabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  files StorageFile[]
+  folders StorageFolder[]
+  reservations StorageReservation[]
+  upgrade StorageUpgradeRequest?
+}
+model StorageFolder {
+  id String @id @default(uuid())
+  accountId String
+  account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Restrict)
+  name String
+  normalizedName String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  files StorageFile[]
+  @@unique([accountId,normalizedName])
+  @@unique([id,accountId])
+}
+model StorageFile {
+  id String @id @default(uuid())
+  accountId String
+  account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Restrict)
+  folderId String?
+  folder StorageFolder? @relation(fields:[folderId,accountId],references:[id,accountId],onDelete:NoAction)
+  name String
+  notes String @default("")
+  mimeType String
+  sizeBytes Int
+  sha256 String
+  objectKey String @unique
+  storageBucket String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([accountId,folderId,createdAt])
+}
+model StorageReservation {
+  id String @id @default(uuid())
+  accountId String
+  account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Cascade)
+  sizeBytes Int
+  expiresAt DateTime
+  @@index([accountId,expiresAt])
+}
+model StorageUpgradeRequest {
+  accountId String @id
+  account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Restrict)
+  requestedLimitBytes BigInt
+  status String @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

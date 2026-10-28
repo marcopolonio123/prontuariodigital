@@ -97,5 +97,6 @@ jobs:
           node scripts/tutorship-smoke.mjs
           node scripts/registration-smoke.mjs
           node scripts/object-storage-smoke.mjs
+          node scripts/personal-storage-smoke.mjs
 
 

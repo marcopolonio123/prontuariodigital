@@ -31,9 +31,9 @@ export async function readPrivateObject(ref:StoredReference){
  if(ref.storageProvider!=='s3'||!ref.storageBucket||!ref.objectKey)throw Error('Referência de documento incompleta.');
  const {client}=connection();try{const result=await client.send(new GetObjectCommand({Bucket:ref.storageBucket,Key:validKey(ref.objectKey)}));if(!result.Body)throw Error('Arquivo não encontrado.');return Buffer.from(await result.Body.transformToByteArray());}finally{client.destroy();}
 }
-export async function signedDocumentUrl(ref:StoredReference,filename:string,mimeType:string){
+export async function signedDocumentUrl(ref:StoredReference,filename:string,mimeType:string,disposition:'inline'|'attachment'='inline'){
  if(ref.storageProvider!=='s3'||!ref.storageBucket||!ref.objectKey)throw Error('Referência de documento incompleta.');
- const {client}=connection();try{return await getSignedUrl(client,new GetObjectCommand({Bucket:ref.storageBucket,Key:validKey(ref.objectKey),ResponseContentType:mimeType,ResponseContentDisposition:`inline; filename*=UTF-8''${encodeURIComponent(filename)}`,ResponseCacheControl:'private, no-store'}),{expiresIn:120});}finally{client.destroy();}
+ const {client}=connection();try{return await getSignedUrl(client,new GetObjectCommand({Bucket:ref.storageBucket,Key:validKey(ref.objectKey),ResponseContentType:mimeType,ResponseContentDisposition:`${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`,ResponseCacheControl:'private, no-store'}),{expiresIn:120});}finally{client.destroy();}
 }
 export async function serveDocument(res:Response,doc:StoredReference&{filename:string;mimeType:string},json=false){
  res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -65,7 +65,7 @@ export async function cleanupStoredFiles(){
  try{const jobs=await prisma.storageDeletion.findMany({where:{nextAttemptAt:{lte:new Date()}},orderBy:{nextAttemptAt:'asc'},take:25});
  for(const job of jobs){try{
   // Object keys are immutable and never reused. Retain anything still referenced.
-  const linked=await Promise.all([prisma.userIdentityDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.patientIdentityDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.professionalVerificationDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.tutorDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.clinicalDocument.count({where:{objectKey:job.objectKey}})]);
+  const linked=await Promise.all([prisma.userIdentityDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.patientIdentityDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.professionalVerificationDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.tutorDocument.count({where:{storageBucket:job.bucket,objectKey:job.objectKey}}),prisma.clinicalDocument.count({where:{objectKey:job.objectKey}}),prisma.storageFile.count({where:{objectKey:job.objectKey,storageBucket:job.bucket}})]);
   if(linked.some(Boolean))continue;
   await client.send(new DeleteObjectCommand({Bucket:job.bucket,Key:validKey(job.objectKey)}));await prisma.storageDeletion.deleteMany({where:{id:job.id}});
  }catch{await prisma.storageDeletion.updateMany({where:{id:job.id},data:{attempts:{increment:1},nextAttemptAt:new Date(Date.now()+Math.min(86400000,60000*2**Math.min(job.attempts,10)))}});}

@@ -1,3 +1,4 @@
+import personalStorageRouter from './personal-storage.js';
 import {cleanupStoredFiles} from './document-storage.js';
 /**
  * My Doctor — API do portal
@@ -33,6 +34,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
+app.use('/api/v1', personalStorageRouter);
 app.use('/api/v1', clinicalWorkflowRouter);
 app.use('/api/v1', v1Router);
 app.use('/api/v1', tutorshipRouter);
@@ -51,7 +53,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-28-private-document-preview', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-28-personal-storage', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', (_req:Request,res:Response)=>res.redirect(307,'/api/v1/auth/register'));
 
