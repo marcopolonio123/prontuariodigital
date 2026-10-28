@@ -1,9 +1,9 @@
+import {storeClinicalFile,legacyDocumentPath,serveDocument,retireStoredFile} from './document-storage.js';
 import { patientEncounterLocation } from './professional-directory.js';
 import { canReadEvent, grantedSections } from './access-scope.js';
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
@@ -25,10 +25,6 @@ import { testConsultantConnection, FREE_TEST_MODELS } from './consultant-connect
 import { administrator } from './professional-admin.js';
 
 const router = Router();
-const DOCUMENT_ROOT = path.resolve(process.env.DOCUMENT_STORAGE_PATH ?? path.join(process.cwd(), 'private-documents'));
-if (process.env.NODE_ENV === 'production' && !process.env.DOCUMENT_STORAGE_PATH) {
-  console.warn('My Doctor: DOCUMENT_STORAGE_PATH não configurado; uploads clínicos permanecerão desabilitados até configurar um diretório privado persistente.');
-}
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 10 },
@@ -36,18 +32,6 @@ const upload = multer({
 });
 const documentCategories = new Set(['report', 'prescription', 'exam']);
 
-async function ensureDocumentRoot() {
-  if (process.env.NODE_ENV === 'production' && !process.env.DOCUMENT_STORAGE_PATH) {
-    throw new Error('DOCUMENT_STORAGE_PATH não configurado em produção.');
-  }
-  await fs.mkdir(DOCUMENT_ROOT, { recursive: true });
-  await fs.access(DOCUMENT_ROOT);
-}
-function safeObjectPath(objectKey: string) {
-  const resolved = path.resolve(DOCUMENT_ROOT, objectKey);
-  if (!resolved.startsWith(DOCUMENT_ROOT + path.sep)) throw new Error('Caminho de documento inválido.');
-  return resolved;
-}
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-change-me';
 const JWT_TTL = '7d';
 const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 10);
@@ -999,15 +983,12 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
   if (!documentCategories.has(category)) return fail(res, 400, 'Categoria de documento inválida.');
   const files = (req.files ?? []) as Express.Multer.File[];
   if (!files.length) return fail(res, 400, 'Selecione ao menos um arquivo.');
-  await ensureDocumentRoot();
   const created = [];
   for (const file of files) {
     const id = crypto.randomUUID();
     const extension = file.mimetype === 'application/pdf' ? '.pdf' : file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg';
-    const objectKey = path.join(req.params.patientId, req.params.eventId, id + extension);
-    const absolutePath = safeObjectPath(objectKey);
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-    await fs.writeFile(absolutePath, file.buffer, { flag: 'wx' });
+    const stored=await storeClinicalFile(`pacientes/${req.params.patientId}/atendimentos/${req.params.eventId}`,file.buffer,file.mimetype,`${req.params.patientId}/${req.params.eventId}/${id}${extension}`);
+    const objectKey=stored.objectKey;
     const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
     try {
       const doc = await prisma.$transaction(async tx => {
@@ -1018,13 +999,14 @@ router.post('/patients/:patientId/events/:eventId/documents', auth, upload.array
         return tx.clinicalDocument.create({ data: {
         id, patientId: req.params.patientId, eventId: req.params.eventId, type: category,
         originalFilename: file.originalname, mimeType: file.mimetype, objectKey, sha256, sizeBytes: file.size,
-        status: 'uploaded', metadata: { storageProvider: 'local_private', ocrStatus: 'not_requested' },
+        status: 'uploaded', metadata: { storageProvider: stored.storageProvider, storageBucket:stored.storageBucket, ocrStatus: 'not_requested' },
       }});
       });
       const { objectKey: _objectKey, ...safeDoc } = doc;
       created.push(safeDoc);
     } catch (error) {
-      await fs.unlink(absolutePath).catch((_unlinkError: unknown): void => {});
+      if(stored.storageProvider==='s3')await retireStoredFile(prisma,stored).catch(()=>console.error('Falha na fila de limpeza de upload.'));
+      else await fs.unlink(legacyDocumentPath(objectKey)).catch(()=>{});
       if (error instanceof Error && error.message === 'APPROVED_MEDICAL_EVENT') return fail(res, 409, 'O atendimento foi aprovado e não pode receber alterações.');
       throw error;
     }
@@ -1048,8 +1030,11 @@ router.get('/patients/:patientId/events/:eventId/documents/:documentId/download'
     id: req.params.documentId, patientId: req.params.patientId, eventId: req.params.eventId, status: { not: 'deleted' },
   }});
   if (!doc) return fail(res, 404, 'Documento não encontrado.');
-  const absolutePath = safeObjectPath(doc.objectKey);
+  const metadata=(doc.metadata??{}) as any;
+  if(metadata.storageProvider==='s3'){await serveDocument(res,{...doc,filename:doc.originalFilename,storageProvider:'s3',storageBucket:metadata.storageBucket});return;}
+  const absolutePath = legacyDocumentPath(doc.objectKey);
   try { await fs.access(absolutePath); } catch { return fail(res, 404, 'Arquivo não encontrado no armazenamento.'); }
+  res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');
   res.type(doc.mimeType);
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.originalFilename)}`);
   res.sendFile(absolutePath);
