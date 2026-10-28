@@ -16,8 +16,8 @@ try{
  else{
   if(process.env.DOCUMENT_STORAGE_MODE!=='s3')throw Error('Configure DOCUMENT_STORAGE_MODE=s3 antes de migrar.');
   await checkObjectStorage();
-  for(const [table,owner,subject,category] of groups){let count=0;
-   while(true){const doc=await prisma[table].findFirst({where:{...filter,objectKey:null},orderBy:{id:'asc'}});if(!doc)break;
+  for(const [table,owner,subject,category] of groups){let count=0;let cursor;
+   while(true){const doc=await prisma[table].findFirst({where:{AND:[filter,{objectKey:null},...(cursor?[{id:{gt:cursor}}]:[])]},orderBy:{id:'asc'}});if(!doc)break;cursor=doc.id;
     assert(doc.content,'Documento legado sem conteúdo.');const bytes=Buffer.from(doc.content);assert.equal(hash(bytes),doc.sha256,'Hash legado divergente.');assert.equal(bytes.length,doc.sizeBytes,'Tamanho legado divergente.');
     const ref=await putPrivateObject(`${subject}/${doc[owner]}/${category}`,bytes,doc.mimeType);
     try{const verified=await readPrivateObject(ref);assert.equal(hash(verified),doc.sha256,'Cópia divergente; original preservado.');assert.equal(verified.length,doc.sizeBytes);

@@ -15,7 +15,7 @@ function connection(){
  const endpoint=process.env.DOCUMENT_STORAGE_ENDPOINT;
  if(!bucket||!region||!accessKeyId||!secretAccessKey)throw Error('Armazenamento privado não configurado.');
  if(endpoint&&new URL(endpoint).protocol!=='https:'&&process.env.NODE_ENV!=='test')throw Error('Armazenamento privado exige HTTPS.');
- return {bucket,client:new S3Client({region,endpoint,forcePathStyle:process.env.DOCUMENT_STORAGE_PATH_STYLE!=='false',credentials:{accessKeyId,secretAccessKey},maxAttempts:2,requestHandler:{connectionTimeout:5000,requestTimeout:15000}})};
+ return {bucket,client:new S3Client({region,endpoint,forcePathStyle:process.env.DOCUMENT_STORAGE_PATH_STYLE!=='false',credentials:{accessKeyId,secretAccessKey},maxAttempts:2,requestChecksumCalculation:'WHEN_REQUIRED',responseChecksumValidation:'WHEN_REQUIRED',requestHandler:{connectionTimeout:5000,requestTimeout:15000}})};
 }
 function validKey(key:string){if(!key||key.startsWith('/')||key.includes('\\')||key.split('/').some(p=>!p||p==='.'||p==='..'))throw Error('Chave de documento inválida.');return key;}
 export const hash=(content:Uint8Array)=>createHash('sha256').update(content).digest('hex');
