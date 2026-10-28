@@ -691,7 +691,7 @@ model StorageAccount {
   limitBytes BigInt @default(5000000000)
   usedBytes BigInt @default(0)
   maxFiles Int @default(10000)
-  uploadsEnabled Boolean @default(true)
+  uploadsEnabled Boolean @default(false)
   createdAt DateTime @default(now())
   files StorageFile[]
   folders StorageFolder[]

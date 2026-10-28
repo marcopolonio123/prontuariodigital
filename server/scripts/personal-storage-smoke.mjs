@@ -21,6 +21,7 @@ try{
  await db.storageReservation.create({data:{accountId:a.id,sizeBytes:100,expiresAt:new Date(0)}});const afterExpiry=await reserveStorage(a.id,5);assert.equal(await db.storageReservation.count({where:{accountId:a.id}}),1);await releaseStorageReservation(afterExpiry.id);
  await assert.rejects(reserveStorage(a.id,25000001));await assert.rejects(reserveStorage(a.id,0));
  await db.storageAccount.update({where:{userId:a.id},data:{limitBytes:1000000n}});
+ assert.equal((await call('/storage/summary',b)).body.uploadsEnabled,false);assert.equal((await send(b)).status,403);
  const folder=(await call('/storage/folders',a,{name:'Contratos'})).body,foreignFolder=(await call('/storage/folders',b,{name:'Privado B'})).body;
  assert.equal((await call('/storage/folders',a,{name:'contratos'})).status,409);
  assert.equal((await send(a,'fora.pdf',Buffer.from('%PDF-fixture'),foreignFolder.id)).status,404);
@@ -28,7 +29,7 @@ try{
  assert(!('objectKey' in file));let stored=await db.storageFile.findUnique({where:{id:file.id}});assert(stored.objectKey.startsWith(`storage/contas/${a.id}/arquivos/`));assert(!stored.objectKey.startsWith('pacientes/'));assert.equal(stored.accountId,a.id);
  assert.equal((await call('/storage/summary',a)).body.usedBytes,stored.sizeBytes);assert.equal((await call('/storage/files',b)).body.total,0);
  assert.equal((await call('/storage/files/'+file.id+'/download',b)).status,404);assert.equal((await call('/storage/files/'+file.id,b,undefined,'DELETE')).status,404);
- assert.equal((await call('/storage/files/'+file.id,b,{...file,name:'Ataque',expectedUpdatedAt:file.updatedAt},'PUT')).status,409);
+ assert.equal((await call('/storage/files/'+file.id,b,{...file,folderId:null,name:'Ataque',expectedUpdatedAt:file.updatedAt},'PUT')).status,409);
  assert.equal((await call('/storage/folders/'+folder.id,a,undefined,'DELETE')).status,409);
  // A personal metadata row cannot point to a managed medical path or a foreign folder.
  await assert.rejects(db.storageFile.create({data:{accountId:a.id,name:'Ataque',folderId:foreignFolder.id,sizeBytes:1,mimeType:'application/octet-stream',sha256:'x',objectKey:`storage/contas/${a.id}/foreign`,storageBucket:'vault-fixtures'}}));
