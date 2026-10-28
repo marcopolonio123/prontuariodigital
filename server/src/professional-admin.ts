@@ -62,7 +62,7 @@ router.post('/account/document', requireOwner, async (req: OwnerRequest, res: Re
       if (kind === 'Certidão de nascimento' && !isUnder18((user.accountData as any)?.birthDate ?? '')) throw new Error('AGE');
       const old = await tx.userIdentityDocument.findUnique({ where: { userId: req.userId! },select:{id:true,storageProvider:true,storageBucket:true,objectKey:true} });
       if ((old?.id ?? null) !== (req.body?.expectedId ?? null)) throw new Error('STALE');
-      const professional = await tx.practitioner.findUnique({ where: { userId: req.userId! },select:{id:true,storageProvider:true,storageBucket:true,objectKey:true} });
+      const professional = await tx.practitioner.findUnique({ where: { userId: req.userId! } });
       if (professional) await invalidate(tx, professional);
       if (old) await retireStoredFile(tx,old);
       if (old) await tx.userIdentityDocument.delete({ where: { id: old.id } });
@@ -77,7 +77,7 @@ router.delete('/account/documents/:id', requireOwner, async (req: OwnerRequest, 
       await tx.user.update({ where: { id: req.userId! }, data: { updatedAt: new Date() } });
       const doc = await tx.userIdentityDocument.findFirst({ where: { id: req.params.id, userId: req.userId! },select:{id:true,storageProvider:true,storageBucket:true,objectKey:true} });
       if (!doc) throw new Error('NOT_FOUND');
-      const professional = await tx.practitioner.findUnique({ where: { userId: req.userId! },select:{id:true,storageProvider:true,storageBucket:true,objectKey:true} });
+      const professional = await tx.practitioner.findUnique({ where: { userId: req.userId! } });
       if (professional) await invalidate(tx, professional);
       await retireStoredFile(tx,doc);
       await tx.userIdentityDocument.delete({ where: { id: doc.id } });
@@ -109,7 +109,7 @@ router.post('/professional/documents', requireOwner, async (req: OwnerRequest, r
   if (!['identity','council'].includes(kind) || !file) return res.status(400).json({ error: 'Use PDF, JPG, PNG ou WEBP de até 3 MB e selecione identidade ou conselho.' });
   try {
     const result = await withStoredFile(file,`usuarios/${req.userId!}/profissional`,stored=>prisma.$transaction(async tx => {
-      const practitioner = await tx.practitioner.findUnique({ where: { userId: req.userId! },select:{id:true,storageProvider:true,storageBucket:true,objectKey:true} });
+      const practitioner = await tx.practitioner.findUnique({ where: { userId: req.userId! } });
       if (!practitioner) throw new Error('PROFILE');
       await invalidate(tx, practitioner);
       if (await tx.professionalVerificationDocument.count({ where: { practitionerId: practitioner.id } }) >= 6) throw new Error('LIMIT');
