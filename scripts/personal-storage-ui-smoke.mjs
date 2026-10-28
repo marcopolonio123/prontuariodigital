@@ -1,0 +1,37 @@
+import {chromium} from 'playwright';
+import {spawn} from 'node:child_process';
+import assert from 'node:assert/strict';
+const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4185'],{stdio:'ignore'});process.on('exit',()=>server.kill());let browser;
+try{
+ for(let i=0;i<40;i++){try{await fetch('http://127.0.0.1:4185/');break}catch{await new Promise(r=>setTimeout(r,250))}}
+ browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+ for(const width of [390,1440]){
+  const page=await browser.newPage({viewport:{width,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
+  await page.addInitScript(()=>sessionStorage.setItem('mydoctor.v1.sessionToken','vault-fixture'));
+  let rows=Array.from({length:23},(_,i)=>({id:'file-'+i,name:'Arquivo '+String(i).padStart(2,'0')+'.pdf',notes:'',folderId:null,folder:null,mimeType:'application/pdf',sizeBytes:100,createdAt:new Date(Date.UTC(2026,0,i+1)).toISOString(),updatedAt:'2026-10-28T12:00:00Z'}));
+  let folders=[{id:'folder1',name:'Pessoais',updatedAt:'2026-10-28T12:00:00Z',_count:{files:0}}],writes=0,lastUpload='';
+  await page.route('**/api/v1/**',async route=>{
+   const url=new URL(route.request().url()),p=url.pathname.replace('/api/v1',''),method=route.request().method();let data=[],status=200;
+   const reply=()=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+   if(method==='POST'&&p==='/storage/files'){assert.match(route.request().headers()['content-type'],/multipart\/form-data/);assert(route.request().postDataBuffer().includes(Buffer.from('documento.txt')));lastUpload='uploaded-'+(++writes);const file={id:lastUpload,name:'documento.txt',notes:'',folderId:null,folder:null,mimeType:'application/octet-stream',sizeBytes:7,createdAt:'2026-10-28T12:30:00Z',updatedAt:'2026-10-28T12:30:00Z'};rows.push(file);data=file;status=201;return reply();}
+   if(method==='POST'&&p==='/storage/folders'){const body=route.request().postDataJSON();writes++;data={id:'folder2',name:body.name,updatedAt:'2026-10-28T13:00:00Z',_count:{files:0}};folders.push(data);status=201;return reply();}
+   if(method==='PUT'&&p.startsWith('/storage/files/')){const body=route.request().postDataJSON();writes++;rows=rows.map(row=>row.id===p.split('/').at(-1)?{...row,...body,updatedAt:'2026-10-28T13:01:00Z'}:row);data={saved:true};return reply();}
+   if(method==='DELETE'&&p.startsWith('/storage/files/')){writes++;rows=rows.filter(row=>row.id!==p.split('/').at(-1));data={removed:true};return reply();}
+   if(p==='/account')data={id:'u1',name:'Marco teste',email:'fixture@example.test',completed:true,isHealthProfessional:false};
+   else if(p==='/profiles')data=[{id:'p1',name:'Marco teste',record:'1',relationship:'self',source:'owned'}];
+   else if(p==='/admin/session')data={authorized:false};
+   else if(p==='/storage/summary')data={limitBytes:5e9,usedBytes:rows.reduce((n,r)=>n+r.sizeBytes,0),reservedBytes:0,maxFileBytes:25e6,maxFiles:10000,uploadsEnabled:true,files:rows.length,folders:folders.length,upgrade:null};
+   else if(p==='/storage/folders')data=folders;
+   else if(p==='/storage/files'){let items=rows.filter(row=>!url.searchParams.get('q')||row.name.toLowerCase().includes(url.searchParams.get('q').toLowerCase()));const sort=url.searchParams.get('sort')??'createdAt',direction=url.searchParams.get('direction')==='asc'?1:-1;items.sort((a,b)=>(typeof a[sort]==='number'?a[sort]-b[sort]:String(a[sort]).localeCompare(String(b[sort])))*direction);const pageNo=Number(url.searchParams.get('page'))||1,size=Number(url.searchParams.get('size'))||10;data={items:items.slice((pageNo-1)*size,pageNo*size),total:items.length,overall:rows.length,page:pageNo,size};}
+   return reply();
+  });
+  await page.goto('http://127.0.0.1:4185/');await page.getByRole('button',{name:'Meu armazenamento',exact:true}).click();await page.getByRole('heading',{name:'Meu armazenamento',exact:true}).waitFor();await page.locator('[data-storage-id]').first().waitFor();assert.equal(await page.locator('[data-storage-id]').count(),10);
+  const top=page.getByRole('navigation',{name:'Arquivos — paginação superior',exact:true}),bottom=page.getByRole('navigation',{name:'Arquivos — paginação inferior',exact:true});await top.waitFor();await bottom.waitFor();await top.getByRole('button',{name:'Próxima',exact:true}).click();await bottom.getByText('Página 2 de 3',{exact:true}).waitFor();
+  await page.getByText('Filtros',{exact:true}).click();await page.getByPlaceholder('Nome ou observações').fill('Arquivo 03');await page.getByRole('button',{name:'Pesquisar',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('[data-storage-id]').length===1&&document.querySelector('[data-storage-id="file-3"]'));assert.equal(await page.locator('[data-storage-id]').count(),1);assert.equal(await top.count(),0);assert.equal(await bottom.count(),0);
+  await page.locator('[data-storage-id="file-3"]').click();await page.getByRole('button',{name:'Editar',exact:true}).click();const edit=page.getByRole('form',{name:'Editar arquivo pessoal'});await edit.getByLabel('Nome',{exact:true}).fill('Arquivo 03 revisado.pdf');await edit.getByRole('button',{name:'Salvar alterações',exact:true}).click();await page.getByText('Arquivo atualizado.',{exact:true}).waitFor();assert(rows.some(row=>row.name==='Arquivo 03 revisado.pdf'));
+  await page.getByRole('button',{name:'Editar',exact:true}).click();await edit.getByLabel('Nome',{exact:true}).fill('Não salvar');await edit.getByRole('button',{name:'Cancelar',exact:true}).click();assert(!rows.some(row=>row.name==='Não salvar'));
+  await page.getByRole('button',{name:'Nova pasta',exact:true}).click();const folderForm=page.getByRole('form',{name:'Nova pasta',exact:true});await folderForm.getByLabel('Nome da pasta',{exact:true}).fill('Contratos');await folderForm.getByRole('button',{name:'Salvar pasta',exact:true}).click();await page.getByText('Pasta salva.',{exact:true}).waitFor();assert.equal(await folderForm.count(),0);assert(folders.some(row=>row.name==='Contratos'));
+  await page.getByRole('button',{name:'Limpar filtro',exact:true}).click();await top.waitFor();await page.getByRole('button',{name:'Enviar arquivos',exact:true}).click();const upload=page.getByRole('form',{name:'Enviar arquivos pessoais'});await upload.locator('input[type=file]').setInputFiles({name:'documento.txt',mimeType:'text/plain',buffer:Buffer.from('fixture')});await upload.getByRole('button',{name:'Salvar arquivos',exact:true}).click();await page.getByText('1 arquivo(s) enviado(s).',{exact:true}).waitFor();await page.locator('[data-storage-id="'+lastUpload+'"]').waitFor();await page.locator('[data-storage-id="'+lastUpload+'"]').click();await page.getByRole('button',{name:'Excluir',exact:true}).click();await page.getByText('Arquivo excluído. Espaço liberado.',{exact:true}).waitFor();assert(!rows.some(row=>row.id===lastUpload));
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Personal storage overflows viewport '+width);assert.deepEqual(errors,[]);assert.equal(writes,4);await page.screenshot({path:'/tmp/mydoctor-personal-storage-'+width+'.png',fullPage:true});console.log('Personal storage UI: pagination, filter, edit/cancel, folder, upload, delete and responsive layout passed',width);await page.close();
+ }
+}finally{await browser?.close();server.kill()}

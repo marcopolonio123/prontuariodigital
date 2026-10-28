@@ -34,6 +34,7 @@ jobs:
           node scripts/insurance-smoke.mjs
           node scripts/tutorship-ui-smoke.mjs
           node scripts/registration-ui-smoke.mjs
+          node scripts/personal-storage-ui-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
@@ -97,5 +98,6 @@ jobs:
           node scripts/tutorship-smoke.mjs
           node scripts/registration-smoke.mjs
           node scripts/object-storage-smoke.mjs
+          node scripts/personal-storage-smoke.mjs
 
 
