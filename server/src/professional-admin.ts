@@ -90,7 +90,7 @@ async function downloadIdentity(req: OwnerRequest, res: Response, admin: boolean
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
     res.setHeader('Cache-Control', 'private, no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);
-    await serveDocument(res,doc);
+    await serveDocument(res,doc,String(req.headers.accept??'').includes('application/json'));
   } catch { res.status(503).json({ error: 'Não foi possível abrir o documento.' }); }
 }
 router.get('/account/documents/:id/download', requireOwner, (req: OwnerRequest, res: Response) => { void downloadIdentity(req, res, false); });
@@ -136,7 +136,7 @@ async function downloadDocument(req: OwnerRequest, res: Response, admin: boolean
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
     res.setHeader('Cache-Control', 'private, no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);
-    await serveDocument(res,doc);
+    await serveDocument(res,doc,String(req.headers.accept??'').includes('application/json'));
   } catch { res.status(503).json({ error: 'Não foi possível abrir o documento.' }); }
 }
 router.get('/professional/documents/:id/download', requireOwner, (req: OwnerRequest, res: Response) => { void downloadDocument(req, res, false); });

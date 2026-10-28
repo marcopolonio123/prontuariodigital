@@ -1,3 +1,4 @@
+import {openPrivateDocument} from './document-preview';
 export type MfaChannel = 'email' | 'sms';
 
 const V1_SESSION_TOKEN_KEY = 'mydoctor.v1.sessionToken';
@@ -182,7 +183,7 @@ export class MyDoctorV1Api {
   private async uploadPersonFile(path:string,kind:string,file:File){if(file.size>3*1024*1024)throw Error('Cada documento pode ter até 3 MB.');const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file)});return this.req<VerificationDocumentV1>(path,{method:'POST',body:JSON.stringify({kind,filename:file.name,mimeType:file.type,data})})}
   savePersonDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/people/'+encodeURIComponent(id)+'/document',kind,file)}
   uploadTutorDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/tutorship/requests/'+encodeURIComponent(id)+'/documents',kind,file)}
-  async openPersonFile(id:string,admin=false,person=false){const path=person?'/people/'+encodeURIComponent(id)+'/document/download':(admin?'/admin':'')+'/tutorship/documents/'+encodeURIComponent(id);const response=await fetch(this.url(path),{headers:{Authorization:'Bearer '+this.token}});if(!response.ok)throw Error('Não foi possível abrir o documento.');const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000)}
+  async openPersonFile(id:string,admin=false,person=false){const path=person?'/people/'+encodeURIComponent(id)+'/document/download':(admin?'/admin':'')+'/tutorship/documents/'+encodeURIComponent(id);return openPrivateDocument(this.url(path),this.token)}
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
   saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; motherName?:string;cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string;fingerprintReference?:FingerprintReferenceInput|null }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
@@ -202,12 +203,9 @@ export class MyDoctorV1Api {
   removeVerificationDocument(id: string) { if (id.startsWith('account:')) return this.removeIdentityDocument(id.slice(8)); return this.req<{ ok: boolean }>(`/professional/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   async openVerificationDocument(id: string, admin = false) {
     const path = id.startsWith('account:') ? `${admin ? '/admin/account' : '/account'}/documents/${encodeURIComponent(id.slice(8))}/download` : `${admin ? '/admin' : '/professional'}/documents/${encodeURIComponent(id)}/download`;
-    const response = await fetch(this.url(path), { headers: { Authorization: `Bearer ${this.token}` } });
-    if (!response.ok) throw new Error('Não foi possível abrir o documento.');
-    const url = URL.createObjectURL(await response.blob());
-    const link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return openPrivateDocument(this.url(path),this.token);
   }
+
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
   listAdminProfessionals() { return this.req<AdminProfessionalV1[]>('/admin/professionals'); }
   decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; expectedUpdatedAt: string }) {
@@ -313,15 +311,9 @@ export class MyDoctorV1Api {
   listHealthEventDocuments(patientId: string, eventId: string) { return this.req<Array<{ id: string; type: string; originalFilename: string; mimeType: string; sizeBytes: number; status: string }>>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents`); }
 
   async openHealthEventDocument(patientId: string, eventId: string, documentId: string, filename: string) {
-    const response = await fetch(this.url(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/download`), {
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
-    });
-    if (!response.ok) throw new Error(`Não foi possível abrir ${filename}.`);
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    return openPrivateDocument(this.url(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/download`),this.token,filename);
   }
+
   inactivateHealthEventDocument(patientId: string, eventId: string, documentId: string) { return this.req<{ id: string; status: string }>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/inactivate`, { method: 'POST' }); }
 
 }
