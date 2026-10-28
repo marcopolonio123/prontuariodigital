@@ -1,28 +1,33 @@
-# Meu armazenamento
+# Armazenamento e planos
 
-Área de documentos pessoais em Configurações. Usa a conta de login, compartilhada pelos perfis acessados por esse login; não cria armazenamento pago automaticamente para um dependente ou concede acesso a outro login. Não há acesso automático pelo profissional de saúde nem inclusão no prontuário.
+Configurações → Meu armazenamento. O menu e a funcionalidade são telas exclusivas: abrir o menu oculta a tela atual; escolher uma função fecha o menu.
 
-## Separação obrigatória
+## Capacidade única, conteúdo separado
 
-- Chaves exclusivamente em `storage/contas/{idDaConta}/arquivos/{uuid}` no bucket R2 privado já configurado.
-- Pastas são metadados; seus nomes não são usados para compor caminhos no R2.
-- StorageAccount, StorageFolder, StorageFile, StorageReservation e StorageUpgradeRequest são tabelas próprias.
-- StorageFile possui CHECK que exige o prefixo da própria conta. O vínculo composto da pasta inclui a conta e rejeita pasta de outro usuário.
-- Identificação, validação profissional, tutela e ClinicalDocument continuam nas estruturas e rotas existentes. Não entram na lista, na exclusão nem na cota desta área pessoal.
-- APIs limitadas ao usuário autenticado. A administração vê solicitações e consumo, não os arquivos pessoais dos clientes.
+Cada conta recebe 1 GB decimal (1.000.000.000 bytes), sem aprovação administrativa. A capacidade é compartilhada pelos documentos administrados pelo MyDoctor e pelos arquivos pessoais. O resumo apresenta `managedBytes`, `personalBytes` e `usedBytes = managedBytes + personalBytes`.
 
-## Cota e ativação
+A separação física e de permissões permanece obrigatória:
 
-Franquia inicial de 5 GB decimais (5.000.000.000 bytes), máximo inicial de 10.000 arquivos e 500 pastas. Cada envio aceita até 25 MB decimais. Os limites são apresentados na tela. Qualquer tipo de arquivo pode ser guardado: apenas PDFs e imagens com assinatura reconhecida são visualizados; demais arquivos recebem MIME binário e download como anexo.
+- Arquivos pessoais: `storage/contas/{idDaConta}/arquivos/{uuid}`. Listas, alteração e exclusão desta tela operam apenas sobre StorageFile da própria conta.
+- Documentos de identificação, validação profissional, tutela e clínicos mantêm seus caminhos, tabelas, permissões e retenção.
+- Nenhum documento é movido, copiado ou incluído na lista pessoal para calcular o consumo.
 
-Novas contas ficam com envio desativado até liberação administrativa. Administradores com e-mail confirmado são liberados na criação da conta de armazenamento para testes. Nenhum plano/preço/pagamento é criado automaticamente. A solicitação de 5 GB ativa o plano inicial; 10, 25, 50 e 100 GB solicitam ampliação. O administrador confirma a liberação sem disparar cobranças. Integração comercial/cobrança recorrente é uma etapa posterior.
+A soma usa os tamanhos dos metadados de UserIdentityDocument, PatientIdentityDocument, ProfessionalVerificationDocument, TutorDocument e ClinicalDocument, independentemente de estarem no R2, disco privado ou banco. Imagens data URI persistidas em User.accountData, Patient.data, HealthEvent.payload e HealthEvent.provenance também entram pelo tamanho textual efetivamente armazenado, incluindo a codificação base64. Perguntas/imagens transitórias enviadas ao consultor não entram, pois não são armazenadas. O texto do prontuário não compõe a franquia de arquivos.
 
-Antes do envio ao R2, uma reserva com validade de 20 minutos é criada sob lock da conta. O limite é comparado com bytes utilizados e reservas em andamento. Reservas expiradas são ignoradas/removidas. A gravação dos metadados, incremento de consumo e remoção da reserva ocorrem na mesma transação. Falhas não consomem franquia. O envio remoto fica fora da transação para evitar locks longos. A aplicação limita envios simultâneos para limitar memória no plano Business; uploads diretos/multipart de arquivos grandes não fazem parte desta entrega.
+A cobrança segue a conta proprietária do cadastro (Patient.ownerUserId); documentos de tutela seguem a conta solicitante. Médico ou tutor com acesso a outra conta não recebe cópia nem cobrança duplicada por essa permissão. Dependentes originalmente criados pela mesma conta compartilham sua cota. Alterar tutor não muda a propriedade de armazenamento. Documentos inativados e versões antigas de imagens preservadas no histórico continuam contando enquanto ocuparem armazenamento. Não há exclusão automática de conteúdo clínico ao atingir a cota.
 
-A exclusão de um arquivo pessoal remove seus metadados, reduz o consumo e enfileira a limpeza do objeto na mesma transação. O trabalhador comum verifica também referências de StorageFile antes de excluir qualquer objeto. Links já emitidos expiram em até 120 segundos. Falhas ambíguas de rede e queda simultânea do banco podem exigir a conciliação de objetos sem referência descrita em private-document-storage.md.
+## Controle de envios
 
-## Interface
+Reservas com validade de 20 minutos são criadas sob lock da conta e somadas ao consumo total antes de qualquer novo envio pessoal ou médico. O upload remoto não segura uma transação longa. Gravar o arquivo pessoal, atualizar seu contador e consumir a reserva ocorre em uma transação. Para documentos geridos, a reserva só é removida após o commit dos metadados; por um intervalo curto, o consumo pode ser contado conservadoramente duas vezes durante o envio. Alterações de imagens em JSON usam a mesma trava, verificam o crescimento e revertem a gravação que ultrapassaria a cota. Reduções e edições sem aumento de arquivos permanecem permitidas, inclusive acima do limite.
 
-Lista inicial com filtros recolhíveis, pesquisa acionada por botão, ordenação e paginação no servidor. Controles no início e no fim; ficam ocultos até 10 resultados. Clique abre detalhes; Editar altera nome, pasta e observações, com Salvar/Cancelar. Excluir exige confirmação. Pasta com arquivos não pode ser excluída: é necessário mover ou excluir seus arquivos primeiro. Arquivos médicos não são apresentados nessa funcionalidade.
+Limites pessoais: até 25 MB por arquivo, 10.000 arquivos, 500 pastas. Quatro envios simultâneos por processo. PDFs/imagens reconhecidos podem ser visualizados; demais formatos são baixados como anexos. Pastas são metadados, seus nomes não compõem as chaves R2. CHECK de namespace e FK composta de pasta/conta mantêm o isolamento. Deleção pessoal reduz somente seu contador e enfileira limpeza do objeto; o trabalhador verifica todas as referências antes de remover qualquer objeto.
 
-A listagem de pastas fica recolhida e usa a tabela/paginação padrão do aplicativo. Até 500 pastas são carregadas para os seletores. Administradores consultam solicitações pendentes em Administração → Armazenamento pessoal.
+## Carrinho e pagamento
+
+Planos de 5 GB e 10 GB representam capacidade total, substituindo o limite anterior, e podem ser escolhidos no carrinho persistido por conta. Preços, periodicidade e provedor de pagamento serão definidos posteriormente pelo proprietário do produto.
+
+Nesta entrega, o carrinho pode ser consultado, alterado e esvaziado. O botão Pagar fica indisponível, explicitamente indicado como em configuração; POST /storage/checkout retorna 409. Nenhum valor é inventado, nenhuma cobrança é executada e nenhum pagamento é simulado. As antigas rotas de pedido de ampliação e aprovação administrativa retornam 410 e não concedem espaço. Solicitações anteriores são preservadas somente para histórico.
+
+A integração comercial futura deverá criar um pedido com preço/versionamento no servidor e liberar a capacidade apenas após confirmação autenticada do provedor, com verificação de pedido, conta, valor, moeda, status e idempotência. Nunca aceitar um status de pagamento fornecido pelo navegador. Ainda não há cobrança nem webhook nesta entrega.
+
+A migração 20261028-storage-plans.sql substitui as franquias da fase de teste por 1 GB ativo; preserva todos os arquivos e não cria assinaturas. O contador StorageAccount.usedBytes continua exclusivo dos arquivos pessoais; o total é calculado sem mover dados. Não executar novamente a migração fora do controle de checksum/ledger.

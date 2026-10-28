@@ -1,3 +1,4 @@
+import {quotaTransaction,StorageError} from './storage-quota.js';
 import personalStorageRouter from './personal-storage.js';
 import {cleanupStoredFiles} from './document-storage.js';
 /**
@@ -53,7 +54,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
 }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
-app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-28-personal-storage', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
+app.get('/api/health', (_req, res) => { res.json({ ok: true, version: '1.2.0', release: '2026-10-28-storage-plans', engine: 'mydoctor-server (Node + Prisma)', apiV1: true }); });
 
 app.post('/api/auth/register', (_req:Request,res:Response)=>res.redirect(307,'/api/v1/auth/register'));
 
@@ -81,9 +82,9 @@ app.get('/api/patients', auth, async (req: AuthedRequest, res: Response) => {
   res.json(patients.map(toClient));
 });
 
-app.post('/api/patients',auth,async(req:AuthedRequest,res:Response)=>{try{res.status(201).json(await createDependent(req.userId!,req.body??{}))}catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível incluir.'})}});
+app.post('/api/patients',auth,async(req:AuthedRequest,res:Response)=>{try{res.status(201).json(await createDependent(req.userId!,req.body??{}))}catch(e){res.status((e instanceof PersonError||e instanceof StorageError)?e.status:503).json({error:(e instanceof PersonError||e instanceof StorageError)?e.message:'Não foi possível incluir.'})}});
 app.put('/api/patients/:id',auth,async(req:AuthedRequest,res:Response)=>{
- try{const saved=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT id FROM "Patient" WHERE id=${req.params.id} FOR UPDATE`;const existing=await tx.patient.findUnique({where:{id:req.params.id}});if(!existing||!managesPatient(existing,req.userId!))throw new PersonError(403,'Sem acesso à ficha.');const identity=personData(req.body);await claimPerson(tx,existing.id,identity);const data={...(existing.data as any),...req.body,...identity,relationshipToOwner:(existing.data as any).relationshipToOwner,createdByUserId:(existing.data as any).createdByUserId};return tx.patient.update({where:{id:existing.id},data:{name:identity.name,data,archived:Boolean(req.body.archived??existing.archived)}})});res.json(toClient(saved))}catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível atualizar.'})}
+ try{const owner=await prisma.patient.findUnique({where:{id:req.params.id}});if(!owner||!managesPatient(owner,req.userId!))throw new PersonError(403,'Sem acesso à ficha.');const saved=await quotaTransaction(owner.ownerUserId,async tx=>{await tx.$queryRaw`SELECT id FROM "Patient" WHERE id=${req.params.id} FOR UPDATE`;const existing=await tx.patient.findUnique({where:{id:req.params.id}});if(!existing||!managesPatient(existing,req.userId!))throw new PersonError(403,'Sem acesso à ficha.');const identity=personData(req.body);await claimPerson(tx,existing.id,identity);const data={...(existing.data as any),...req.body,...identity,relationshipToOwner:(existing.data as any).relationshipToOwner,createdByUserId:(existing.data as any).createdByUserId};return tx.patient.update({where:{id:existing.id},data:{name:identity.name,data,archived:Boolean(req.body.archived??existing.archived)}})});res.json(toClient(saved))}catch(e){res.status((e instanceof PersonError||e instanceof StorageError)?e.status:503).json({error:(e instanceof PersonError||e instanceof StorageError)?e.message:'Não foi possível atualizar.'})}
 });
 
 app.delete('/api/patients/:id', auth, async (req: AuthedRequest, res: Response) => {

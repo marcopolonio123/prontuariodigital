@@ -684,19 +684,20 @@ model StorageDeletion {
   @@index([nextAttemptAt])
 }
 
-// Personal vault is separate from clinical/identity documents and their retention.
+// Unified capacity; personal and managed files retain separate namespaces and permissions.
 model StorageAccount {
   userId String @id
-  user User @relation(fields:[userId],references:[id],onDelete:Restrict)
-  limitBytes BigInt @default(5000000000)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  limitBytes BigInt @default(1000000000)
   usedBytes BigInt @default(0)
   maxFiles Int @default(10000)
-  uploadsEnabled Boolean @default(false)
+  uploadsEnabled Boolean @default(true)
   createdAt DateTime @default(now())
   files StorageFile[]
   folders StorageFolder[]
   reservations StorageReservation[]
   upgrade StorageUpgradeRequest?
+  cart StorageCart?
 }
 model StorageFolder {
   id String @id @default(uuid())
@@ -740,6 +741,14 @@ model StorageUpgradeRequest {
   account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Restrict)
   requestedLimitBytes BigInt
   status String @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StorageCart {
+  accountId String @id
+  account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Cascade)
+  gb Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

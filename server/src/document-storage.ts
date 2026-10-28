@@ -1,3 +1,4 @@
+import {withManagedQuota} from './storage-quota.js';
 import {randomUUID,createHash} from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -44,7 +45,8 @@ export async function serveDocument(res:Response,doc:StoredReference&{filename:s
 export async function retireStoredFile(tx:Prisma.TransactionClient,ref:StoredReference|null|undefined){
  if(ref?.storageProvider==='s3'&&ref.objectKey&&ref.storageBucket)await tx.storageDeletion.upsert({where:{bucket_objectKey:{bucket:ref.storageBucket,objectKey:ref.objectKey}},create:{bucket:ref.storageBucket,objectKey:ref.objectKey},update:{}});
 }
-export async function withStoredFile<T>(file:FileInput,prefix:string,action:(data:Omit<FileInput,'content'>&{content:Uint8Array<ArrayBuffer>|null;storageProvider:string|null;storageBucket:string|null;objectKey:string|null})=>Promise<T>){
+export async function withStoredFile<T>(file:FileInput,prefix:string,action:(data:Omit<FileInput,'content'>&{content:Uint8Array<ArrayBuffer>|null;storageProvider:string|null;storageBucket:string|null;objectKey:string|null})=>Promise<T>,accountId?:string):Promise<T>{
+ if(accountId)return withManagedQuota(accountId,file.sizeBytes,()=>withStoredFile(file,prefix,action));
  if(!objectStorageEnabled())return action({...file,content:new Uint8Array(file.content),storageProvider:null,storageBucket:null,objectKey:null});
  const ref=await putPrivateObject(prefix,file.content,file.mimeType);
  try{return await action({...file,...ref,content:null});}
