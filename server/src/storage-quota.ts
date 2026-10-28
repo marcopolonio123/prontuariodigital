@@ -2,7 +2,10 @@ import prisma from './db.js';
 import type {Prisma} from '@prisma/client';
 export class StorageError extends Error {constructor(public status:number,message:string){super(message)}}
 export const PERSONAL_FILE_LIMIT=25000000;
-export const ensureAccount=(userId:string)=>prisma.storageAccount.upsert({where:{userId},create:{userId},update:{}});
+export async function ensureAccount(userId:string){
+ await prisma.$executeRaw`INSERT INTO "StorageAccount" ("userId") VALUES (${userId}) ON CONFLICT ("userId") DO NOTHING`;
+ return prisma.storageAccount.findUniqueOrThrow({where:{userId}});
+}
 export async function lockStorageAccount(tx:Prisma.TransactionClient,userId:string){await tx.$queryRaw`SELECT "userId" FROM "StorageAccount" WHERE "userId"=${userId} FOR UPDATE`;return tx.storageAccount.findUniqueOrThrow({where:{userId}})}
 // Charge files to their owning account, never to a clinician or another account's tutor.
 // Sizes apply equally to R2, legacy disk and documents still stored in the database.
