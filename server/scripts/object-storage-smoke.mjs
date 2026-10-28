@@ -1,3 +1,4 @@
+import {cleanupTutorshipFixtures} from './tutorship-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID,createHash} from 'node:crypto';
@@ -47,12 +48,12 @@ try{
  const count=objects.size;migration=await migrate(legacy.id);assert.equal(migration.code,0,migration.output);assert.equal(objects.size,count,'Repeat migration duplicated objects');
  const patient=await db.patient.create({data:{id:randomUUID(),ownerUserId:owner.id,name:'Paciente fixture',record:'storage-'+randomUUID(),data:{relationshipToOwner:'child'},tutorUserId:owner.id}});
  const depResponse=await call('/people/'+patient.id+'/document',owner,input);assert.equal(depResponse.status,200);assert.equal((await db.patientIdentityDocument.findUnique({where:{patientId:patient.id}})).content,null);assert.equal((await call('/people/'+patient.id+'/document/download',other)).status,403);
- const event=await db.healthEvent.create({data:{patientId:patient.id,type:'consultation',title:'Fixture',occurredAt:new Date(),status:'final'}});
+ const event=await db.healthEvent.create({data:{patientId:patient.id,type:'consultation',title:'Fixture',occurredAt:new Date(),status:'final',payload:{}}});
  const key=`${patient.id}/${event.id}/fixture.pdf`;await fs.mkdir(path.dirname(path.join(root,key)),{recursive:true});await fs.writeFile(path.join(root,key),bytes);
  const clinical=await db.clinicalDocument.create({data:{patientId:patient.id,eventId:event.id,type:'report',originalFilename:'fixture.pdf',mimeType:'application/pdf',objectKey:key,sha256,sizeBytes:bytes.length,metadata:{storageProvider:'local_private'}}});
  migration=await migrate(clinical.id);assert.equal(migration.code,0,migration.output);const moved=await db.clinicalDocument.findUnique({where:{id:clinical.id}});assert.equal(moved.metadata.storageProvider,'s3');assert.equal((await fs.readFile(path.join(root,key))).toString(),bytes.toString(),'Migration removed local original');
  response=await call(`/patients/${patient.id}/events/${event.id}/documents/${clinical.id}/download`,owner);assert.equal(response.status,303);assert.equal(await(await fetch(response.headers.get('location'))).text(),bytes.toString());
  await db.clinicalDocument.delete({where:{id:clinical.id}});await db.healthEvent.delete({where:{id:event.id}});await db.patientIdentityDocument.delete({where:{patientId:patient.id}});await db.patient.delete({where:{id:patient.id}});
  console.log('Private object storage: metadata-only rows, authorized expiring URLs, no public read, replacement cleanup, provider failure, legacy fallback, verified resumable migration and patient isolation passed.');
-}finally{await db.userIdentityDocument.deleteMany({where:{userId:{in:users}}});await db.user.deleteMany({where:{id:{in:users}}});await db.storageDeletion.deleteMany({where:{bucket}});await db.$disconnect();s3.closeAllConnections();await new Promise(r=>s3.close(r));await fs.rm(root,{recursive:true,force:true});}
+}catch(error){console.error('Object storage test failed:',error);throw error;}finally{await cleanupTutorshipFixtures(db,users);await db.userIdentityDocument.deleteMany({where:{userId:{in:users}}});await db.user.deleteMany({where:{id:{in:users}}});await db.storageDeletion.deleteMany({where:{bucket}});await db.$disconnect();s3.closeAllConnections();await new Promise(r=>s3.close(r));await fs.rm(root,{recursive:true,force:true});}
 process.exit(0);
