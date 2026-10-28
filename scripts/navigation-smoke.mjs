@@ -107,7 +107,7 @@ try {
   assert.equal(document.querySelectorAll('[data-mydoctor-professional-entry]').length, 0, 'Menu depende de mutação externa');
   await click('← Voltar ao MyDoctor');
   assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
-  await menu(); await click('Meu cadastro');
+  await menu(); await click('Cadastro');
   assert.match(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
   assert.equal([...document.querySelectorAll('button')].filter(button => /^Salvar/.test(button.textContent.trim())).length, 1, 'Mais de um botão para salvar');
   assert.match(document.body.textContent, /Endereço completo/);
@@ -216,6 +216,7 @@ try {
   await fs.unlink('.consent-test.cjs');
   console.log('✅ Navegação: sessão restaurada, telas estáveis, ida/volta profissional, Meu cadastro, flag inicial e logout OK.');
 } finally { await settle(() => root.unmount()); await fs.unlink(outfile); dom.window.close(); }
+
 
 
 

@@ -1,6 +1,6 @@
 # Armazenamento e planos
 
-Configurações → Meu armazenamento. O menu e a funcionalidade são telas exclusivas: abrir o menu oculta a tela atual; escolher uma função fecha o menu.
+Administração → Armazenamento. Cadastro também fica no grupo Administração. A gestão restrita do sistema permanece visível somente para administradores. O menu e a funcionalidade são telas exclusivas: abrir o menu oculta a tela atual; escolher uma função fecha o menu.
 
 ## Capacidade única, conteúdo separado
 
