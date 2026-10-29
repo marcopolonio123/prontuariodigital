@@ -45,7 +45,7 @@ export default function V1ProfessionalShell() {
     return () => { current = false; };
   }, [api, token, view]);
 
-  const title = view==='professional-agenda'?'Minha agenda':view === 'identification-history' ? 'Acessos à minha digital' : view === 'utility' ? 'Identificar Pessoa' : view === 'administration' ? 'Administração' : view === 'professional' ? 'Validação de cadastro profissional' : view === 'clinicar' ? 'Atendimento' : view === 'professional-locations' ? 'Locais que atendo' : view === 'professional-access' ? 'Solicitar acesso ao prontuário do paciente' : view === 'access-requests' ? 'Solicitações de acesso' : 'Atendimentos para confirmar';
+  const title = view==='professional-agenda'?'Minha agenda':view === 'identification-history' ? 'Acessos à minha digital' : view === 'utility' ? 'Identificar Pessoa' : view === 'administration' ? 'Administração' : view === 'professional' ? 'Validação de cadastro profissional' : view === 'clinicar' ? 'Atendimento' : view === 'professional-locations' ? 'Locais que atendo' : view === 'professional-access' ? 'Solicitar acesso ao prontuário do paciente' : view === 'access-requests' ? 'Autorização de acesso' : 'Atendimentos para confirmar';
 
   return <>
     <RecordDictationEnhancer />

@@ -76,7 +76,7 @@ export default function AccessRequestsPanel({ api }: { api: MyDoctorV1Api }) {
   const pending = items.filter(item => item.status === 'pending'); const decided = items.filter(item => item.status !== 'pending');
   return <div className="space-y-4">
     <section className="rounded-xl border border-line bg-card p-4">
-      <h2 className="text-xl font-bold">Solicitações de acesso ao seu prontuário</h2>
+      <h2 className="text-xl font-bold">Autorização de acesso ao seu prontuário</h2>
       <p className="mt-2 text-sm text-mute">Você decide quem pode acessar, quais seções pode consultar e por quanto tempo. Altere ou revogue as autorizações aqui.</p>
       <button disabled={loading || Boolean(busyId)} type="button" onClick={() => void load()} className="mt-3 rounded-lg border border-line px-3 py-2 text-sm">Atualizar</button>
       {message && <p role="status" className="mt-3 rounded-lg bg-paper p-3 text-sm">{message}</p>}
