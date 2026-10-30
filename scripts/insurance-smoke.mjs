@@ -1,3 +1,4 @@
+async function openSettings(page){const group=page.getByLabel('Menu configurações',{exact:true}).locator('..');if(!(await group.evaluate(el=>el.open)))await group.locator('summary').click();}
 import {chromium} from 'playwright';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -27,7 +28,7 @@ try{
    const data=path==='/account'?{id:'u1',name:'Paciente teste',completed:true}:path==='/profiles'?[{id:'p1',name:'Paciente teste',source:'owned',relationship:'self'}]:path==='/patients/p1/events'?events:path==='/admin/session'?{authorized:false}:path.includes('/events/')?events.find(e=>path.includes('/events/'+e.id)):[];
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
-  await page.goto('http://127.0.0.1:4179/');await page.getByRole('button',{name:'Convênios',exact:true}).click();
+  await page.goto('http://127.0.0.1:4179/');await openSettings(page);await page.getByRole('button',{name:'Convênios',exact:true}).click();
   await page.locator('[data-insurance-id]').first().waitFor();assert.equal(await page.locator('[data-insurance-id]').count(),10);
   assert.equal(await page.getByText('Convênio de outra pessoa',{exact:true}).count(),0); assert.equal(await page.getByRole('button',{name:'Editar',exact:true}).count(),0); await page.getByRole('button',{name:'Ordenar por Operadora / plano',exact:true}).click(); assert.equal(await page.locator('[data-insurance-id]').first().getAttribute('data-insurance-id'),'ins-0'); await page.getByRole('button',{name:'Ordenar por Operadora / plano',exact:true}).click();
   const filters=page.locator('details').filter({hasText:'Filtros de convênios'});
@@ -63,3 +64,4 @@ try{
   console.log('Convênios: filtros, perfil isolado, imagem inteira/ampliada, edição, fotos preservadas, inativação, reativação e cancelar OK',width);await page.close();
  }
 }finally{await browser?.close();server.kill()}
+
