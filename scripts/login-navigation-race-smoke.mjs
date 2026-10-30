@@ -21,7 +21,9 @@ try{
   await page.locator('input[type=email]').focus();await page.keyboard.press('Enter');
   await page.getByLabel('Código de verificação',{exact:true}).fill('123456');await page.getByRole('button',{name:'Solicitar novo código',exact:true}).focus();await page.keyboard.press('Enter');
   await page.getByRole('button',{name:'Prontuário',exact:true}).waitFor();
-  assert.equal(await page.getByRole('button',{name:'Meus dados/cadastro',exact:true}).count(),1,'Login deve abrir o menu mesmo com cadastro incompleto e dependentes');
+  assert.equal(await page.getByRole('navigation',{name:'Menu do MyDoctor',exact:true}).count(),1,'Login deve abrir o menu mesmo com cadastro incompleto e dependentes');
+  assert.equal(await page.getByLabel('Menu configurações',{exact:true}).locator('..').evaluate(el=>el.open),false,'Configurações deve iniciar recolhido');
+  assert.equal(await page.getByRole('navigation',{name:'Menu do MyDoctor',exact:true}).evaluate(el=>el.lastElementChild.querySelector('summary').textContent),'Configurações','Configurações deve ficar no final');
   await page.getByRole('button',{name:'Prontuário',exact:true}).click();
   await page.locator('[data-record-id="e1"]').waitFor();
   assert.equal(accountStarted,true);
