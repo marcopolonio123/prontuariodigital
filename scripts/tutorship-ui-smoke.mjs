@@ -1,3 +1,4 @@
+async function openSettings(page){const group=page.getByLabel('Menu configurações',{exact:true}).locator('..');if(!(await group.evaluate(el=>el.open)))await group.locator('summary').click();}
 import {chromium} from 'playwright';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
