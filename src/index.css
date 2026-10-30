@@ -82,7 +82,7 @@ textarea {
 
 input[type="date"],
 input[type="datetime-local"],
-input[type="file"] {
+input[type="file"]:not(.hidden) {
   display: block;
   inline-size: 100%;
   width: 100%;
@@ -91,9 +91,53 @@ input[type="file"] {
   overflow: hidden;
 }
 
+/* Um único padrão para todos os seletores nativos de anexos do aplicativo.
+   Campos ocultos continuam usando os botões personalizados que já possuem. */
+input[type="file"]:not(.hidden) {
+  padding: .375rem;
+  border: 1px solid var(--color-line);
+  border-radius: .75rem;
+  background: white;
+  color: var(--color-mute);
+  font-size: .875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
 input[type="file"]::file-selector-button {
   max-width: 100%;
-  margin-right: .5rem;
+  min-height: 44px;
+  margin: 0 .75rem 0 0;
+  padding: .625rem 1rem;
+  border: 1px solid var(--color-moss-700);
+  border-radius: .5rem;
+  background: var(--color-moss-700);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+
+input[type="file"]:not(:disabled):hover::file-selector-button {
+  background: var(--color-moss-800);
+  border-color: var(--color-moss-800);
+}
+
+input[type="file"]:focus-visible {
+  outline: 2px solid var(--color-moss-500);
+  outline-offset: 3px;
+}
+
+input[type="file"]:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+input[type="file"]:disabled::file-selector-button {
+  cursor: not-allowed;
 }
 
 .grid > *,
@@ -174,3 +218,4 @@ svg {
 .bar-fill { transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
 
 input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointer; }
+
