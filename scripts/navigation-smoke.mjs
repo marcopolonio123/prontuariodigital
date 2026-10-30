@@ -101,7 +101,9 @@ try {
   assert.doesNotMatch(document.body.textContent, /Olá, Pessoa/);
   await menu(); const professionalMenu=[...document.querySelectorAll('summary')].find(item=>item.textContent==='Profissional'); assert.ok(professionalMenu);
   await settle(()=>professionalMenu.click());
-  assert.deepEqual([...document.querySelector('[aria-label="Menu profissional"]').querySelectorAll('button')].map(item=>item.textContent.replace('Aguardando validação','').trim()),['Atendimento','Minha agenda','Solicitar acesso ao prontuário do paciente','Locais que atendo','Minha equipe','Validação de cadastro profissional']);
+  assert.deepEqual([...document.querySelector('[aria-label="Menu profissional"]').querySelectorAll('button')].map(item=>item.textContent.replace('Aguardando validação','').trim()),['Atendimento','Agenda de atendimentos','Solicitar acesso ao prontuário do paciente','Locais que atendo']);
+  const settings=document.querySelector('[aria-label="Menu configurações"]');
+  assert.match(settings.textContent,/Minha equipe/);assert.match(settings.textContent,/Validação de cadastro profissional/);
   await click('Validação de cadastro profissional');
   assert.match(document.querySelector('main').textContent, /Dados para validação/);
   assert.equal(document.querySelectorAll('[data-mydoctor-professional-entry]').length, 0, 'Menu depende de mutação externa');
