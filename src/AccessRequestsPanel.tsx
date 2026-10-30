@@ -12,7 +12,7 @@ function ProfessionalIdentity({ item, compact = false }: { item: IncomingAccessR
     <span aria-hidden="true" className={`${compact ? 'h-10 w-10 text-sm' : 'h-12 w-12 text-base'} flex shrink-0 items-center justify-center rounded-xl bg-moss-100 font-bold text-moss-800`}>{initials}</span>
     <div className="min-w-0">
       {!compact && <p className="text-[10px] font-bold uppercase tracking-wider text-moss-700">Profissional solicitante</p>}
-      <h4 className={`${compact ? 'text-sm' : 'mt-1 text-lg'} break-words font-bold text-ink`}>{name}</h4>
+      <h4 className={`${compact ? 'text-sm' : 'mt-1 text-lg'} break-words font-bold text-ink`}>{name}</h4>{item.assistantName&&<p className="mt-1 text-xs text-mute">Solicitação enviada por atendente: {item.assistantName}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-2"><span className="rounded-md bg-moss-100 px-2.5 py-1 text-xs font-bold text-moss-800">{item.profession || 'Profissional de saúde'}</span>{item.specialty && <span className="text-sm font-semibold text-ink">{item.specialty}</span>}</div>
       {item.registrations.length > 0 && <p className="mt-2 text-xs font-semibold text-mute">{item.registrations.map(reg => `${reg.council} ${reg.registration}${reg.region ? '/' + reg.region : ''}`).join(' · ')}</p>}
     </div>
@@ -113,5 +113,6 @@ export default function AccessRequestsPanel({ api }: { api: MyDoctorV1Api }) {
     </section>}
   </div>;
 }
+
 
 

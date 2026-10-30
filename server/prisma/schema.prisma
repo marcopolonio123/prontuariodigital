@@ -21,6 +21,9 @@ model User {
   passwordHash    String
   role            String                  @default("titular") // titular | responsavel | profissional
   accountData     Json                    @default("{}")
+  professionalTeam ProfessionalStaff[] @relation("staffOwner")
+  staffAssignments ProfessionalStaff[] @relation("staffMember")
+  submittedAccessRequests AccessRequest[] @relation("accessSubmitter")
   alertPreference AlertPreference?
   alertDismissals AlertDismissal[]
   storageAccount StorageAccount?
@@ -153,6 +156,8 @@ model MedicationReminderDelivery {
 model AccessRequest {
   id                  String        @id @default(uuid())
   requesterUserId     String
+  submittedByUserId String?
+  submittedBy User? @relation("accessSubmitter",fields:[submittedByUserId],references:[id],onDelete:SetNull)
   requester           User          @relation("requester", fields: [requesterUserId], references: [id], onDelete: Cascade)
   practitionerId      String?
   practitioner        Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
@@ -708,10 +713,13 @@ model StorageFolder {
   account StorageAccount @relation(fields:[accountId],references:[userId],onDelete:Restrict)
   name String
   normalizedName String
+  parentId String?
+  parent StorageFolder? @relation("storageTree",fields:[parentId,accountId],references:[id,accountId],onDelete:NoAction,onUpdate:NoAction)
+  children StorageFolder[] @relation("storageTree")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   files StorageFile[]
-  @@unique([accountId,normalizedName])
+  @@unique([accountId,parentId,normalizedName])
   @@unique([id,accountId])
 }
 model StorageFile {
@@ -784,4 +792,29 @@ model AlertDismissal {
  alertKey String
  expiresAt DateTime
  @@id([userId,alertKey])
+}
+
+
+model ProfessionalStaff {
+ id String @id @default(uuid())
+ professionalUserId String
+ professional User @relation("staffOwner",fields:[professionalUserId],references:[id],onDelete:Cascade)
+ staffUserId String
+ staff User @relation("staffMember",fields:[staffUserId],references:[id],onDelete:Cascade)
+ status String @default("pending")
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ audit ProfessionalStaffAudit[]
+ @@unique([professionalUserId,staffUserId])
+ @@index([staffUserId,status])
+}
+model ProfessionalStaffAudit {
+ id String @id @default(uuid())
+ linkId String
+ link ProfessionalStaff @relation(fields:[linkId],references:[id],onDelete:Cascade)
+ actorUserId String
+ action String
+ entityId String?
+ createdAt DateTime @default(now())
+ @@index([linkId,createdAt])
 }

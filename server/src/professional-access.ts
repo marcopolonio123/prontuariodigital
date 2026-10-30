@@ -1,3 +1,4 @@
+import {staffContext,assertStaff,staffAudit,type DelegatedRequest} from './professional-staff.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
@@ -10,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-only-mydoctor-jwt-secret-chang
 const REQUEST_TTL_HOURS = 24;
 const GRANT_TTL_HOURS = 24;
 
-interface AuthedRequest extends Request { userId?: string; }
+interface AuthedRequest extends DelegatedRequest { userId?: string; }
 const fail = (res: Response, status: number, error: string) => res.status(status).json({ error });
 
 function auth(req: AuthedRequest, res: Response, next: NextFunction) {
@@ -51,7 +52,7 @@ router.get('/professional/patients/lookup', auth, async (req: AuthedRequest, res
   return res.json({ patientId: patient.id, name: patient.name });
 });
 
-router.get('/professional/access-requests', auth, async (req: AuthedRequest, res: Response) => {
+router.get('/professional/access-requests', auth, staffContext, async (req: AuthedRequest, res: Response) => {
   const practitioner = await verifiedPractitioner(req.userId!);
   if (!practitioner) return fail(res, 403, 'Clinicar está disponível somente para profissional verificado.');
 
@@ -79,7 +80,7 @@ router.get('/professional/access-requests', auth, async (req: AuthedRequest, res
   })));
 });
 
-router.post('/professional/access-requests', auth, async (req: AuthedRequest, res: Response) => {
+router.post('/professional/access-requests', auth, staffContext, async (req: AuthedRequest, res: Response) => {
   const practitioner = await verifiedPractitioner(req.userId!);
   if (!practitioner) return fail(res, 403, 'Clinicar está disponível somente para profissional verificado.');
 
@@ -91,6 +92,7 @@ router.post('/professional/access-requests', auth, async (req: AuthedRequest, re
 
   try {
     const result = await prisma.$transaction(async tx => {
+      await assertStaff(tx,req);
       const locked = await tx.practitioner.updateMany({ where: { id: practitioner.id, active: true, verificationStatus: 'verified' }, data: { updatedAt: new Date() } });
       if (!locked.count) throw new Error('UNVERIFIED');
       const now = new Date();
@@ -98,13 +100,14 @@ router.post('/professional/access-requests', auth, async (req: AuthedRequest, re
       if (active) throw new Error('ACTIVE');
       const existing = await tx.accessRequest.findFirst({ where: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, status: 'pending', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, orderBy: { requestedAt: 'desc' } });
       if (existing) return { row: existing, created: false };
-      const row = await tx.accessRequest.create({ data: { requesterUserId: req.userId!, practitionerId: practitioner.id, patientId, requestedScope: [...ACCESS_SECTIONS], requestedPermission: 'read_write_consultation', status: 'pending', expiresAt: new Date(now.getTime() + REQUEST_TTL_HOURS * 60 * 60 * 1000) } });
+      const row = await tx.accessRequest.create({ data: { requesterUserId: req.userId!, submittedByUserId:req.actorUserId??req.userId!, practitionerId: practitioner.id, patientId, requestedScope: [...ACCESS_SECTIONS], requestedPermission: 'read_write_consultation', status: 'pending', expiresAt: new Date(now.getTime() + REQUEST_TTL_HOURS * 60 * 60 * 1000) } });
+      await staffAudit(tx,req,'request_access',row.id);
       return { row, created: true };
     }, { maxWait: 10000, timeout: 20000 });
     return res.status(result.created ? 201 : 200).json({ id: result.row.id, patientId, patientName: patient.name, status: result.row.status, requestedAt: result.row.requestedAt.toISOString(), expiresAt: result.row.expiresAt?.toISOString() ?? null });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
-    return fail(res, code === 'ACTIVE' ? 409 : code === 'UNVERIFIED' ? 403 : 503, code === 'ACTIVE' ? 'Você já possui autorização ativa para este paciente. Use o acesso existente; solicite novamente somente após vencimento ou revogação.' : code === 'UNVERIFIED' ? 'Clinicar está disponível somente para profissional verificado.' : 'Não foi possível solicitar acesso. Atualize a lista e tente novamente.');
+    return fail(res, code === 'ACTIVE' ? 409 : ['UNVERIFIED','STAFF_REVOKED'].includes(code) ? 403 : 503, code === 'ACTIVE' ? 'Você já possui autorização ativa para este paciente. Use o acesso existente; solicite novamente somente após vencimento ou revogação.' : ['UNVERIFIED','STAFF_REVOKED'].includes(code) ? 'Clinicar está disponível somente para profissional verificado.' : 'Não foi possível solicitar acesso. Atualize a lista e tente novamente.');
   }
 });
 
@@ -120,6 +123,7 @@ router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Re
       grant: { select: { id: true, validUntil: true, revokedAt: true, scope: true } },
       patient: { select: { name: true } },
       requester: { select: { name: true } },
+      submittedBy:{select:{name:true}},
       practitioner: { include: { registrations: { include: { authority: true } } } },
     },
     orderBy: { requestedAt: 'desc' },
@@ -136,6 +140,7 @@ router.get('/access-requests/incoming', auth, async (req: AuthedRequest, res: Re
     patientId: row.patientId,
     patientName: row.patient.name,
     requesterName: row.requester.name,
+    assistantName:row.submittedByUserId&&row.submittedByUserId!==row.requesterUserId?row.submittedBy?.name??null:null,
     practitionerName: row.practitioner?.name ?? row.requester.name,
     profession: row.practitioner?.profession ?? null,
     specialty: row.practitioner?.specialty ?? null,
@@ -291,6 +296,7 @@ router.post('/access-requests/:id/revoke', auth, async (req: AuthedRequest, res:
 });
 
 export default router;
+
 
 
 

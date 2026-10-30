@@ -28,7 +28,7 @@ export interface FingerprintReferenceMetadata {registeredAt:string;width:number;
 export interface FingerprintReferenceInput {photo:string;consent:true;finger:'right_index'|'left_index'}
 export interface AccountProfileV1 extends V1User { motherName?:string; fingerprintReference?:FingerprintReferenceMetadata|null; rgUf: string; rgType: 'RG' | 'CIN'; avatarDataUrl: string; cpf: string; rg: string; postalCode: string; street: string; number: string; complement: string; neighborhood: string; country: string; birthDate: string; sex: string; city: string; state: string; completed: boolean; isHealthProfessional: boolean; }
 export interface VerificationDocumentV1 { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string; }
-export interface StorageFolderV1 {id:string;name:string;updatedAt:string;_count:{files:number}}
+export interface StorageFolderV1 {parentId?:string|null;id:string;name:string;updatedAt:string;_count:{files:number}}
 export interface StorageFileV1 {id:string;name:string;notes:string;folderId:string|null;folder:{id:string;name:string}|null;mimeType:string;sizeBytes:number;createdAt:string;updatedAt:string}
 export interface StorageSummaryV1 {limitBytes:number;usedBytes:number;personalBytes:number;managedBytes:number;reservedBytes:number;maxFileBytes:number;maxFiles:number;uploadsEnabled:boolean;files:number;folders:number}
 export interface StoragePageV1 {items:StorageFileV1[];total:number;overall:number;page:number;size:number}
@@ -58,7 +58,7 @@ export interface ProfessionalAccessRequestV1 {
   grantRevokedAt?: string | null;
   grantedSections?: string[];
 }
-export interface IncomingAccessRequestV1 {
+export interface IncomingAccessRequestV1 {assistantName?:string|null;
   id: string;
   patientId: string;
   patientName: string;
@@ -172,7 +172,8 @@ export class MyDoctorV1Api {
   recordUtilityUsage(method:'open'|'finger'|'finger_photo',location:UtilityLocation,action?:UtilityPhotoAction,diagnostic?:UtilityPhotoDiagnostic){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location,action,diagnostic})})}
   utilityLogs(query:{admin?:boolean;mine?:boolean;identificationOnly?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.mine)params.set('mine','1');if(query.identificationOnly)params.set('identificationOnly','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
 
-  constructor(private readonly baseUrl: string, private token = readV1SessionToken()) {}
+  constructor(private readonly baseUrl: string, private token = readV1SessionToken(), private professionalUserId?:string) {}
+  forProfessional(id:string){return new MyDoctorV1Api(this.baseUrl,this.token,id)}
 
   searchPeople(input:{cpf:string;name:string;birthDate:string;motherName:string;record?:string}){return this.req<{items:PersonCandidate[];more:boolean;creationToken:string|null}>('/people/search',{method:'POST',body:JSON.stringify(input)})}
   createPerson(input:PersonV1,relationship:string,creationToken:string){return this.req<PatientProfile>('/profiles',{method:'POST',body:JSON.stringify({...input,relationship,creationToken})})}
@@ -220,7 +221,7 @@ export class MyDoctorV1Api {
   setToken(token: string) { this.token = token; publishV1SessionToken(token); }
   private url(path: string) { return `${this.baseUrl.replace(/\/$/, '')}/api/v1${path}`; }
   private async req<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(this.url(path), { ...init, headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...(init.headers ?? {}) } });
+    const response = await fetch(this.url(path), { ...init, headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...(this.professionalUserId?{'X-MyDoctor-Professional':this.professionalUserId}:{}), ...(init.headers ?? {}) } });
     if (!response.ok) {
       let error = `Erro do servidor (${response.status}).`;
       try { const body = (await response.json()) as { error?: string }; if (body.error) error = body.error; } catch { /* resposta sem JSON */ }
@@ -328,12 +329,18 @@ export class MyDoctorV1Api {
   readAlert(id:string){return this.req('/alerts/read',{method:'POST',body:JSON.stringify({id})})}
   getStorageSummary(){return this.req<StorageSummaryV1>('/storage/summary')}
   listStorageFolders(){return this.req<StorageFolderV1[]>('/storage/folders')}
-  saveStorageFolder(name:string,id?:string,expectedUpdatedAt?:string){return this.req('/storage/folders'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify({name,expectedUpdatedAt})})}
+  saveStorageFolder(name:string,id?:string,expectedUpdatedAt?:string,parentId?:string|null){return this.req('/storage/folders'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify({name,expectedUpdatedAt,parentId})})}
   deleteStorageFolder(id:string){return this.req('/storage/folders/'+encodeURIComponent(id),{method:'DELETE'})}
   listStorageFiles(query:Record<string,string|number>){return this.req<StoragePageV1>('/storage/files?'+new URLSearchParams(Object.entries(query).map(([key,value])=>[key,String(value)])))}
   async uploadStorageFile(file:File,folderId:string,notes:string){const body=new FormData();body.append('folderId',folderId);body.append('notes',notes);body.append('file',file);const response=await fetch(this.url('/storage/files'),{method:'POST',headers:{Authorization:'Bearer '+this.token},body});const data=await response.json();if(!response.ok)throw new Error(data.error??'Não foi possível enviar o arquivo.');return data as StorageFileV1}
   updateStorageFile(file:StorageFileV1){return this.req('/storage/files/'+encodeURIComponent(file.id),{method:'PUT',body:JSON.stringify({name:file.name,notes:file.notes,folderId:file.folderId,expectedUpdatedAt:file.updatedAt})})}
   deleteStorageFile(id:string){return this.req('/storage/files/'+encodeURIComponent(id),{method:'DELETE'})}
+  downloadStorageFile(file:StorageFileV1){return openPrivateDocument(this.url('/storage/files/'+encodeURIComponent(file.id)+'/download?download=1'),this.token,file.name)}
+  searchStaffUsers(q:string){return this.req<{items:StaffUserV1[];total:number}>('/professional/staff/users?q='+encodeURIComponent(q))}
+  getProfessionalStaff(){return this.req<{items:StaffLinkV1[];audit:StaffAuditV1[]}>('/professional/staff')}
+  inviteProfessionalStaff(staffUserId:string){return this.req('/professional/staff',{method:'POST',body:JSON.stringify({staffUserId})})}
+  getStaffAssignments(){return this.req<StaffLinkV1[]>('/staff/assignments')}
+  decideStaffLink(link:StaffLinkV1,decision:'accept'|'reject'|'revoke'){return this.req('/staff/assignments/'+encodeURIComponent(link.id)+'/decision',{method:'POST',body:JSON.stringify({decision,expectedUpdatedAt:link.updatedAt})})}
   openStorageFile(file:StorageFileV1){return openPrivateDocument(this.url('/storage/files/'+encodeURIComponent(file.id)+'/download'),this.token,file.name)}
   getStorageCart(){return this.req<StorageCartV1|null>('/storage/cart')}
   saveStorageCart(gb:number){return this.req<StorageCartV1>('/storage/cart',{method:'PUT',body:JSON.stringify({gb})})}
@@ -358,3 +365,8 @@ export function defaultV1ApiUrl() {
 export interface PatientAgendaItem {id:string;title:string;at:string;professional:string;location:string;notes:string;status:string;alert:boolean;source:string;updatedAt:string}
 export interface AlertSettingsV1 {enabled:Record<string,boolean>;leadMinutes:number;updatedAt:string|null;canReview:boolean}
 export interface AlertItemV1 {id:string;type:string;text:string;at:string}
+
+
+export interface StaffUserV1 {id:string;name:string;userNumber:number;emailMasked:string}
+export interface StaffLinkV1 {id:string;professionalUserId:string;staffUserId:string;status:string;updatedAt:string;professional:{name:string;userNumber:number;practitioner:{active:boolean;verificationStatus:string;specialty:string|null}|null};staff:{name:string;userNumber:number}}
+export interface StaffAuditV1 {id:string;action:string;createdAt:string;actorUserId:string;link:{staff:{name:string;userNumber:number}}}

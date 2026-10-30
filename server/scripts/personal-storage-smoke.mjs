@@ -24,6 +24,8 @@ try{
  assert.equal((await call('/storage/summary',b)).body.uploadsEnabled,true);const free=await reserveStorage(b.id,10);await releaseStorageReservation(free.id);
  const folder=(await call('/storage/folders',a,{name:'Contratos'})).body,foreignFolder=(await call('/storage/folders',b,{name:'Privado B'})).body;
  assert.equal((await call('/storage/folders',a,{name:'contratos'})).status,409);
+ const child=(await call('/storage/folders',a,{name:'Exames',parentId:folder.id})).body;assert.equal(child.parentId,folder.id);assert.equal((await call('/storage/folders',a,{name:'exames',parentId:folder.id})).status,409);assert.equal((await call('/storage/folders',a,{name:'Estranha',parentId:foreignFolder.id})).status,404);assert.equal((await call('/storage/folders/'+folder.id,a,undefined,'DELETE')).status,409);assert.equal((await call('/storage/folders/'+child.id,a,undefined,'DELETE')).status,200);
+
  assert.equal((await send(a,'fora.pdf',Buffer.from('%PDF-fixture'),foreignFolder.id)).status,404);
  let upload=await send(a,'Contrato.pdf',Buffer.from('%PDF-fixture'),folder.id);assert.equal(upload.status,201);let file=upload.body;
  assert(!('objectKey' in file));let stored=await db.storageFile.findUnique({where:{id:file.id}});assert(stored.objectKey.startsWith(`storage/contas/${a.id}/arquivos/`));assert(!stored.objectKey.startsWith('pacientes/'));assert.equal(stored.accountId,a.id);
@@ -38,6 +40,7 @@ try{
  assert.equal((await call('/storage/files/'+file.id,a,{name:'Versão antiga',notes:'',folderId:null,expectedUpdatedAt:file.updatedAt},'PUT')).status,409);
  assert.equal((await call('/storage/folders/'+folder.id,a,undefined,'DELETE')).status,200);
  const personalUrl=await fetch(base+'/storage/files/'+file.id+'/download',{headers:{Authorization:'Bearer '+a.token,Accept:'application/json'},redirect:'error'});assert.equal(personalUrl.status,200);const link=await personalUrl.json();assert.equal(link.expiresIn,120);assert.equal(await(await fetch(link.url)).text(),'%PDF-fixture');
+ const forced=await fetch(base+'/storage/files/'+file.id+'/download?download=1',{headers:{Authorization:'Bearer '+a.token,Accept:'application/json'}});assert(new URL((await forced.json()).url).searchParams.get('response-content-disposition').startsWith('attachment;'));
  // Managed documents contribute to the shared quota but never enter personal lists or deletion routes.
  patient=await db.patient.create({data:{id:randomUUID(),ownerUserId:a.id,name:'Paciente fixture',record:'vault-fixture-'+randomUUID(),data:{relationshipToOwner:'self'}}});event=await db.healthEvent.create({data:{patientId:patient.id,type:'consultation',title:'Fixture',occurredAt:new Date(),payload:{}}});
  const medicalKey=`pacientes/${patient.id}/atendimentos/${event.id}/medical`;objects.set('/vault-fixtures/'+medicalKey,Buffer.from('medical-preserve'));
@@ -87,3 +90,4 @@ try{
  await db.storageFile.deleteMany({where:{accountId:{in:users}}});await db.storageFolder.deleteMany({where:{accountId:{in:users}}});await db.storageReservation.deleteMany({where:{accountId:{in:users}}});await db.storageUpgradeRequest.deleteMany({where:{accountId:{in:users}}});await db.storageAccount.deleteMany({where:{userId:{in:users}}});await db.storageDeletion.deleteMany({where:{bucket:'vault-fixtures'}});await db.user.deleteMany({where:{id:{in:users}}});await db.$disconnect();mock.closeAllConnections();await new Promise(r=>mock.close(r));
 }
 process.exit(0);
+
