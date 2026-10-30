@@ -1,3 +1,4 @@
+import {staffContext,assertStaff,staffAudit} from './professional-staff.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
@@ -52,7 +53,7 @@ router.get('/practitioners/:id/locations',auth,async(req:AuthedRequest,res:Respo
  if(!practitioner?.userId)return fail(res,404,'Profissional não encontrado.');
  return res.json((await directory(prisma,practitioner.userId)).filter(place=>place.active!==false).map(({id,name,address})=>({id,name,address})));
 });
-router.get('/professional/locations', auth, async (req: AuthedRequest, res: Response) => {
+router.get('/professional/locations', auth, staffContext, async (req: AuthedRequest, res: Response) => {
   if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
   const locations=await directory(prisma,req.userId!);
   const results=await Promise.all(locations.map(async place=>({...place,hasAssociations:await locationAssociated(prisma,place.id)})));
@@ -402,7 +403,7 @@ async function ownAgenda(userId:string){
   const returns=events.map(event=>{const place=places.find(item=>item.id===event.locationId),f=(event.payload as any).followUp,override=event.followUpState;const same=override?.at.toISOString()===f.at;return {id:'return:'+event.id,locationId:place?.id??'',locationName:(event.payload as any).onlineVisit?'Atendimento on-line':(event.payload as any).homeVisit?'Atendimento domiciliar':event.organizationNameSnapshot??'',locationAddress:(event.payload as any).onlineVisit||(event.payload as any).homeVisit?'':place?.address??'',title:'Retorno · '+event.title,at:f.at,notes:'Programado no atendimento',patientName:event.patient.name,source:'return',status:same?override.status:'scheduled',alert:f.alert!==false,updatedAt:(same?override.updatedAt:event.updatedAt).toISOString()}});
   return [...returns,...manual.map(entry=>({...entry,locationId:['online','home'].includes(entry.modality)?entry.modality:entry.locationId??'',patientId:entry.patientId??'',patientName:entry.patientName||null,at:entry.at.toISOString(),updatedAt:entry.updatedAt.toISOString(),source:'manual'}))].sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
 }
-router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Response)=>{
+router.get('/professional/agenda/patients',auth,staffContext,async(req:AuthedRequest,res:Response)=>{
   const practitioner=await verifiedPractitioner(req.userId!);
   if(!practitioner)return fail(res,403,'A pesquisa exige perfil profissional aprovado e ativo.');
   const q=String(req.query.q??'').trim();
@@ -430,11 +431,11 @@ router.get('/professional/agenda/patients',auth,async(req:AuthedRequest,res:Resp
   });
   return res.json({items,total:matching.length});
 });
-router.get('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
+router.get('/professional/agenda',auth,staffContext,async(req:AuthedRequest,res:Response)=>{
   if(!await verifiedPractitioner(req.userId!))return fail(res,403,'A agenda exige perfil profissional aprovado e ativo.');
   return res.json(await ownAgenda(req.userId!));
 });
-router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
+router.post('/professional/agenda',auth,staffContext,async(req:AuthedRequest,res:Response)=>{
   const practitioner=await verifiedPractitioner(req.userId!);
   if(!practitioner)return fail(res,403,'A agenda exige perfil profissional aprovado e ativo.');
   const body=req.body??{},id=String(body.id??'');
@@ -447,6 +448,7 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
   if(!title||title.length>200||notes.length>2000||!Number.isFinite(at.getTime()))return fail(res,400,'Informe descrição e data/hora válidas (até 200 caracteres na descrição e 2.000 nas observações).');
   try{
     await prisma.$transaction(async tx=>{
+      await assertStaff(tx,req);
       await lockDirectory(tx,req.userId!);
       const places=await directory(tx,req.userId!);
       if(existing?.source==='return'){
@@ -476,12 +478,14 @@ router.post('/professional/agenda',auth,async(req:AuthedRequest,res:Response)=>{
         if(id)await tx.professionalAppointment.update({where:{id},data:next});
         else await tx.professionalAppointment.create({data:{...next,id:'manual:'+randomUUID()}});
       }
+      await staffAudit(tx,req,id?'agenda_update':'agenda_create',id||undefined);
     });
     return res.json({saved:true});
-  }catch(e){if(e instanceof Error&&e.message==='PATIENT_NOT_FOUND')return fail(res,404,'O paciente não está mais disponível no cadastro. Pesquise novamente ou informe apenas o nome.');if(e instanceof Error&&e.message==='PATIENT_NAME')return fail(res,400,'O nome do paciente deve ter até 150 caracteres.');if(e instanceof Error&&e.message==='LOCATION')return fail(res,400,'Selecione um local do seu cadastro profissional.');if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
+  }catch(e){if(e instanceof Error&&e.message==='STAFF_REVOKED')return fail(res,403,'Vínculo de atendente revogado.');if(e instanceof Error&&e.message==='PATIENT_NOT_FOUND')return fail(res,404,'O paciente não está mais disponível no cadastro. Pesquise novamente ou informe apenas o nome.');if(e instanceof Error&&e.message==='PATIENT_NAME')return fail(res,400,'O nome do paciente deve ter até 150 caracteres.');if(e instanceof Error&&e.message==='LOCATION')return fail(res,400,'Selecione um local do seu cadastro profissional.');if(e instanceof Error&&e.message==='CONFLICT')return fail(res,409,'A agenda mudou. Atualize a lista e tente novamente.');if(e instanceof Error&&e.message==='LIMIT')return fail(res,400,'Limite de 500 compromissos próprios atingido.');throw e}
 });
 
 export default router;
+
 
 
 
