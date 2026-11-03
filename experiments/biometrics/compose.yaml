@@ -1,0 +1,20 @@
+services:
+  biometrics-lab:
+    build: .
+    ports:
+      - "127.0.0.1:8791:8791"
+    env_file: .env
+    volumes:
+      - biometric-lab-data:/data
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  biometric-lab-data:
