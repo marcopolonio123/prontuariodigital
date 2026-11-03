@@ -71,10 +71,10 @@ router.get('/storage/files/:id/download',auth,route(async(req,res)=>{
 }));
 // Plan prices and the payment provider will be configured later. No client or admin
 // endpoint can mark an order paid or grant capacity without verified payment.
-const plans=[5,10].map(gb=>({gb,priceCents:null as number|null,currency:'BRL',period:null as string|null,purchasable:false}));
+const plans=[{gb:5,priceCents:200},{gb:10,priceCents:350},{gb:20,priceCents:650}].map(plan=>({...plan,currency:'BRL',period:'month',purchasable:false}));
 router.get('/storage/plans',auth,route(async(_req,res)=>res.json({plans,checkoutEnabled:false})));
 router.get('/storage/cart',auth,route(async(req,res)=>res.json(await prisma.storageCart.findUnique({where:{accountId:req.userId!}}))));
-router.put('/storage/cart',auth,route(async(req,res)=>{const gb=Number(req.body.gb);if(!plans.some(p=>p.gb===gb))throw new StorageError(400,'Escolha 5 GB ou 10 GB.');const account=await ensureAccount(req.userId!);if(BigInt(gb*1e9)<=account.limitBytes)throw new StorageError(400,'Escolha um plano maior que o atual.');const cart=await prisma.storageCart.upsert({where:{accountId:req.userId!},create:{accountId:req.userId!,gb},update:{gb}});return res.json(cart)}));
+router.put('/storage/cart',auth,route(async(req,res)=>{const gb=Number(req.body.gb);if(!plans.some(p=>p.gb===gb))throw new StorageError(400,'Escolha 5 GB, 10 GB ou 20 GB.');const account=await ensureAccount(req.userId!);if(BigInt(gb*1e9)<=account.limitBytes)throw new StorageError(400,'Escolha um plano maior que o atual.');const cart=await prisma.storageCart.upsert({where:{accountId:req.userId!},create:{accountId:req.userId!,gb},update:{gb}});return res.json(cart)}));
 router.delete('/storage/cart',auth,route(async(req,res)=>{await prisma.storageCart.deleteMany({where:{accountId:req.userId!}});return res.json({removed:true})}));
 router.post('/storage/checkout',auth,route(async()=>{throw new StorageError(409,'Pagamento ainda não configurado. Nenhuma cobrança ou liberação de espaço foi realizada.')}));
 router.post('/storage/upgrade',auth,route(async()=>{throw new StorageError(410,'Ampliação disponível pelo carrinho após confirmação do pagamento.')}));

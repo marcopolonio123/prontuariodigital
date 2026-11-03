@@ -78,7 +78,7 @@ try{
  assert.equal((await call('/storage/cart',b)).body,null);
  assert.equal((await call('/storage/cart',a,{gb:10},'PUT')).body.gb,10);
  assert.equal((await call('/storage/cart',a)).body.gb,10);
- assert.equal((await call('/storage/plans',a)).body.checkoutEnabled,false);
+ const catalog=(await call('/storage/plans',a)).body;assert.equal(catalog.checkoutEnabled,false);assert.deepEqual(catalog.plans.map(p=>[p.gb,p.priceCents,p.period]),[[5,200,'month'],[10,350,'month'],[20,650,'month']]);assert.equal((await call('/storage/cart',a,{gb:20},'PUT')).status,200);
  assert.equal((await call('/storage/checkout',a,{status:'paid',gb:10})).status,409);
  assert.equal((await call('/admin/storage/requests/'+a.id+'/decision',a,{decision:'approve'})).status,410);
  assert.equal((await call('/storage/upgrade',a,{gb:10})).status,410);
