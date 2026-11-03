@@ -1,0 +1,10 @@
+.env
+.venv/
+data/
+models/*
+!models/manifest.json
+fingerprint/target/
+__pycache__/
+.pytest_cache/
+*.pyc
+test-results/
