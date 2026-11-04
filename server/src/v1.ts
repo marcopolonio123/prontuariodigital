@@ -689,6 +689,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if (await prisma.integrationImport.findUnique({where:{eventId:current.id},select:{id:true}})) return fail(res, 403, 'Registro integrado preservado como recebido. Correções devem vir da origem.');
   if (current.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
   if (current.practitionerId && current.authoredByUserId === req.userId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento está disponível somente para consulta pelo profissional.');
   if (current.status === 'cancelled') return fail(res, 409, 'Reative o registro antes de editá-lo.');
@@ -916,7 +917,7 @@ router.post('/patients/:patientId/events/:eventId/inactivate', auth, async (req:
   if (current.practitionerId && current.authoredByUserId === req.userId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento está disponível somente para consulta pelo profissional.');
   const updated = await prisma.healthEvent.update({ where: { id: current.id }, data: {
     status: 'cancelled',
-    provenance: { source: 'mydoctor_manual', action: 'inactivated', actorUserId: req.userId!, inactivatedAt: new Date().toISOString(), reason, previousStatus: current.status },
+    provenance: { ...((current.provenance as any)?.source==='fhir_r4_integration' ? current.provenance as object : {}), source: (current.provenance as any)?.source==='fhir_r4_integration'?'fhir_r4_integration':'mydoctor_manual', action: 'inactivated', actorUserId: req.userId!, inactivatedAt: new Date().toISOString(), reason, previousStatus: current.status },
   }});
   res.json(updated);
 });
@@ -932,7 +933,7 @@ router.post('/patients/:patientId/events/:eventId/reactivate', auth, async (req:
   const previousProvenance = current.provenance;
   const updated = await prisma.healthEvent.update({ where: { id: current.id }, data: {
     status: 'amended',
-    provenance: { source: 'mydoctor_manual', action: 'reactivated', actorUserId: req.userId!, reactivatedAt: new Date().toISOString(), previousProvenance },
+    provenance: (current.provenance as any)?.source==='fhir_r4_integration' ? {...current.provenance as object, action:'reactivated',actorUserId:req.userId!,reactivatedAt:new Date().toISOString()} : { source: 'mydoctor_manual', action: 'reactivated', actorUserId: req.userId!, reactivatedAt: new Date().toISOString(), previousProvenance },
   }});
   res.json(updated);
 });
@@ -1065,6 +1066,7 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
 

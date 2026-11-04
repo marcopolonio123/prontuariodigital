@@ -1,3 +1,4 @@
+import integrationsRouter from './integrations.js';
 import professionalStaffRouter from './professional-staff.js';
 import alertsRouter from './alerts.js';
 import patientAgendaRouter from './patient-agenda.js';
@@ -43,6 +44,7 @@ app.use('/api/v1', patientAgendaRouter);
 app.use('/api/v1', professionalStaffRouter);
 app.use('/api/v1', personalStorageRouter);
 app.use('/api/v1', clinicalWorkflowRouter);
+app.use('/api/v1', integrationsRouter);
 app.use('/api/v1', v1Router);
 app.use('/api/v1', tutorshipRouter);
 app.use('/api/v1', publicUtilityRouter);

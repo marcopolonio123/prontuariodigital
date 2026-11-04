@@ -37,6 +37,7 @@ jobs:
           node scripts/personal-storage-ui-smoke.mjs
           node scripts/agenda-alerts-ui-smoke.mjs
           node scripts/staff-explorer-ui-smoke.mjs
+          node scripts/integrations-ui-smoke.mjs
 
   backend:
     runs-on: ubuntu-latest
@@ -103,6 +104,8 @@ jobs:
           node scripts/personal-storage-smoke.mjs
           node scripts/agenda-alerts-smoke.mjs
           node scripts/professional-staff-smoke.mjs
+          node scripts/fhir-contract-smoke.mjs
+          node scripts/integrations-smoke.mjs
 
 
 

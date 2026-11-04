@@ -1,0 +1,49 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "receita",
+        "identifier": [
+          {
+            "system": "https://integrador.example/documentos",
+            "value": "receita-1"
+          }
+        ],
+        "meta": {
+          "versionId": "1"
+        },
+        "subject": {
+          "reference": "Patient/00000000-0000-0000-0000-000000000000"
+        },
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "text": "Medicamento de demonstração"
+        },
+        "authoredOn": "2026-11-04T10:00:00-03:00",
+        "requester": {
+          "reference": "Practitioner/profissional"
+        },
+        "dosageInstruction": [
+          {
+            "text": "Instrução de demonstração. Não utilizar clinicamente."
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "profissional",
+        "name": [
+          {
+            "text": "Profissional de demonstração"
+          }
+        ]
+      }
+    }
+  ]
+}

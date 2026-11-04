@@ -12,7 +12,8 @@ export async function lockStorageAccount(tx:Prisma.TransactionClient,userId:stri
 export async function managedStorageBytes(tx:Prisma.TransactionClient,userId:string):Promise<bigint>{
  const rows=await tx.$queryRaw<{bytes:bigint}[]>`
  SELECT COALESCE(sum(n),0)::bigint AS bytes FROM (
- SELECT "sizeBytes"::bigint n FROM "UserIdentityDocument" WHERE "userId"=${userId}
+ SELECT octet_length(i.bundle::text)::bigint n FROM "IntegrationImport" i JOIN "Patient" p ON p.id=i."patientId" WHERE p."ownerUserId"=${userId}
+ UNION ALL SELECT "sizeBytes"::bigint n FROM "UserIdentityDocument" WHERE "userId"=${userId}
  UNION ALL SELECT d."sizeBytes" FROM "ProfessionalVerificationDocument" d JOIN "Practitioner" p ON p.id=d."practitionerId" WHERE p."userId"=${userId}
  UNION ALL SELECT d."sizeBytes" FROM "PatientIdentityDocument" d JOIN "Patient" p ON p.id=d."patientId" WHERE p."ownerUserId"=${userId}
  UNION ALL SELECT d."sizeBytes" FROM "ClinicalDocument" d JOIN "Patient" p ON p.id=d."patientId" WHERE p."ownerUserId"=${userId}
@@ -52,3 +53,4 @@ export async function quotaTransaction<T>(userId:string,action:(tx:Prisma.Transa
   return result;
  },{timeout:20000});
 }
+
