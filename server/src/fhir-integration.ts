@@ -5,7 +5,12 @@ export class IntegrationError extends Error {constructor(public status:number,me
 function required(ok:unknown,message:string):asserts ok {if(!ok)throw new IntegrationError(422,message)}
 function text(v:unknown,max=5000):string {required(typeof v==='string'&&v.trim().length>0&&v.length<=max,'Texto ausente ou maior que o permitido.');return v.trim()}
 const cc=(c:any)=> typeof c?.text==='string'?c.text:(c?.coding??[]).map((x:any)=>x.display??x.code).filter(Boolean).join(', ');
-const date=(v:any)=>{required(typeof v==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d.*(?:Z|[+-]\d\d:\d\d)$/.test(v)&&Number.isFinite(Date.parse(v)),'Informe data/hora FHIR com fuso horário.');return new Date(v).toISOString()};
+const date=(v:any)=>{
+ const m=typeof v==='string'?v.match(/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,9})?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/):null;
+ required(m&&Number.isFinite(Date.parse(v)),'Informe data/hora FHIR com segundos e fuso horário.');
+ const year=Number(m[1]),month=Number(m[2]),day=Number(m[3]),days=[31,year%4===0&&(year%100!==0||year%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+ required(month>=1&&month<=12&&day>=1&&day<=days[month-1],'Data clínica inválida.');return new Date(v).toISOString();
+};
 export function canonical(v:any):string {return Array.isArray(v)?'['+v.map(canonical).join(',')+']':v&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}':JSON.stringify(v)}
 export function parseClinicalBundle(bundle:any,consentId:string){
  required(Buffer.byteLength(JSON.stringify(bundle)??'')<=512*1024,'Bundle limitado a 512 KB. Arquivos devem utilizar o fluxo de documentos, fora do JSON clínico.');
@@ -49,7 +54,7 @@ export function parseClinicalBundle(bundle:any,consentId:string){
   category=codes.includes('LAB')?'laboratory':'imaging';required(['final','amended','corrected','appended'].includes(root.status),'Laudo precisa estar finalizado.');
   occurredAt=date(root.effectiveDateTime??root.effectivePeriod?.start??root.issued);title=text(cc(root.code),300);notes=typeof root.conclusion==='string'?root.conclusion:'';
   exams=(root.result??[]).map((ref:any)=>{const o=resolve(ref);required(o?.resourceType==='Observation','Resultado deve apontar para Observation.');required(['final','amended','corrected'].includes(o.status),'Observation precisa estar finalizada.');required(cc(o.code),'Observation.code obrigatório.');
-   const q=o.valueQuantity;let val=q?`${q.comparator??''}${q.value} ${q.unit??q.code??''}`:o.valueString??cc(o.valueCodeableConcept);
+   const q=o.valueQuantity;if(q)required(typeof q.value==='number'&&Number.isFinite(q.value),'valueQuantity deve conter valor numérico finito.');let val=q?`${q.comparator??''}${q.value} ${q.unit??q.code??''}`:o.valueString??cc(o.valueCodeableConcept);
    required(val!==undefined&&val!==''||o.dataAbsentReason,'Observation deve informar valor ou motivo de ausência.');
    const ranges=(o.referenceRange??[]).map((r:any)=>r.text??`${r.low?.value??''}–${r.high?.value??''} ${r.low?.unit??r.high?.unit??''}`).join('; ');
    return `${cc(o.code)}: ${val||cc(o.dataAbsentReason)}${ranges?' (referência: '+ranges+')':''}${o.interpretation?.length?' · '+o.interpretation.map(cc).join(', '):''}`;

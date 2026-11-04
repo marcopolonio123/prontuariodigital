@@ -42,6 +42,8 @@ Recursos auxiliares permitidos: Composition, Observation, ImagingStudy, Practiti
 
 O original completo é preservado (inclusive detalhes que ainda não tenham coluna visual específica), com SHA-256 canônico, origem, versão e auditoria. Resumo textual não executa XHTML recebido. O contrato não substitui um validador FHIR completo/perfil de cada parceiro; validar os exemplos no validador oficial e realizar homologação bilateral antes de dados reais.
 
+Exemplos sintéticos em `examples/`: consultation.json, laboratory.json, imaging.json e prescription.json. Substituir o alias de paciente pelo código real de autorização em todos os recursos antes do envio. Os exemplos não contêm documentos assinados ou dados reais.
+
 ### Retornos
 
 - 202: recebido aguardando conferência; receiptId, status, duplicate=false.
