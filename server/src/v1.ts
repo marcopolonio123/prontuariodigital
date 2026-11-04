@@ -689,6 +689,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
   if (!ids.has(req.params.patientId)) return fail(res, 403, 'Você não tem acesso a este prontuário.');
   const current = await prisma.healthEvent.findFirst({ where: { id: req.params.eventId, patientId: req.params.patientId } });
   if (!current) return fail(res, 404, 'Registro não encontrado.');
+  if ((current.provenance as any)?.source === 'fhir_r4_integration') return fail(res, 403, 'Registro integrado preservado como recebido. Correções devem vir da origem.');
   if (current.practitionerId && ['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento deve ser alterado pelo profissional em Clinicar.');
   if (current.practitionerId && current.authoredByUserId === req.userId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento está disponível somente para consulta pelo profissional.');
   if (current.status === 'cancelled') return fail(res, 409, 'Reative o registro antes de editá-lo.');
@@ -1065,6 +1066,7 @@ void cleanDiary();
 setInterval(() => { void cleanDiary(); }, 60 * 60 * 1000).unref();
 
 export default router;
+
 
 
 

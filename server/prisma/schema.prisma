@@ -13,6 +13,9 @@ datasource db {
 }
 
 model User {
+  integrationConsents IntegrationConsent[]
+  integrationDecisions IntegrationImport[] @relation("integrationReviewer")
+  integrationAudit IntegrationAudit[]
   userNumber Int @unique @default(autoincrement())
   id              String                  @id @default(uuid())
   name            String
@@ -80,6 +83,8 @@ model VerificationChallenge {
 }
 
 model Patient {
+  integrationConsents IntegrationConsent[]
+  integrationImports IntegrationImport[]
   recordNumber Int @unique @default(autoincrement())
   id             String          @id
   record         String          @default("")
@@ -322,6 +327,7 @@ model Location {
 
 // Origem externa do dado: hospital, clínica, RNDS/SUS, laboratório, dispositivo etc.
 model SourceSystem {
+  integrationClient IntegrationClient?
   id        String             @id @default(uuid())
   code      String             @unique
   name      String
@@ -335,6 +341,7 @@ model SourceSystem {
 
 // Coração do prontuário: todo fato clínico relevante é um evento na linha do tempo.
 model HealthEvent {
+  integrationImport IntegrationImport?
   id                String         @id @default(uuid())
   patientId         String
   patient           Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -817,4 +824,82 @@ model ProfessionalStaffAudit {
  entityId String?
  createdAt DateTime @default(now())
  @@index([linkId,createdAt])
+}
+
+// Authorized incoming FHIR R4 documents. Credentials never stored in plaintext.
+model IntegrationClient {
+  id String @id @default(uuid())
+  sourceSystemId String @unique
+  sourceSystem SourceSystem @relation(fields:[sourceSystemId],references:[id],onDelete:Restrict)
+  tokenHash String @unique
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  consents IntegrationConsent[]
+  imports IntegrationImport[]
+  audit IntegrationAudit[]
+}
+model IntegrationConsent {
+  id String @id @default(uuid())
+  clientId String
+  client IntegrationClient @relation(fields:[clientId],references:[id],onDelete:Restrict)
+  patientId String
+  patient Patient @relation(fields:[patientId],references:[id],onDelete:Restrict)
+  authorizedByUserId String
+  authorizedBy User @relation(fields:[authorizedByUserId],references:[id],onDelete:Restrict)
+  categories Json
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  imports IntegrationImport[]
+  audit IntegrationAudit[]
+  @@unique([id,clientId,patientId])
+  @@index([patientId,createdAt])
+}
+model IntegrationImport {
+  id String @id @default(uuid())
+  clientId String
+  client IntegrationClient @relation(fields:[clientId],references:[id],onDelete:Restrict)
+  patientId String
+  patient Patient @relation(fields:[patientId],references:[id],onDelete:Restrict)
+  consentId String
+  consent IntegrationConsent @relation(fields:[consentId],references:[id],onDelete:Restrict)
+  category String
+  identifierSystem String
+  externalId String
+  version String
+  digest String
+  bundle Json
+  summary Json
+  status String @default("pending")
+  eventId String? @unique
+  event HealthEvent? @relation(fields:[eventId],references:[id],onDelete:Restrict)
+  reviewedByUserId String?
+  reviewedBy User? @relation("integrationReviewer",fields:[reviewedByUserId],references:[id],onDelete:Restrict)
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  audit IntegrationAudit[]
+  @@unique([clientId,patientId,identifierSystem,externalId,version])
+  @@index([patientId,createdAt])
+}
+model IntegrationAudit {
+  id String @id @default(uuid())
+  clientId String
+  client IntegrationClient @relation(fields:[clientId],references:[id],onDelete:Restrict)
+  consentId String?
+  consent IntegrationConsent? @relation(fields:[consentId],references:[id],onDelete:Restrict)
+  importId String?
+  receipt IntegrationImport? @relation(fields:[importId],references:[id],onDelete:Restrict)
+  actorUserId String?
+  actor User? @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+  action String
+  createdAt DateTime @default(now())
+  @@index([clientId,createdAt])
+}
+
+model IntegrationSetup {
+ provider String @id
+ environment String @default("homologation")
+ cnes String
+ requesterId String
+ updatedAt DateTime @updatedAt
 }

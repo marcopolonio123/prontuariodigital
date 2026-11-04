@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import jwt from 'jsonwebtoken';
+if(process.env.NODE_ENV!=='test')throw Error('Use banco de teste isolado.');
+process.env.PORT='8806';await import('../dist/index.js');const {prisma:db}=await import('../dist/db.js');const users=[],patients=[],clients=[];const api='http://127.0.0.1:8806/api/v1';
+async function user(){const u=await db.user.create({data:{name:'Integration fixture',email:randomUUID()+'@integration.test',passwordHash:'fixture',emailVerifiedAt:new Date()}});users.push(u.id);const p=await db.patient.create({data:{id:randomUUID(),ownerUserId:u.id,name:u.name,data:{relationshipToOwner:'self'}}});patients.push(p.id);return {...u,patientId:p.id,token:jwt.sign({uid:u.id},process.env.JWT_SECRET)}}
+async function call(path,u,body,method=body?'POST':'GET',headers={}){const r=await fetch(api+path,{method,headers:{'Content-Type':'application/json',...(u?{Authorization:'Bearer '+u.token}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()}}
+let sourceIds=[];
+try{
+ const owner=await user(),other=await user();process.env.MYDOCTOR_ADMIN_EMAILS=owner.email;
+ assert.equal((await call('/integrations/clients',null)).status,401);assert.equal((await call('/admin/integrations/clients',other,{name:'Laboratório teste'})).status,403);
+ const created=await call('/admin/integrations/clients',owner,{name:'Laboratório teste'});assert.equal(created.status,201);clients.push(created.body.id);const partner={token:created.body.token};assert(partner.token.startsWith('mdi_'));assert(!(JSON.stringify(await call('/integrations/clients',owner))).includes(partner.token));
+ const createConsent=(u,categories=['laboratory'])=>call('/patients/'+u.patientId+'/integrations',u,{clientId:clients[0],categories,expiresAt:new Date(Date.now()+86400000).toISOString()});
+ assert.equal((await call('/patients/'+owner.patientId+'/integrations',other)).status,403);const consent=(await createConsent(owner)).body;assert(consent.id);assert.equal((await createConsent(owner)).status,409);
+ const report={resourceType:'DiagnosticReport',id:'r1',identifier:[{system:'https://lab.example/id',value:'exam-123'}],meta:{versionId:'1'},status:'final',subject:{reference:'Patient/'+consent.id},category:[{coding:[{system:'http://terminology.hl7.org/CodeSystem/v2-0074',code:'LAB'}]}],code:{text:'Resultado teste'},effectiveDateTime:'2026-11-04T10:00:00-03:00',conclusion:'Laudo sintético de teste'};const bundle={resourceType:'Bundle',type:'collection',entry:[{resource:report}]};const receive=b=>call('/integrations/fhir/r4/Bundle',partner,b,'POST',{'X-MyDoctor-Consent':consent.id});
+ assert.equal((await call('/integrations/fhir/r4/Bundle',owner,bundle)).status,401);let r=await receive(bundle);assert.equal(r.status,202,JSON.stringify(r.body));const id=r.body.receiptId;assert.equal((await db.healthEvent.count({where:{patientId:owner.patientId}})),0);assert.equal((await receive(bundle)).body.duplicate,true);
+ const changed=structuredClone(bundle);changed.entry[0].resource.conclusion='Outra conclusão';assert.equal((await receive(changed)).status,409);
+ const wrong=structuredClone(bundle);wrong.entry[0].resource.subject.reference='Patient/'+other.patientId;assert.equal((await receive(wrong)).status,422);
+ const deniedCategory=structuredClone(bundle);deniedCategory.entry[0].resource.category[0].coding[0].code='RAD';assert.equal((await receive(deniedCategory)).status,403);
+ assert.equal((await call('/patients/'+owner.patientId+'/integration-imports',other)).status,403);assert.equal((await call('/patients/'+other.patientId+'/integration-imports/'+id,other)).status,404);
+ assert.equal((await call('/patients/'+owner.patientId+'/integration-imports/'+id+'/decision',other,{decision:'approve'})).status,403);
+ const decisions=await Promise.all([1,2].map(()=>call('/patients/'+owner.patientId+'/integration-imports/'+id+'/decision',owner,{decision:'approve'})));assert.deepEqual(decisions.map(x=>x.status).sort(),[200,409]);
+ const events=await db.healthEvent.findMany({where:{patientId:owner.patientId}});assert.equal(events.length,1);assert.equal(events[0].type,'exam');assert.equal(events[0].occurredAt.toISOString(),'2026-11-04T13:00:00.000Z');assert.equal(events[0].provenance.source,'fhir_r4_integration');assert.equal((await call('/patients/'+owner.patientId+'/events/'+events[0].id,owner,{title:'Alterado'},'PUT')).status,403);
+ const newer=structuredClone(bundle);newer.entry[0].resource.meta.versionId='2';const n=await receive(newer);assert.equal(n.status,202);assert.equal((await call('/patients/'+owner.patientId+'/integration-imports/'+n.body.receiptId+'/decision',owner,{decision:'approve'})).status,409);
+ const detail=(await call('/patients/'+owner.patientId+'/integration-imports/'+id,owner)).body;assert.equal(detail.digest.length,64);assert(detail.audit.some(a=>a.action==='approved'));
+ assert.equal((await call('/admin/integrations/rnds',other,{environment:'production',cnes:'1234567',requesterId:'test'},'PUT')).status,403);
+ assert.equal((await call('/admin/integrations/rnds',owner,{environment:'homologation',cnes:'1234567',requesterId:'test'},'PUT')).status,200);assert.equal((await call('/integrations/rnds',owner)).body.connected,false);assert.equal((await call('/integrations/rnds',other)).body.setup,null);
+ await call('/patients/'+owner.patientId+'/integrations/'+consent.id+'/revoke',owner,{});assert.equal((await receive(bundle)).status,403);
+ const c2=(await createConsent(other)).body;await db.integrationConsent.update({where:{id:c2.id},data:{expiresAt:new Date(Date.now()-1000)}});const b2=structuredClone(bundle);b2.entry[0].resource.subject.reference='Patient/'+c2.id;assert.equal((await call('/integrations/fhir/r4/Bundle',partner,b2,'POST',{'X-MyDoctor-Consent':c2.id})).status,403);
+ await call('/admin/integrations/clients/'+clients[0]+'/disable',owner,{});assert.equal((await receive(bundle)).status,401);
+ console.log('Authorized integrations: admin credentials, scoped/expiring/revocable consent, patient isolation, duplicate/conflict handling, concurrent approval, immutable origin, correction guard and honest RNDS preparation OK.');
+}finally{
+ sourceIds=(await db.integrationClient.findMany({where:{id:{in:clients}},select:{sourceSystemId:true}})).map(x=>x.sourceSystemId);
+ await db.integrationAudit.deleteMany({where:{clientId:{in:clients}}});await db.integrationImport.deleteMany({where:{clientId:{in:clients}}});await db.healthEvent.deleteMany({where:{patientId:{in:patients}}});await db.integrationConsent.deleteMany({where:{patientId:{in:patients}}});await db.integrationClient.deleteMany({where:{id:{in:clients}}});await db.sourceSystem.deleteMany({where:{id:{in:sourceIds}}});await db.integrationSetup.deleteMany({where:{provider:'rnds'}});await db.storageAccount.deleteMany({where:{userId:{in:users}}});await db.patient.deleteMany({where:{id:{in:patients}}});await db.user.deleteMany({where:{id:{in:users}}});await db.$disconnect();
+}process.exit(0);

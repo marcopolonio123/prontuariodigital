@@ -169,6 +169,7 @@ export interface PersonCandidate {id:string;name:string;record:string;document:s
 export interface TutorRequestV1 {id:string;patientId:string;patientName:string;record:string;requesterName:string;requesterUserId:string;status:string;kind:string;reason:string;note:string;relationship:string;createdAt:string;canDecide:boolean;mine:boolean;documents:VerificationDocumentV1[];}
 export interface TutorHistoryV1 {id:string;action:string;at:string;actorName:string;oldTutorName:string;newTutorName:string;}
 export class MyDoctorV1Api {
+  integrationRequest<T>(path:string,options?:RequestInit){return this.req<T>(path,options)}
   recordUtilityUsage(method:'open'|'finger'|'finger_photo',location:UtilityLocation,action?:UtilityPhotoAction,diagnostic?:UtilityPhotoDiagnostic){return this.req<{id:string;at:string;result:string}>('/utility/usage',{method:'POST',body:JSON.stringify({method,location,action,diagnostic})})}
   utilityLogs(query:{admin?:boolean;mine?:boolean;identificationOnly?:boolean;patientId?:string;cursor?:string}={}){const params=new URLSearchParams();if(query.admin)params.set('admin','1');if(query.mine)params.set('mine','1');if(query.identificationOnly)params.set('identificationOnly','1');if(query.patientId)params.set('patientId',query.patientId);if(query.cursor)params.set('cursor',query.cursor);return this.req<{items:UtilityLog[];nextCursor:string|null}>('/utility/logs?'+params)}
 
