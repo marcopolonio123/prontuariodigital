@@ -253,6 +253,9 @@ model Practitioner {
 }
 
 model ProfessionalRegistration {
+  rqe String?
+  rqeSpecialty String?
+  rqeVerifiedAt DateTime?
   id                       String            @id @default(uuid())
   practitionerId           String
   practitioner             Practitioner      @relation(fields: [practitionerId], references: [id], onDelete: Cascade)

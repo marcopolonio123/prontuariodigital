@@ -1,3 +1,4 @@
+import CnesSearch from './CnesSearch';
 import QueryList,{QueryFilters} from './QueryList';
 import {useEffect,useRef,useState} from 'react';
 import type {MyDoctorV1Api,ProfessionalLocationV1,LocationAddressV1,LocationAvailabilityV1} from '../lib/api-v1';
@@ -47,6 +48,7 @@ export default function ProfessionalLocations({api,locations,onChange,disabled,s
   <p className="font-bold">Hospital, clínica ou laboratório</p>
   {cnes?<div className="mt-2 flex flex-wrap items-center gap-3"><span>Vinculado ao CNES {cnes}</span><button type="button" className="underline" onClick={()=>{setCnes(null);setCnesQuery('');setMessage('Preenchimento manual, sem vínculo ao CNES.')}}>Remover vínculo</button></div>:
   <div className="mt-2 flex flex-wrap items-end gap-2"><label className="text-xs font-bold text-mute">CNES (opcional)<input value={cnesQuery} inputMode="numeric" maxLength={7} onChange={e=>setCnesQuery(e.target.value.replace(/\D/g,''))} className={field}/></label><button type="button" disabled={cnesQuery.length!==7} onClick={()=>void findCnes()} className="rounded-lg border border-line px-3 py-2 font-bold disabled:opacity-50">Buscar CNES</button></div>}
+  {!cnes&&<CnesSearch api={api} onSelect={result=>{setCnes(result.code);setCnesQuery(result.code);setName(result.name);setAddress(result.fullAddress);setLegacy('');setMessage('Confira a unidade antes de salvar.')}}/>}
  </div>
  <label className="block text-xs font-bold text-mute">Nome do local<input readOnly={!!cnes} value={name} maxLength={150} onChange={e=>setName(e.target.value)} className={field}/></label>
  {legacy&&<p className="rounded-lg bg-white p-2 text-xs text-mute">Endereço anterior: {legacy}. Ele será mantido enquanto você não preencher os campos abaixo.</p>}

@@ -107,6 +107,7 @@ jobs:
           node scripts/fhir-contract-smoke.mjs
           node scripts/integrations-smoke.mjs
           node scripts/reference-directory-smoke.mjs
+          node scripts/guided-references-smoke.mjs
 
 
 

@@ -1,3 +1,4 @@
+import {knownCity,normalized,ReferenceError} from './guided-references.js';
 import type { Prisma } from '@prisma/client';
 
 export class CnesError extends Error {
@@ -47,4 +48,24 @@ export async function linkCnes(tx: Prisma.TransactionClient, record: Awaited<Ret
     select:{organizationId:true},
   });
   return identifier.organizationId;
+}
+
+export async function searchCnesUnits(municipality:unknown,query:unknown,offset:unknown,transport=fetch){
+  const city=knownCity(municipality);
+  if(typeof query!=='string'||normalized(query).length<3||query.length>100||typeof offset!=='number'||!Number.isInteger(offset)||offset<0||offset>20000||offset%20!==0)throw new ReferenceError(400,'Digite ao menos três caracteres do nome e confira a página.');
+  const term=normalized(query);
+  const params=new URLSearchParams({codigo_municipio:city.code.slice(0,6),status:'1',limit:'20',offset:String(offset)});
+  try{
+    const response=await transport('https://apidadosabertos.saude.gov.br/cnes/estabelecimentos?'+params,{signal:AbortSignal.timeout(12000),redirect:'error'});
+    if(!response.ok)throw unavailable();
+    const {estabelecimentos}=await response.json();
+    if(!Array.isArray(estabelecimentos)||estabelecimentos.length>20)throw unavailable();
+    const items=estabelecimentos.flatMap(row=>{
+      const code=String(row?.codigo_cnes??'').padStart(7,'0');
+      const name=typeof row?.nome_fantasia==='string'?row.nome_fantasia.trim():typeof row?.nome_razao_social==='string'?row.nome_razao_social.trim():'';
+      if(!/^\d{7}$/.test(code)||code==='0000000'||String(row?.codigo_municipio??'').slice(0,6)!==city.code.slice(0,6)||!normalized(name).includes(term))return [];
+      return [{code,name:name.slice(0,150),street:typeof row.endereco_estabelecimento==='string'?row.endereco_estabelecimento.slice(0,180):''}];
+    });
+    return {items,nextOffset:estabelecimentos.length===20&&offset<20000?offset+20:null};
+  }catch{throw unavailable();}
 }

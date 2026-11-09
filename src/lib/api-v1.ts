@@ -38,9 +38,9 @@ export interface V1User { userNumber?: number; id: string; name: string; email: 
 export interface RegisterResponse extends V1User, LoginStartResponse { requiresMfaLogin: true; requiresEmailConfirmation:true; emailSent:boolean; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
 export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; isTutor?:boolean;hasTutor?:boolean; }
-export interface ProfessionalRegistrationV1 { id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
+export interface ProfessionalRegistrationV1 { rqe?:string|null; rqeSpecialty?:string|null; rqeVerifiedAt?:string|null; id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
 export interface ProfessionalProfileV1 { id: string; name: string; profession: string; specialty?: string | null; verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended' | string; verifiedAt?: string | null; active: boolean; registrations: ProfessionalRegistrationV1[]; }
-export interface UpsertProfessionalProfileInput { profession: string; specialty?: string; council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS'; registration: string; region?: string; }
+export interface UpsertProfessionalProfileInput { rqe?:string; profession: string; specialty?: string; council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS'; registration: string; region?: string; }
 
 export interface PatientLookupV1 { patientId: string; name: string; }
 export interface ProfessionalAccessRequestV1 {
@@ -158,7 +158,7 @@ export interface MedicationAgendaV1 {
 export interface AdminProfessionalV1 {
   id: string; name: string; email: string; profession: string; specialty: string | null;
   verificationStatus: string; active: boolean; updatedAt: string;
-  registrations: Array<{ id: string; council: string; registration: string; region: string | null; status: string }>;
+  registrations: Array<{ id: string; council: string; registration: string; region: string | null; status: string; rqe?:string|null; rqeSpecialty?:string|null; rqeVerifiedAt?:string|null }>;
   documents: VerificationDocumentV1[];
   history: Array<{ id: string; decision: string; status: string; actorName: string; note: string; evidence: string | null; createdAt: string }>;
 }
@@ -194,6 +194,9 @@ export class MyDoctorV1Api {
   savePersonDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/people/'+encodeURIComponent(id)+'/document',kind,file)}
   uploadTutorDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/tutorship/requests/'+encodeURIComponent(id)+'/documents',kind,file)}
   async openPersonFile(id:string,admin=false,person=false){const path=person?'/people/'+encodeURIComponent(id)+'/document/download':(admin?'/admin':'')+'/tutorship/documents/'+encodeURIComponent(id);return openPrivateDocument(this.url(path),this.token)}
+  searchCities(uf:string,query:string,signal?:AbortSignal){return this.req<Array<{code:string;name:string;uf:string}>>('/directory/cities?'+new URLSearchParams({uf,q:query}),{signal});}
+  searchCnesUnits(city:string,query:string,offset:number,signal?:AbortSignal){return this.req<{items:Array<{code:string;name:string;street:string}>;nextOffset:number|null}>('/directory/cnes/search',{method:'POST',body:JSON.stringify({city,query,offset}),signal});}
+  searchAns(query:string,operator?:string,signal?:AbortSignal){return this.req<{edition:string;items:Array<{code:string;name:string;legalName?:string;uf?:string}>}>('/directory/ans/search',{method:'POST',body:JSON.stringify({query,operator}),signal});}
   lookupCnes(code:string,signal?:AbortSignal) { return this.req<CnesLocationV1>('/directory/cnes/'+encodeURIComponent(code),{signal}); }
   searchMedicationCatalog(query:string,signal?:AbortSignal) { return this.req<{importedOn:string;items:MedicationCatalogItemV1[]}>('/directory/medications/search',{method:'POST',body:JSON.stringify({query}),signal}); }
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
@@ -220,7 +223,7 @@ export class MyDoctorV1Api {
 
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
   listAdminProfessionals() { return this.req<AdminProfessionalV1[]>('/admin/professionals'); }
-  decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; expectedUpdatedAt: string }) {
+  decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; checkedRqe?:boolean; expectedUpdatedAt: string }) {
     return this.req<{ status: string }>(`/admin/professionals/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify(input) });
   }
   setToken(token: string) { this.token = token; publishV1SessionToken(token); }

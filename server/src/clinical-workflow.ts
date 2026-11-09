@@ -1,4 +1,5 @@
-import {CnesError,linkCnes,lookupCnes} from './cnes-directory.js';
+import {ReferenceError,searchCities} from './guided-references.js';
+import {CnesError,linkCnes,lookupCnes,searchCnesUnits} from './cnes-directory.js';
 import {staffContext,assertStaff,staffAudit} from './professional-staff.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -59,6 +60,15 @@ router.get('/professional/locations', auth, staffContext, async (req: AuthedRequ
   const locations=await directory(prisma,req.userId!);
   const results=await Promise.all(locations.map(async place=>({...place,hasAssociations:await locationAssociated(prisma,place.id)})));
   return res.json(req.query.includeInactive==='1'?results:results.filter(place=>place.active));
+});
+router.get('/directory/cities',auth,(req,res)=>{
+  try{return res.json(searchCities(req.query.uf,req.query.q));}
+  catch(e){return fail(res,e instanceof ReferenceError?e.status:503,e instanceof ReferenceError?e.message:'Consulta indisponível.');}
+});
+router.post('/directory/cnes/search',auth,async(req:AuthedRequest,res)=>{
+  if(!await verifiedPractitioner(req.userId!))return fail(res,403,'Perfil profissional não está habilitado.');
+  try{return res.json(await searchCnesUnits(req.body?.city,req.body?.query,req.body?.offset??0));}
+  catch(e){return fail(res,e instanceof CnesError||e instanceof ReferenceError?e.status:503,e instanceof Error?e.message:'Consulta indisponível.');}
 });
 router.get('/directory/cnes/:code', auth, async (req: AuthedRequest, res: Response) => {
   if (!await verifiedPractitioner(req.userId!)) return fail(res,403,'Perfil profissional não está habilitado.');

@@ -59,7 +59,7 @@ try {
   await db.accessGrant.delete({where:{id:guardianGrant.id}});
   await db.identificationLog.deleteMany({where:{id:{in:[usage.body.id,denied.body.id,targetLog.id]}}});
 
-  const profileData = { profession: 'Médico teste', council: 'CRM', registration: String(Date.now()), region: 'SP', specialty: 'Teste', verificationStatus: 'verified' };
+  const profileData = { profession: 'Médico teste', council: 'CRM', registration: String(Date.now()), region: 'SP', specialty: 'Teste', rqe: '54321', verificationStatus: 'verified' };
   const requested = await call('/professional/profile', professional.token, profileData, 'PUT');
   assert.equal(requested.body.verificationStatus, 'pending', 'autoverificação indevida');
   professionals.push(requested.body.id);
@@ -69,13 +69,14 @@ try {
   async function reviewRow() { const list = await call('/admin/professionals', admin.token); assert.equal(list.status, 200); return list.body.find(row => row.id === requested.body.id); }
   let row = await reviewRow();
   const path = '/admin/professionals/' + row.id + '/decision';
-  const input = { decision: 'approve', note: 'Conferência de teste sem dados reais', evidence: 'Fonte oficial simulada e identidade conferida em teste', checkedIdentityAndCouncil: true, registrationId: row.registrations[0].id, expectedUpdatedAt: row.updatedAt };
+  const input = { decision: 'approve', note: 'Conferência de teste sem dados reais', evidence: 'Fonte oficial simulada e identidade conferida em teste', checkedIdentityAndCouncil: true, checkedRqe: true, registrationId: row.registrations[0].id, expectedUpdatedAt: row.updatedAt };
   assert.equal((await call(path, professional.token, input)).status, 403);
   assert.equal((await call(path, admin.token, { ...input, checkedIdentityAndCouncil: false })).status, 400);
   assert.equal((await call(path, admin.token, { ...input, expectedUpdatedAt: '2000-01-01T00:00:00Z' })).status, 409);
   const concurrent = await Promise.all([call(path, admin.token, input), call(path, admin.token, input)]);
   assert.equal(concurrent.filter(r => r.status === 200).length, 1);
   assert.equal(concurrent.filter(r => r.status === 409).length, 1);
+  const confirmed=await reviewRow();assert.equal(confirmed.registrations[0].rqe,'54321');assert(confirmed.registrations[0].rqeVerifiedAt);
   assert.equal((await call('/professional/access-requests', professional.token)).status, 200);
   assert.equal((await call('/patients/' + patient.patientId + '/events', professional.token)).status, 403, 'aprovação concedeu acesso ao paciente');
   const lookup='/practitioners/lookup?'+new URLSearchParams({council:'CRM',registration:profileData.registration,region:'SP'});

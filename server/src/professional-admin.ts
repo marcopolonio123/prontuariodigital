@@ -150,7 +150,7 @@ router.get('/admin/professionals', requireAdmin, async (req: AdminRequest, res: 
     res.json(professionals.map(item => ({ id: item.id, name: item.name, email: item.user?.email, profession: item.profession, specialty: item.specialty,
       verificationStatus: item.verificationStatus, active: item.active, updatedAt: item.updatedAt.toISOString(),
       documents: [...item.verificationDocuments, ...(item.user?.identityDocument ? [{ ...item.user.identityDocument, id: 'account:' + item.user.identityDocument.id, kind: 'identity' }] : [])],
-      registrations: item.registrations.map(reg => ({ id: reg.id, council: reg.authority.code, registration: reg.registration, region: reg.region, status: reg.status })),
+      registrations: item.registrations.map(reg => ({ id: reg.id, council: reg.authority.code, registration: reg.registration, region: reg.region, status: reg.status,rqe:reg.rqe,rqeSpecialty:reg.rqeSpecialty,rqeVerifiedAt:reg.rqeVerifiedAt?.toISOString()??null })),
       history: item.verificationDecisions.map(decision => ({ id: decision.id, decision: decision.decision, status: decision.status, actorName: decision.actorName, note: decision.note, evidence: decision.evidence, createdAt: decision.createdAt.toISOString() })) })));
   } catch { res.status(503).json({ error: 'A análise de profissionais está indisponível. Tente novamente.' }); }
 });
@@ -173,18 +173,20 @@ router.post('/admin/professionals/:id/decision', requireAdmin, async (req: Admin
       if (current.updatedAt.toISOString() !== expectedUpdatedAt) throw new Error('STALE');
       const registration = current.registrations.find(reg => reg.id === req.body?.registrationId);
       if (decision === 'approve' && !registration) throw new Error('REGISTRATION');
+      const confirmsRqe=decision==='approve' && req.body?.checkedRqe===true;
+      if(confirmsRqe && (registration?.authority.code!=='CRM'||!registration.rqe||!registration.rqeSpecialty||registration.rqeSpecialty!==current.specialty))throw new Error('RQE');
       const status = decision === 'approve' ? 'verified' : decision === 'reject' ? 'rejected' : 'suspended';
       const now = new Date();
       const updated = await tx.practitioner.updateMany({ where: { id: current.id, updatedAt: current.updatedAt }, data: { verificationStatus: status, active: decision === 'approve', verifiedAt: decision === 'approve' ? now : null } });
       if (!updated.count) throw new Error('STALE');
-      await tx.professionalRegistration.updateMany({ where: { practitionerId: current.id }, data: { status: decision === 'suspend' ? 'suspended' : 'unknown', verifiedAt: null } });
-      if (decision === 'approve') await tx.professionalRegistration.update({ where: { id: registration!.id }, data: { status: 'active', verifiedAt: now, verificationSource: 'mydoctor_admin_manual' } });
+      await tx.professionalRegistration.updateMany({ where: { practitionerId: current.id }, data: { status: decision === 'suspend' ? 'suspended' : 'unknown', verifiedAt: null,rqeVerifiedAt:null } });
+      if (decision === 'approve') await tx.professionalRegistration.update({ where: { id: registration!.id }, data: { status: 'active', verifiedAt: now, verificationSource: 'mydoctor_admin_manual',rqeVerifiedAt:confirmsRqe?now:null } });
       // Revalidações exigem uma nova autorização do paciente; não reativar grants antigos.
       await tx.accessGrant.updateMany({ where: { practitionerId: current.id, revokedAt: null }, data: { revokedAt: now } });
       await tx.accessRequest.updateMany({ where: { practitionerId: current.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
       await tx.professionalVerificationDecision.create({ data: { practitionerId: current.id, actorUserId: req.actor!.id, actorName: req.actor!.name,
         decision, previousStatus: current.verificationStatus, status, note, evidence: evidence || null,
-        registrationSnapshot: current.registrations.map(reg => ({ council: reg.authority.code, registration: reg.registration, region: reg.region, selected: reg.id === registration?.id })) } });
+        registrationSnapshot: current.registrations.map(reg => ({ council: reg.authority.code, registration: reg.registration, region: reg.region, selected: reg.id === registration?.id,rqe:reg.rqe,rqeSpecialty:reg.rqeSpecialty,rqeConfirmed:confirmsRqe&&reg.id===registration?.id })) } });
       return { status };
     });
     res.json(result);
@@ -193,6 +195,7 @@ router.post('/admin/professionals/:id/decision', requireAdmin, async (req: Admin
     if (code === 'NOT_FOUND') return res.status(404).json({ error: 'Profissional não encontrado.' });
     if (code === 'SELF_REVIEW') return res.status(403).json({ error: 'Você não pode validar seu próprio perfil profissional.' });
     if (code === 'STALE') return res.status(409).json({ error: 'O cadastro mudou. Atualize a lista e revise os dados novamente.' });
+    if (code === 'RQE') return res.status(400).json({error:'Confira o RQE da especialidade informada no registro CRM selecionado.'});
     if (code === 'REGISTRATION') return res.status(400).json({ error: 'Selecione o registro profissional conferido.' });
     res.status(503).json({ error: 'Não foi possível registrar a decisão. Nenhuma aprovação foi confirmada.' });
   }

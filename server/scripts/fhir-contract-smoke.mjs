@@ -6,6 +6,13 @@ const base=(resourceType,id)=>({resourceType,id,subject,identifier:[{system:'htt
 const observation={...base('Observation','glucose'),status:'final',code:{coding:[{system:'http://loinc.org',code:'2345-7',display:'Glicose'}]},valueQuantity:{value:95,unit:'mg/dL',system:'http://unitsofmeasure.org',code:'mg/dL'},referenceRange:[{low:{value:70,unit:'mg/dL'},high:{value:99,unit:'mg/dL'}}]};
 const report={...base('DiagnosticReport','result'),status:'final',category:[{coding:[{system:'http://terminology.hl7.org/CodeSystem/v2-0074',code:'LAB'}]}],code:{text:'Glicemia'},effectiveDateTime:'2026-11-04T10:00:00-03:00',result:[{reference:'Observation/glucose'}]};
 const lab=b([report,observation]);assert.match(parseClinicalBundle(lab,'consent-123').summary.payload.exams,/95 mg\/dL.*70–99/);
+const service={...base('ServiceRequest','order'),status:'completed',intent:'order',code:{coding:[{system:'https://lab.example/procedures',code:'ORDER-1',display:'Glicemia solicitada'}]}};
+const structured=parseClinicalBundle(b([{...report,basedOn:[{reference:'ServiceRequest/order'}]},observation,service]),'consent-123').summary.payload.examDetails;
+assert.equal(structured.orderedProcedures[0].codes[0].code,'ORDER-1');
+assert.equal(structured.results[0].codes[0].code,'2345-7');
+assert.equal(structured.results[0].unitCode,'mg/dL');
+assert.equal(structured.results[0].referenceRange,'70–99 mg/dL');
+assert.throws(()=>parseClinicalBundle(b([{...report,basedOn:[{reference:'ServiceRequest/order'}]},observation,{...service,subject:{reference:'Patient/other'}}]),'consent-123'),IntegrationError);
 assert.equal(parseClinicalBundle(lab,'consent-123').summary.occurredAt,'2026-11-04T13:00:00.000Z');
 const reordered={type:'collection',entry:lab.entry,resourceType:'Bundle'};assert.equal(parseClinicalBundle(lab,'consent-123').digest,parseClinicalBundle(reordered,'consent-123').digest);
 const prescription=b([{...base('MedicationRequest','rx'),status:'active',intent:'order',authoredOn:'2026-11-04T10:00:00Z',medicationCodeableConcept:{text:'Medicamento de exemplo'},dosageInstruction:[{text:'Conforme prescrição da origem'}]}]);assert.equal(parseClinicalBundle(prescription,'consent-123').category,'prescription');
