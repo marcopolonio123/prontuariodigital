@@ -39,3 +39,13 @@ export function verifiedMedication(registration:unknown) {
   if(!item)throw new CatalogError(422,'O registro não está nesta edição do catálogo. Selecione novamente ou informe o medicamento manualmente.');
   return {name:item.name,medicationRegistration:item.registration};
 }
+
+/** Admin consultation of the packaged edition. This never mutates source data. */
+export function listMedicationReferences(query:string,skip:number,take:number) {
+  const {items,importedOn}=load();
+  const words=normalize(query).split(' ');
+  const matches=[...items.values()].filter(item=>words.every(word=>item.search.includes(word)||item.registration.includes(word)));
+  return {total:matches.length,items:matches.slice(skip,skip+take).map(item=>({
+    id:item.registration,name:item.name,code:item.registration,description:item.ingredient,source:'Anvisa',edition:importedOn,
+  }))};
+}

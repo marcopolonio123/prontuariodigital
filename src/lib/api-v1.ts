@@ -155,6 +155,15 @@ export interface MedicationAgendaV1 {
   recipients: Array<{ id: string; name: string; emailMasked: string; owner: boolean }>;
 }
 
+export type AdminCatalogKind = 'insurers'|'medications'|'professionals'|'facilities';
+export interface AdminCatalogEntryV1 {
+  id:string;name:string;internalCode:string|null;description:string;active:boolean;version:number;updatedAt:string;
+  history?:Array<{action:string;version:number;createdAt:string}>;
+}
+export interface AdminCatalogReferenceV1 {id:string;name:string;code:string;description:string;source:string;edition?:string;profileStatus?:string}
+export interface AdminCatalogPageV1 {items:Array<AdminCatalogEntryV1|AdminCatalogReferenceV1>;total:number;page:number;pageSize:number}
+export type AdminCatalogInput = {name:string;internalCode:string;description:string};
+
 export interface AdminProfessionalV1 {
   id: string; name: string; email: string; profession: string; specialty: string | null;
   verificationStatus: string; active: boolean; updatedAt: string;
@@ -222,6 +231,16 @@ export class MyDoctorV1Api {
   }
 
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
+  listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number},signal?:AbortSignal){
+    return this.req<AdminCatalogPageV1>('/admin/catalogs/'+kind+'?'+new URLSearchParams({...filters,page:String(filters.page)}),{signal});
+  }
+  adminCatalogDetail(kind:AdminCatalogKind,id:string){return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+'/'+encodeURIComponent(id));}
+  saveAdminCatalog(kind:AdminCatalogKind,input:AdminCatalogInput,existing?:AdminCatalogEntryV1){
+    return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+(existing?'/'+encodeURIComponent(existing.id):''),{method:existing?'PUT':'POST',body:JSON.stringify({...input,expectedVersion:existing?.version})});
+  }
+  changeAdminCatalogStatus(kind:AdminCatalogKind,item:AdminCatalogEntryV1){
+    return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+'/'+encodeURIComponent(item.id)+(item.active?'':'/restore'),{method:item.active?'DELETE':'POST',body:JSON.stringify({expectedVersion:item.version})});
+  }
   listAdminProfessionals() { return this.req<AdminProfessionalV1[]>('/admin/professionals'); }
   decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; checkedRqe?:boolean; expectedUpdatedAt: string }) {
     return this.req<{ status: string }>(`/admin/professionals/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify(input) });

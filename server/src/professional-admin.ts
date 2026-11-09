@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import prisma from './db.js';
 import { isUnder18 } from './identity-policy.js';
 
-interface AdminRequest extends Request { actor?: { id: string; name: string }; }
+export interface AdminRequest extends Request { actor?: { id: string; name: string }; }
 const router = Router();
 export async function administrator(req: AdminRequest) {
   const token = (req.headers.authorization ?? '').replace(/^Bearer /, '');
@@ -18,7 +18,7 @@ export async function administrator(req: AdminRequest) {
   const confirmed = user.emailVerifiedAt || user.challenges.some(item => item.destination.toLowerCase() === user.email.toLowerCase());
   return { user, authorized: Boolean(confirmed && admins.includes(user.email.toLowerCase())) };
 }
-async function requireAdmin(req: AdminRequest, res: Response, next: NextFunction) {
+export async function requireAdmin(req: AdminRequest, res: Response, next: NextFunction) {
   try {
     const result = await administrator(req);
     if (!result.authorized) return res.status(403).json({ error: 'Acesso restrito à administração.' });
