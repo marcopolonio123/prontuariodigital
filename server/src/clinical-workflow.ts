@@ -1,3 +1,4 @@
+import {cfmRequired,checkCfmRegistration,RegistryCheckError} from './cfm-registry.js';
 import {staffContext,assertStaff,staffAudit} from './professional-staff.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -33,6 +34,32 @@ async function verifiedPractitioner(userId: string) {
     where: { userId, active: true, verificationStatus: 'verified' },
     include: { registrations: { include: { authority: true } } },
   });
+}
+
+type VerifiedPractitioner = NonNullable<Awaited<ReturnType<typeof verifiedPractitioner>>>;
+async function checkClinicalCouncil(practitioner: VerifiedPractitioner) {
+  if (!cfmRequired() || !practitioner.registrations.some(item => item.authority.code === 'CRM')) return undefined;
+  const registration = practitioner.registrations.find(item => item.status === 'active');
+  if (!registration) throw new RegistryCheckError(403, 'O perfil não tem um registro profissional ativo.');
+  if (registration.authority.code !== 'CRM') return undefined; // other professions retain their existing review
+  return checkCfmRegistration({ ...registration, name: practitioner.name });
+}
+async function lockClinicalProfile(tx: Prisma.TransactionClient, practitioner: VerifiedPractitioner) {
+  const rows = await tx.$queryRaw<{id: string}[]>`SELECT id FROM "Practitioner"
+    WHERE id=${practitioner.id} AND "updatedAt"=${practitioner.updatedAt}
+    AND active=true AND "verificationStatus"='verified' FOR UPDATE`;
+  if (!rows.length) throw new RegistryCheckError(409, 'O perfil profissional mudou. Reabra o atendimento.');
+}
+
+async function lockClinicalAuthorization(tx: Prisma.TransactionClient, practitioner: VerifiedPractitioner, patientId: string, grantId: string) {
+  const patients = await tx.$queryRaw<{id: string}[]>`SELECT id FROM "Patient" WHERE id=${patientId} AND archived=false FOR UPDATE`;
+  if (!patients.length) throw new RegistryCheckError(403, 'O prontuário não está disponível.');
+  await lockClinicalProfile(tx, practitioner);
+  const grants = await tx.$queryRaw<{id: string}[]>`SELECT id FROM "AccessGrant" WHERE id=${grantId}
+    AND "patientId"=${patientId} AND "accountId"=${practitioner.userId} AND "practitionerId"=${practitioner.id}
+    AND permission='read_write_consultation' AND "revokedAt" IS NULL AND "validFrom"<=CURRENT_TIMESTAMP
+    AND ("validUntil" IS NULL OR "validUntil">CURRENT_TIMESTAMP) FOR UPDATE`;
+  if (!grants.length) throw new RegistryCheckError(403, 'A autorização do paciente não está mais ativa.');
 }
 
 // Private professional directory. Stored separately from patient records and identity fields.
@@ -150,6 +177,10 @@ router.get('/professional/patients/:patientId/summary', auth, async (req: Authed
     OR: [{ validUntil: null }, { validUntil: { gt: now } }],
   } });
   if (!grant) return fail(res, 403, 'Não há autorização ativa para este prontuário.');
+  try { await checkClinicalCouncil(practitioner); } catch (error) {
+    if (error instanceof RegistryCheckError) return fail(res, error.status, error.message);
+    throw error;
+  }
   await purgeExpiredDiary(req.params.patientId);
   const [patient, events, schedules] = await Promise.all([
     prisma.patient.findUnique({ where: { id: req.params.patientId }, select: { data: true } }),
@@ -168,6 +199,8 @@ router.get('/professional/patients/:patientId/summary', auth, async (req: Authed
   // Recheck just before responding so a reduction/revocation is not overwritten by a stale UI.
   const current = await currentClinicalGrant(req.userId!, practitioner.id, req.params.patientId);
   if (!current) return fail(res, 403, 'A autorização não está mais ativa.');
+  const profile = await verifiedPractitioner(req.userId!);
+  if (!profile || profile.updatedAt.getTime() !== practitioner.updatedAt.getTime()) return fail(res, 409, 'O perfil profissional mudou. Reabra o atendimento.');
   const sections = grantedSections(current.scope);
   const record = scopedRecord(data, current.scope);
   res.setHeader('Cache-Control', 'no-store');
@@ -208,7 +241,10 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
   let followUp;try{followUp=normalizeFollowUp(body.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}
   const registration = practitioner.registrations.find((item) => item.status === 'active') ?? practitioner.registrations[0];
   let event;
-  try { event = await prisma.$transaction(async tx => {
+  try {
+    const councilCheck = await checkClinicalCouncil(practitioner);
+    event = await prisma.$transaction(async tx => {
+    await lockClinicalAuthorization(tx, practitioner, accessRequest.patientId, accessRequest.grant.id);
     const place=await encounterLocation(tx,req.userId!,body);
     return tx.healthEvent.create({
     data: {
@@ -244,12 +280,13 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
       provenance: {
         source: 'mydoctor_professional',
         workflow: 'patient_confirmation_required',
+        ...(councilCheck ? { councilCheck } : {}),
         practitionerUserId: req.userId!,
         createdAt: new Date().toISOString(),
       },
     },
     });
-  }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'Selecione um local ativo do seu cadastro ou informe Outros.'); throw error; }
+  }); } catch(error) { if(error instanceof RegistryCheckError)return fail(res,error.status,error.message); if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'Selecione um local ativo do seu cadastro ou informe Outros.'); throw error; }
   return res.status(201).json(event);
 });
 
@@ -300,10 +337,15 @@ router.put('/professional/consultations/:id', auth, async (req: AuthedRequest, r
   const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
   let followUp;try{followUp=normalizeFollowUp(body.followUp??payload.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}
   let updated;
-  try { updated=await prisma.$transaction(async tx=>{
+  try {
+    const grant = await currentClinicalGrant(req.userId!, practitioner.id, event.patientId);
+    if (!grant) return fail(res, 403, 'É necessária uma autorização ativa do paciente para editar o atendimento.');
+    await checkClinicalCouncil(practitioner);
+    updated=await prisma.$transaction(async tx=>{
+    await lockClinicalAuthorization(tx, practitioner, event.patientId, grant.id);
     const place=await encounterLocation(tx,req.userId!,{...body,homeVisit:body.homeVisit??payload.homeVisit,onlineVisit:body.onlineVisit??payload.onlineVisit},event.locationId);
     return tx.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, locationId:place?.id??null, organizationNameSnapshot: body.onlineVisit === true ? null : place?.name ?? (String(body.organizationName ?? '').trim() || null), payload: { ...payload, followUp, onlineVisit: body.onlineVisit === undefined ? payload.onlineVisit === true : body.onlineVisit === true, homeVisit: body.onlineVisit === true ? false : body.homeVisit === undefined ? payload.homeVisit === true : body.homeVisit === true, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
-  }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'Selecione um local ativo do seu cadastro ou informe Outros.');throw error; }
+  }); } catch(error) { if(error instanceof RegistryCheckError)return fail(res,error.status,error.message); if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'Selecione um local ativo do seu cadastro ou informe Outros.');throw error; }
   if (!updated.count) return fail(res, 409, 'O atendimento foi atualizado ou aprovado enquanto você editava. Reabra para consultar a versão atual.');
   return res.json(await prisma.healthEvent.findUnique({ where: { id: event.id } }));
 });
@@ -318,7 +360,17 @@ router.post('/professional/consultations/:id/submit', auth, async (req: AuthedRe
   if (event.status === 'pending_patient_confirmation') return res.json({ id: event.id, status: event.status });
   const expected = new Date(req.body?.expectedUpdatedAt ?? event.updatedAt);
   if (Number.isNaN(expected.getTime())) return fail(res, 400, 'Versão do atendimento inválida.');
-  const updated = await prisma.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: ['draft', 'rejected_by_patient'] }, updatedAt: expected }, data: { status: 'pending_patient_confirmation', accessGrantId: grant.id } });
+  let updated;
+  try {
+    await checkClinicalCouncil(practitioner);
+    updated = await prisma.$transaction(async tx => {
+      await lockClinicalAuthorization(tx, practitioner, event.patientId, grant.id);
+      return tx.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: ['draft', 'rejected_by_patient'] }, updatedAt: expected }, data: { status: 'pending_patient_confirmation', accessGrantId: grant.id } });
+    });
+  } catch (error) {
+    if (error instanceof RegistryCheckError) return fail(res, error.status, error.message);
+    throw error;
+  }
   if (!updated.count) return fail(res, 409, 'O atendimento foi atualizado. Reabra antes de enviar.');
   return res.json({ id: event.id, status: 'pending_patient_confirmation' });
 });
