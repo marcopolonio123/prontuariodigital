@@ -1,9 +1,11 @@
+import {cfmRequired,checkCfmRegistration,RegistryCheckError} from './cfm-registry.js';
 import {StorageError} from './storage-quota.js';
 import {withStoredFile,retireStoredFile,serveDocument} from './document-storage.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
+import { Prisma } from '@prisma/client';
 import { isUnder18 } from './identity-policy.js';
 
 interface AdminRequest extends Request { actor?: { id: string; name: string }; }
@@ -166,6 +168,18 @@ router.post('/admin/professionals/:id/decision', requireAdmin, async (req: Admin
     return res.status(400).json({ error: 'Confira a identidade e o conselho e registre a fonte da conferência antes de aprovar.' });
   }
   try {
+    let councilCheck: Awaited<ReturnType<typeof checkCfmRegistration>> | undefined;
+    if (decision === 'approve' && cfmRequired()) {
+      const candidate = await prisma.practitioner.findUnique({
+        where: { id: req.params.id }, include: { registrations: { include: { authority: true } } },
+      });
+      if (!candidate) throw new Error('NOT_FOUND');
+      if (candidate.userId === req.actor!.id) throw new Error('SELF_REVIEW');
+      if (candidate.updatedAt.toISOString() !== expectedUpdatedAt) throw new Error('STALE');
+      const selected = candidate.registrations.find(reg => reg.id === req.body?.registrationId);
+      if (!selected) throw new Error('REGISTRATION');
+      if (selected.authority.code === 'CRM') councilCheck = await checkCfmRegistration({ ...selected, name: candidate.name });
+    }
     const result = await prisma.$transaction(async tx => {
       const current = await tx.practitioner.findUnique({ where: { id: req.params.id }, include: { registrations: { include: { authority: true } } } });
       if (!current) throw new Error('NOT_FOUND');
@@ -178,18 +192,19 @@ router.post('/admin/professionals/:id/decision', requireAdmin, async (req: Admin
       const updated = await tx.practitioner.updateMany({ where: { id: current.id, updatedAt: current.updatedAt }, data: { verificationStatus: status, active: decision === 'approve', verifiedAt: decision === 'approve' ? now : null } });
       if (!updated.count) throw new Error('STALE');
       await tx.professionalRegistration.updateMany({ where: { practitionerId: current.id }, data: { status: decision === 'suspend' ? 'suspended' : 'unknown', verifiedAt: null } });
-      if (decision === 'approve') await tx.professionalRegistration.update({ where: { id: registration!.id }, data: { status: 'active', verifiedAt: now, verificationSource: 'mydoctor_admin_manual' } });
+      if (decision === 'approve') await tx.professionalRegistration.update({ where: { id: registration!.id }, data: { status: 'active', verifiedAt: now, verificationSource: councilCheck ? 'mydoctor_admin_cfm' : 'mydoctor_admin_manual', verificationPayload: councilCheck ?? Prisma.DbNull } });
       // Revalidações exigem uma nova autorização do paciente; não reativar grants antigos.
       await tx.accessGrant.updateMany({ where: { practitionerId: current.id, revokedAt: null }, data: { revokedAt: now } });
       await tx.accessRequest.updateMany({ where: { practitionerId: current.id, status: { in: ['pending', 'approved'] } }, data: { status: 'revoked' } });
       await tx.professionalVerificationDecision.create({ data: { practitionerId: current.id, actorUserId: req.actor!.id, actorName: req.actor!.name,
         decision, previousStatus: current.verificationStatus, status, note, evidence: evidence || null,
-        registrationSnapshot: current.registrations.map(reg => ({ council: reg.authority.code, registration: reg.registration, region: reg.region, selected: reg.id === registration?.id })) } });
+        registrationSnapshot: current.registrations.map(reg => ({ council: reg.authority.code, registration: reg.registration, region: reg.region, selected: reg.id === registration?.id, ...(reg.id === registration?.id && councilCheck ? { councilCheck } : {}) })) } });
       return { status };
     });
     res.json(result);
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
+    if (error instanceof RegistryCheckError) return res.status(error.status).json({ error: error.message });
     if (code === 'NOT_FOUND') return res.status(404).json({ error: 'Profissional não encontrado.' });
     if (code === 'SELF_REVIEW') return res.status(403).json({ error: 'Você não pode validar seu próprio perfil profissional.' });
     if (code === 'STALE') return res.status(409).json({ error: 'O cadastro mudou. Atualize a lista e revise os dados novamente.' });

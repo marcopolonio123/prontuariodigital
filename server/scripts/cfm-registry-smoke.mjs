@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {checkCfmRegistration,cfmRequired} from '../dist/cfm-registry.js';
+
+const input = {registration:'52-000123',region:'RJ',name:'João Exemplo'};
+const valid = '<crm>123</crm><uf>RJ</uf><nome>JOAO   EXEMPLO</nome><situacao>A</situacao><tipoInscricao>P</tipoInscricao>';
+const wrap = body => '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><c:ConsultarResponse xmlns:c="http://servico.cfm.org.br/"><dadosMedico>'+body+'</dadosMedico></c:ConsultarResponse></s:Body></s:Envelope>';
+delete process.env.CFM_WS_KEY;
+delete process.env.CFM_VALIDATION_REQUIRED;
+assert.equal(cfmRequired(),false);
+process.env.CFM_VALIDATION_REQUIRED='true';
+assert.equal(cfmRequired(),true);
+await assert.rejects(checkCfmRegistration(input,()=>assert.fail('Must not call without key')), e=>e.status===503);
+process.env.CFM_WS_KEY='test<&>1';
+const record = await checkCfmRegistration(input, async body => {
+  assert.match(body, /<crm>123<\/crm><uf>RJ<\/uf>/);
+  assert.match(body, /test&lt;&amp;&gt;1/);
+  assert.doesNotMatch(body, /João|cpf|nascimento/);
+  return wrap(valid);
+});
+assert.equal(record.crm,'123');
+assert.equal(record.status,'A');
+assert.equal(record.source,'cfm_ws_consultar');
+const rejects = async (xml, status) => assert.rejects(checkCfmRegistration(input,async()=>xml),e=>e.status===status);
+await rejects(wrap(valid.replace('>A<','>S<')),403);
+await rejects(wrap(valid.replace('>P<','>E<')),403);
+await rejects(wrap(valid.replace('EXEMPLO','OUTRO')),403);
+await rejects(wrap(valid.replace('>RJ<','>SP<')),503);
+await rejects(wrap('<codigoErro>8101</codigoErro>'),403);
+await rejects(wrap('<codigoErro>3010</codigoErro>'),503);
+await rejects(wrap(valid+'<situacao>A</situacao>'),503);
+await rejects(wrap(valid.replace('<situacao>A</situacao>','')),503);
+await rejects('<!DOCTYPE x [<!ENTITY x SYSTEM "file:///etc/passwd">]>'+wrap(valid),503);
+await rejects(wrap(valid).replace('http://servico.cfm.org.br/','https://invalid.example'),503);
+await rejects(wrap(valid+' '.repeat(65536)),503);
+await assert.rejects(checkCfmRegistration(input,async()=>{throw new Error('Network down')}),e=>e.status===503);
+console.log('CFM: opt-in, required mode, SOAP contract, identity comparison, registration status and unavailable/error handling OK.');
