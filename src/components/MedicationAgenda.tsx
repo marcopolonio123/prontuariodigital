@@ -1,7 +1,7 @@
 import QueryList,{QueryFilters} from './QueryList';
 
 import { useEffect, useRef, useState } from 'react';
-import type { MedicationAgendaV1, MedicationScheduleInput, MedicationScheduleV1, MyDoctorV1Api, PatientProfile } from '../lib/api-v1';
+import type { MedicationAgendaV1, MedicationCatalogItemV1, MedicationScheduleInput, MedicationScheduleV1, MyDoctorV1Api, PatientProfile } from '../lib/api-v1';
 
 const days: Array<[number, string]> = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']];
 const inputClass = 'mt-1 block w-full min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-moss-500 focus:ring-2 focus:ring-moss-100';
@@ -14,6 +14,29 @@ function blank(): MedicationScheduleInput {
   const now = new Date();
   const date = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   return { name: '', dose: '', continuousUse: false, weekdays: [0, 1, 2, 3, 4, 5, 6], times: ['08:00'], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo', startsOn: date, endsOn: null, recipientIds: [], alertsEnabled: false };
+}
+function CatalogField({api,name,registration,onSelect,disabled}:{api:MyDoctorV1Api;name:string;registration?:string|null;onSelect:(name:string,registration:string|null)=>void;disabled:boolean}) {
+  const [items,setItems]=useState<MedicationCatalogItemV1[]>([]),[status,setStatus]=useState(''),[pending,setPending]=useState(false);
+  const request=useRef<AbortController>();
+  useEffect(()=>()=>request.current?.abort(),[]);
+  const search=async()=>{
+    request.current?.abort();const controller=new AbortController();request.current=controller;
+    setPending(true);setStatus('');setItems([]);
+    try {
+      const result=await api.searchMedicationCatalog(name.trim(),controller.signal);
+      if(controller.signal.aborted)return;
+      setItems(result.items);
+      setStatus(result.items.length?'Catálogo Anvisa · importado em '+result.importedOn.split('-').reverse().join('/')+'. Confira a embalagem.':'Nenhum resultado. Você pode manter o nome informado manualmente.');
+    }catch(error){if(!controller.signal.aborted)setStatus(error instanceof Error?error.message:'Catálogo indisponível.');}
+    finally{if(!controller.signal.aborted)setPending(false);}
+  };
+  return <div className="min-w-0 space-y-2">
+    <label className="text-xs font-bold text-mute">Medicamento<input value={name} maxLength={150} onChange={e=>{request.current?.abort();setPending(false);setItems([]);setStatus('');onSelect(e.target.value,null)}} className={inputClass}/></label>
+    <button type="button" className={secondaryClass} disabled={disabled||pending||name.trim().length<3||name.trim().length>80} onClick={()=>void search()}>{pending?'Buscando…':'Buscar no catálogo Anvisa'}</button>
+    {registration&&<p className="text-xs text-mute">Registro Anvisa: {registration}. A dose continua sendo informada conforme a prescrição.</p>}
+    {status&&<p role="status" className="text-xs text-mute">{status}</p>}
+    {items.length>0&&<ul className="max-h-56 space-y-1 overflow-auto rounded-lg border border-line bg-white p-2">{items.map(item=><li key={item.registration}><button type="button" disabled={disabled} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-paper" onClick={()=>{onSelect(item.name,item.registration);setItems([]);setStatus('')}}><strong>{item.name}</strong><span className="block text-xs text-mute">{item.ingredient||'Princípio ativo não informado'} · {item.registration}</span></button></li>)}</ul>}
+  </div>;
 }
 export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api; profile: PatientProfile }) {
   const [agenda, setAgenda] = useState<MedicationAgendaV1 | null>(null);
@@ -124,7 +147,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
       ]} renderDetails={schedule=><div className="space-y-3"><h4 className="font-bold text-ink">{schedule.name}</h4><p>Dose: {schedule.dose||'Dose não informada'}</p><p>Dias: {schedule.weekdays.length===7?'Todos os dias':days.filter(([day])=>schedule.weekdays.includes(day)).map(([,label])=>label).join(', ')}</p><p>Horários: {schedule.times.join(', ')} · {schedule.timezone.replace('America/','').replace(/_/g,' ')}</p><p>{schedule.continuousUse?'Uso contínuo':schedule.startsOn.split('-').reverse().join('/')+(schedule.endsOn?' até '+schedule.endsOn.split('-').reverse().join('/'):' · Sem término')}</p><p>Alertas: {schedule.alertsEnabled&&agenda.alertsEnabled?'Configurados':'Desativados'}</p><p>Destinatários: {schedule.recipientIds.map(id=>agenda.recipients.find(person=>person.id===id)?.name??'Conta sem acesso vigente').join(', ')||'Sem destinatários'}</p>
       {agenda.registeredMedications?.some(medicine=>normalized(medicine.name)===normalized(schedule.name)&&normalized(medicine.dose)!==normalized(schedule.dose))&&<p className="text-warn-600">Dose diferente do prontuário. Confira a prescrição.</p>}
       {agenda.canEdit ? <div className="flex items-center gap-1 whitespace-nowrap">
-                <button className="inline-flex min-h-11 items-center rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-moss-800 hover:bg-moss-50 disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Editar ${schedule.name}`} onClick={() => { setEditing(schedule); setForm({ name: schedule.name, dose: schedule.dose, continuousUse: schedule.continuousUse === true, weekdays: schedule.weekdays, times: schedule.times, timezone: schedule.timezone, startsOn: schedule.startsOn, endsOn: schedule.endsOn, recipientIds: schedule.recipientIds, alertsEnabled: schedule.alertsEnabled }); }}>Editar</button>
+                <button className="inline-flex min-h-11 items-center rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-moss-800 hover:bg-moss-50 disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Editar ${schedule.name}`} onClick={() => { setEditing(schedule); setForm({ name: schedule.name, medicationRegistration:schedule.medicationRegistration, dose: schedule.dose, continuousUse: schedule.continuousUse === true, weekdays: schedule.weekdays, times: schedule.times, timezone: schedule.timezone, startsOn: schedule.startsOn, endsOn: schedule.endsOn, recipientIds: schedule.recipientIds, alertsEnabled: schedule.alertsEnabled }); }}>Editar</button>
                 <button className="inline-flex min-h-11 items-center rounded-md px-2 py-1.5 text-xs font-semibold text-mute hover:bg-paper disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Remover ${schedule.name}`} onClick={() => void run(async () => { if (!window.confirm(`Remover ${schedule.name} da agenda e interromper seus alertas?`)) return; await api.removeMedicationSchedule(profile.id, schedule.id); await refresh(); if (editing?.id === schedule.id) { setEditing(null); setForm(null); } setFeedback('Medicamento removido da agenda.'); })}>Remover</button>
               </div> : <span className="text-xs text-mute">Consulta</span>}
       </div>}/>
@@ -134,7 +157,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
       <h3 className="font-display text-lg font-bold">{editing ? 'Editar medicamento' : 'Novo medicamento'}</h3>
       <div className="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-2">
         
-        <label className="text-xs font-bold text-mute">Medicamento<input value={form.name} maxLength={150} onChange={e => setForm({ ...form, name: e.target.value })} className={inputClass} /></label>
+        <CatalogField key={profile.id+':'+(editing?.id??'new')} api={api} name={form.name} registration={form.medicationRegistration} disabled={busy} onSelect={(name,medicationRegistration)=>setForm({...form,name,medicationRegistration})}/>
         <label className="text-xs font-bold text-mute">Dose prescrita (opcional)<input value={form.dose} maxLength={150} onChange={e => setForm({ ...form, dose: e.target.value })} className={inputClass} /></label>
         <fieldset className="sm:col-span-2"><legend className="text-xs font-bold text-mute">Dias da semana</legend><button type="button" className="mt-2 text-xs font-bold text-moss-700 underline" onClick={() => setForm({ ...form, weekdays: [0, 1, 2, 3, 4, 5, 6] })}>Todos os dias</button><div className="mt-2 flex flex-wrap gap-2">{days.map(([day, label]) => <label key={day} className={`flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl border px-3 focus-within:ring-2 focus-within:ring-moss-500 py-2 text-sm font-bold transition-colors ${form.weekdays.includes(day) ? 'border-moss-500 bg-moss-50 text-moss-800' : 'border-line bg-white text-mute'}`}><input className="sr-only" type="checkbox" checked={form.weekdays.includes(day)} onChange={e => setForm({ ...form, weekdays: e.target.checked ? [...form.weekdays, day] : form.weekdays.filter(value => value !== day) })} />{label}</label>)}</div></fieldset>
         <fieldset className="sm:col-span-2"><legend className="text-xs font-bold text-mute">Horários</legend><div className="mt-2 flex flex-wrap gap-2">{form.times.map((time, index) => <div key={index} className="flex items-center gap-1"><input aria-label={`Horário ${index + 1}`} type="time" value={time} className="min-w-0 rounded-lg border border-line bg-paper px-2 py-2 text-sm font-bold text-ink" onChange={e => setForm({ ...form, times: form.times.map((value, i) => i === index ? e.target.value : value) })} /><button type="button" aria-label={`Remover horário ${index + 1}`} disabled={form.times.length === 1} className={secondaryClass} onClick={() => setForm({ ...form, times: form.times.filter((_, i) => i !== index) })}>×</button></div>)}{form.times.length < 12 && <button type="button" className={secondaryClass} onClick={() => setForm({ ...form, times: [...form.times, '12:00'] })}>+ Horário</button>}</div></fieldset>

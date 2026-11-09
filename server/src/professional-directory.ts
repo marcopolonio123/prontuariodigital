@@ -7,8 +7,8 @@ export async function lockDirectory(tx: Db, userId: string) {
   await tx.user.update({where:{id:userId},data:{updatedAt:new Date()},select:{id:true}});
 }
 export async function directory(db: Db, userId: string) {
-  const rows = await db.professionalLocation.findMany({where:{userId},include:{location:true,availability:{orderBy:[{weekday:'asc'},{startMinute:'asc'}]}},orderBy:{createdAt:'asc'}});
-  return rows.map(row => ({id:row.id,name:row.location.name,address:row.location.formattedAddress??'',active:row.active,
+  const rows = await db.professionalLocation.findMany({where:{userId},include:{location:{include:{organization:{select:{identifiers:{where:{system:'CNES'},select:{value:true},take:1}}}}},availability:{orderBy:[{weekday:'asc'},{startMinute:'asc'}]}},orderBy:{createdAt:'asc'}});
+  return rows.map(row => ({id:row.id,name:row.location.name,cnes:row.location.organization?.identifiers[0]?.value??null,organizationId:row.location.organizationId,address:row.location.formattedAddress??'',active:row.active,
     fullAddress:row.location.addressLine1 ? {postalCode:row.location.postalCode??'',street:row.location.addressLine1,number:row.location.number??'',complement:row.location.addressLine2??'',neighborhood:row.location.neighborhood??'',city:row.location.city??'',state:row.location.state??'',country:row.location.country} : null,
     availability:row.availability.map(slot=>({weekday:slot.weekday,start:time(slot.startMinute),end:time(slot.endMinute)}))}));
 }

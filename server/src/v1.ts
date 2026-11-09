@@ -649,7 +649,7 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
       endedAt: body.endedAt ? new Date(body.endedAt) : null,
       timezone: String(body.timezone ?? 'America/Sao_Paulo'),
       practitionerId: body.practitionerId ? String(body.practitionerId) : null,
-      organizationId: body.organizationId ? String(body.organizationId) : null,
+      organizationId: place?.organizationId ?? null,
       locationId: place?.id??null,
       sourceSystemId: body.sourceSystemId ? String(body.sourceSystemId) : null,
       practitionerNameSnapshot: body.practitionerName ? String(body.practitionerName) : null,
@@ -711,6 +711,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
     where: { id: current.id },
     data: {
       locationId:place===undefined?current.locationId:place?.id??null,
+      organizationId:place===undefined?current.organizationId:place?.organizationId??null,
       status: 'amended',
       title: body.title !== undefined ? String(body.title).trim() : current.title,
       type: body.type !== undefined ? String(body.type) : current.type,

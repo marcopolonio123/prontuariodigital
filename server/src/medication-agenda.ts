@@ -1,3 +1,4 @@
+import { CatalogError, searchMedicationCatalog, verifiedMedication } from './medication-catalog.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from './db.js';
@@ -13,6 +14,11 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction) {
     next();
   } catch { res.status(401).json({ error: 'Entre na sua conta para acessar a agenda.' }); }
 }
+router.post('/directory/medications/search', auth, (req: AuthedRequest, res: Response) => {
+  res.setHeader('Cache-Control','no-store');
+  try { return res.json(searchMedicationCatalog(req.body?.query)); }
+  catch (error) { if(error instanceof CatalogError)return res.status(error.status).json({error:error.message});return res.status(503).json({error:'Catálogo indisponível.'}); }
+});
 export function grantAllowsMedication(scope: unknown) {
   return scope == null || (Array.isArray(scope) && (scope.includes('record') || scope.includes('medications')));
 }
@@ -59,19 +65,23 @@ async function save(req: AuthedRequest, res: Response) {
   if (!patient || !managesPatient(patient,req.userId!)) return res.status(403).json({ error: 'Somente o titular/responsável pelo cadastro pode alterar a agenda.' });
   try {
     const input = parseSchedule(req.body);
+    const registration = req.body?.medicationRegistration;
+    const selection = registration == null ? null : verifiedMedication(registration);
+    if(selection && selection.name!==input.name) throw new CatalogError(422,'O nome não corresponde ao registro selecionado. Escolha novamente ou informe manualmente.');
+    const data = {...input,medicationRegistration:selection?.medicationRegistration??null};
     const recipients = await medicationRecipients(patient.id);
     if (input.recipientIds.some(id => !recipients.some(user => user.id === id))) return res.status(400).json({ error: 'Escolha pessoas com acesso vigente a este perfil .' });
     if (req.params.scheduleId) {
       const current = await prisma.medicationSchedule.findFirst({ where: { id: req.params.scheduleId, patientId: patient.id, active: true } });
       if (!current) return res.status(404).json({ error: 'Agenda não encontrada.' });
       if (req.body.expectedUpdatedAt !== current.updatedAt.toISOString()) return res.status(409).json({ error: 'A agenda mudou. Atualize a tela antes de editar.' });
-      const result = await prisma.medicationSchedule.updateMany({ where: { id: current.id, updatedAt: current.updatedAt }, data: input });
+      const result = await prisma.medicationSchedule.updateMany({ where: { id: current.id, updatedAt: current.updatedAt }, data: req.body.medicationRegistration===undefined && input.name===current.name ? input : data });
       if (!result.count) return res.status(409).json({ error: 'A agenda mudou. Atualize a tela.' });
       return res.json(await prisma.medicationSchedule.findUnique({ where: { id: current.id } }));
     }
     if (await prisma.medicationSchedule.count({ where: { patientId: patient.id, active: true } }) >= 50) return res.status(400).json({ error: 'Este perfil atingiu o limite de 50 agendas ativas.' });
-    return res.status(201).json(await prisma.medicationSchedule.create({ data: { ...input, patientId: patient.id } }));
-  } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Dados da agenda inválidos.' }); }
+    return res.status(201).json(await prisma.medicationSchedule.create({ data: { ...data, patientId: patient.id } }));
+  } catch (error) { return res.status(error instanceof CatalogError?error.status:400).json({ error: error instanceof Error ? error.message : 'Dados da agenda inválidos.' }); }
 }
 router.post('/patients/:patientId/medications', auth, save);
 router.put('/patients/:patientId/medications/:scheduleId', auth, save);

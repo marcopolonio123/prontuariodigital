@@ -1,3 +1,4 @@
+import {CnesError,linkCnes,lookupCnes} from './cnes-directory.js';
 import {staffContext,assertStaff,staffAudit} from './professional-staff.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -59,23 +60,34 @@ router.get('/professional/locations', auth, staffContext, async (req: AuthedRequ
   const results=await Promise.all(locations.map(async place=>({...place,hasAssociations:await locationAssociated(prisma,place.id)})));
   return res.json(req.query.includeInactive==='1'?results:results.filter(place=>place.active));
 });
+router.get('/directory/cnes/:code', auth, async (req: AuthedRequest, res: Response) => {
+  if (!await verifiedPractitioner(req.userId!)) return fail(res,403,'Perfil profissional não está habilitado.');
+  try { return res.json(await lookupCnes(req.params.code)); }
+  catch (error) { if(error instanceof CnesError)return fail(res,error.status,error.message);return fail(res,503,'Consulta CNES indisponível.'); }
+});
 async function saveProfessionalLocation(req: AuthedRequest, res: Response, action: 'create' | 'edit' | 'remove') {
   if (!await verifiedPractitioner(req.userId!)) return fail(res, 403, 'Perfil profissional não está habilitado.');
   const body=req.body??{};
-  const name = String(req.body?.name ?? '').trim(), address = String(req.body?.address ?? '').trim();
+  let name = String(req.body?.name ?? '').trim(); const address = String(req.body?.address ?? '').trim();
   if (action !== 'remove' && (name.length < 2 || name.length > 150 || address.length > 300)) return fail(res, 400, 'Informe um nome de 2 a 150 caracteres e endereço de até 300 caracteres.');
   try {
+    if(action!=='remove' && body.cnes!==undefined && body.cnes!==null && typeof body.cnes!=='string')return fail(res,400,'Informe o CNES como texto.');
+    const official=action!=='remove' && body.cnes ? await lookupCnes(body.cnes) : null;
+    if(official)name=official.name;
     const result = await prisma.$transaction(async tx => {
       // Lock the same user row as account edits, preserving identity data during concurrent writes.
       await lockDirectory(tx,req.userId!);
       const items = await directory(tx,req.userId!);
       const id = action === 'create' ? randomUUID() : req.params.id;
       if (action !== 'create' && !items.some(item => item.id === id)) throw new Error('LOCATION_NOT_FOUND');
-      if (action !== 'remove' && items.some(item => item.id !== id && item.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'))) throw new Error('LOCATION_DUPLICATE');
       const current=items.find(item=>item.id===id);
+      const retainOfficial=!!current?.cnes && body.cnes===undefined;
+      if(retainOfficial)name=current!.name;
+      if (action !== 'remove' && items.some(item => item.id !== id && (item.name.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR') || !!official && item.cnes===official.code))) throw new Error('LOCATION_DUPLICATE');
       if(current && await locationAssociated(tx,current.id))throw new Error('LOCATION_ASSOCIATED');
       let fullAddress=current?.fullAddress??null;
-      if(body.fullAddress!==undefined){
+      if(official)fullAddress=official.fullAddress;
+      else if(!retainOfficial && body.fullAddress!==undefined){
         if(body.fullAddress===null)fullAddress=null;
         else{
           const input=body.fullAddress;
@@ -96,12 +108,13 @@ async function saveProfessionalLocation(req: AuthedRequest, res: Response, actio
         availability.sort((a,b)=>a.weekday-b.weekday||a.start.localeCompare(b.start));
       }
       const formatted=fullAddress?[fullAddress.street+(fullAddress.number?', '+fullAddress.number:''),fullAddress.complement,fullAddress.neighborhood,fullAddress.city+' / '+fullAddress.state,fullAddress.postalCode,fullAddress.country].filter(Boolean).join(' · '):address;
-      const location = { id, name, address:formatted,fullAddress,availability,active:current?.active!==false };
+      const organizationId=official?await linkCnes(tx,official):retainOfficial?current!.organizationId:null;
+      const location = { id, name, cnes:official?.code??(retainOfficial?current!.cnes:null), address:formatted,fullAddress,availability,active:current?.active!==false };
       if(action==='remove') {
         await tx.professionalLocation.delete({where:{id}});
         await tx.location.delete({where:{id}});
       } else {
-        await tx.location.upsert({where:{id},create:{id,name,formattedAddress:formatted,addressLine1:fullAddress?.street??null,addressLine2:fullAddress?.complement??null,number:fullAddress?.number??null,neighborhood:fullAddress?.neighborhood??null,city:fullAddress?.city??null,state:fullAddress?.state??null,postalCode:fullAddress?.postalCode??null,country:fullAddress?.country??'BR'},update:{name,formattedAddress:formatted,addressLine1:fullAddress?.street??null,addressLine2:fullAddress?.complement??null,number:fullAddress?.number??null,neighborhood:fullAddress?.neighborhood??null,city:fullAddress?.city??null,state:fullAddress?.state??null,postalCode:fullAddress?.postalCode??null,country:fullAddress?.country??'BR'}});
+        await tx.location.upsert({where:{id},create:{id,name,organizationId,formattedAddress:formatted,addressLine1:fullAddress?.street??null,addressLine2:fullAddress?.complement??null,number:fullAddress?.number??null,neighborhood:fullAddress?.neighborhood??null,city:fullAddress?.city??null,state:fullAddress?.state??null,postalCode:fullAddress?.postalCode??null,country:fullAddress?.country??'BR'},update:{name,organizationId,formattedAddress:formatted,addressLine1:fullAddress?.street??null,addressLine2:fullAddress?.complement??null,number:fullAddress?.number??null,neighborhood:fullAddress?.neighborhood??null,city:fullAddress?.city??null,state:fullAddress?.state??null,postalCode:fullAddress?.postalCode??null,country:fullAddress?.country??'BR'}});
         await tx.professionalLocation.upsert({where:{id},create:{id,userId:req.userId!,normalizedName:name.toLowerCase(),active:location.active},update:{normalizedName:name.toLowerCase()}});
         await tx.professionalLocationAvailability.deleteMany({where:{locationId:id}});
         if(availability.length)await tx.professionalLocationAvailability.createMany({data:availability.map(slot=>({locationId:id,weekday:slot.weekday,startMinute:minute(slot.start),endMinute:minute(slot.end)}))});
@@ -110,6 +123,7 @@ async function saveProfessionalLocation(req: AuthedRequest, res: Response, actio
     });
     return res.status(action === 'create' ? 201 : 200).json(result);
   } catch (error) {
+    if(error instanceof CnesError)return fail(res,error.status,error.message);
     if(error instanceof Error&&error.message==='LOCATION_ASSOCIATED')return fail(res,409,'Este local tem registros associados. Você pode inativá-lo, mas não alterar ou excluir.');
     if(error instanceof Error&&error.message==='ADDRESS')return fail(res,400,'Confira endereço, cidade, estado, país e CEP do local.');
     if(error instanceof Error&&error.message==='AVAILABILITY')return fail(res,400,'Confira dias e horários: o início deve ser anterior ao fim, sem períodos sobrepostos no mesmo dia.');
@@ -213,6 +227,7 @@ router.post('/professional/consultations', auth, async (req: AuthedRequest, res:
     return tx.healthEvent.create({
     data: {
       locationId: place?.id ?? null,
+      organizationId: place?.organizationId ?? null,
       patientId: accessRequest.patientId,
       type,
       status: 'draft',
@@ -302,7 +317,7 @@ router.put('/professional/consultations/:id', auth, async (req: AuthedRequest, r
   let updated;
   try { updated=await prisma.$transaction(async tx=>{
     const place=await encounterLocation(tx,req.userId!,{...body,homeVisit:body.homeVisit??payload.homeVisit,onlineVisit:body.onlineVisit??payload.onlineVisit},event.locationId);
-    return tx.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, locationId:place?.id??null, organizationNameSnapshot: body.onlineVisit === true ? null : place?.name ?? (String(body.organizationName ?? '').trim() || null), payload: { ...payload, followUp, onlineVisit: body.onlineVisit === undefined ? payload.onlineVisit === true : body.onlineVisit === true, homeVisit: body.onlineVisit === true ? false : body.homeVisit === undefined ? payload.homeVisit === true : body.homeVisit === true, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
+    return tx.healthEvent.updateMany({ where: { id: event.id, authoredByUserId: req.userId!, status: { in: editableStatuses }, updatedAt: expected }, data: { title, type, occurredAt, locationId:place?.id??null, organizationId:place?.organizationId??null, organizationNameSnapshot: body.onlineVisit === true ? null : place?.name ?? (String(body.organizationName ?? '').trim() || null), payload: { ...payload, followUp, onlineVisit: body.onlineVisit === undefined ? payload.onlineVisit === true : body.onlineVisit === true, homeVisit: body.onlineVisit === true ? false : body.homeVisit === undefined ? payload.homeVisit === true : body.homeVisit === true, ...Object.fromEntries(['symptoms', 'diagnosis', 'exams', 'prescriptions', 'notes'].map(key => [key, String(body[key] ?? '').trim()])) } as Prisma.InputJsonValue } });
   }); } catch(error) { if(error instanceof Error && error.message==='LOCATION')return fail(res,400,'Selecione um local ativo do seu cadastro ou informe Outros.');throw error; }
   if (!updated.count) return fail(res, 409, 'O atendimento foi atualizado ou aprovado enquanto você editava. Reabra para consultar a versão atual.');
   return res.json(await prisma.healthEvent.findUnique({ where: { id: event.id } }));
