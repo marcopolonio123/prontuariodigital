@@ -5,6 +5,13 @@ export class IntegrationError extends Error {constructor(public status:number,me
 function required(ok:unknown,message:string):asserts ok {if(!ok)throw new IntegrationError(422,message)}
 function text(v:unknown,max=5000):string {required(typeof v==='string'&&v.trim().length>0&&v.length<=max,'Texto ausente ou maior que o permitido.');return v.trim()}
 const cc=(c:any)=> typeof c?.text==='string'?c.text:(c?.coding??[]).map((x:any)=>x.display??x.code).filter(Boolean).join(', ');
+type ExamCode={system:string;code:string;display?:string};
+const examCodes=(concept:any):ExamCode[]=>{
+ const coding=concept?.coding??[];
+ required(Array.isArray(coding)&&coding.length<=30,'Codificação do exame inválida.');
+ return coding.filter((item:any)=>item?.system&&item?.code).map((item:any)=>({system:text(item.system,250),code:text(item.code,120),...(typeof item.display==='string'?{display:item.display.slice(0,250)}:{})}));
+};
+type ExamDetails={reportCodes:ExamCode[];orderedProcedures:Array<{name:string;codes:ExamCode[]}>;results:Array<{name:string;codes:ExamCode[];value:string;unitCode:string|null;unitSystem:string|null;referenceRange:string;interpretation:string}>};
 const date=(v:any)=>{
  const m=typeof v==='string'?v.match(/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,9})?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/):null;
  required(m&&Number.isFinite(Date.parse(v)),'Informe data/hora FHIR com segundos e fuso horário.');
@@ -16,14 +23,14 @@ export function parseClinicalBundle(bundle:any,consentId:string){
  required(Buffer.byteLength(JSON.stringify(bundle)??'')<=512*1024,'Bundle limitado a 512 KB. Arquivos devem utilizar o fluxo de documentos, fora do JSON clínico.');
  required(bundle?.resourceType==='Bundle'&&bundle.type==='collection'&&Array.isArray(bundle.entry)&&bundle.entry.length>0&&bundle.entry.length<=50,'Envie um Bundle FHIR R4 collection com até 50 recursos.');
  const resources:any[]=[],refs=new Map<string,any>();
- const allowed=['Encounter','Composition','DiagnosticReport','MedicationRequest','Observation','ImagingStudy','Practitioner','PractitionerRole','Organization','Location','Medication','Condition','Procedure','Endpoint','DocumentReference','Specimen'];
+ const allowed=['Encounter','Composition','DiagnosticReport','MedicationRequest','Observation','ImagingStudy','Practitioner','PractitionerRole','Organization','Location','Medication','Condition','Procedure','Endpoint','DocumentReference','Specimen','ServiceRequest'];
  for(const entry of bundle.entry){
   const r=entry?.resource;required(r&&allowed.includes(r.resourceType),'Tipo de recurso fora do contrato de integração MyDoctor.');
   required(typeof r.id==='string'&&/^[A-Za-z0-9.-]{1,64}$/.test(r.id),'Todo recurso precisa de id FHIR.');
   const key=r.resourceType+'/'+r.id;required(!refs.has(key),'Recurso duplicado no Bundle.');refs.set(key,r);
   if(entry.fullUrl){required(typeof entry.fullUrl==='string'&&/^urn:uuid:[0-9a-f-]{36}$/i.test(entry.fullUrl)&&!refs.has(entry.fullUrl),'fullUrl deve ser urn:uuid único.');refs.set(entry.fullUrl,r)}
   required(!r.contained?.length&&!r.modifierExtension?.length&&!r.implicitRules,'Recursos contidos, modifierExtension e implicitRules exigem adaptação específica.');
-  if(['Encounter','Composition','DiagnosticReport','MedicationRequest','Observation','ImagingStudy','Condition','Procedure','DocumentReference','Specimen'].includes(r.resourceType))required(r.subject?.reference==='Patient/'+consentId,'O paciente do recurso não corresponde à autorização.');
+  if(['Encounter','Composition','DiagnosticReport','MedicationRequest','Observation','ImagingStudy','Condition','Procedure','DocumentReference','Specimen','ServiceRequest'].includes(r.resourceType))required(r.subject?.reference==='Patient/'+consentId,'O paciente do recurso não corresponde à autorização.');
   resources.push(r);
  }
  const walk=(v:any,depth=0)=>{required(depth<40,'Estrutura muito profunda.');if(!v||typeof v!=='object')return;for(const [k,x] of Object.entries(v)){
@@ -38,6 +45,7 @@ export function parseClinicalBundle(bundle:any,consentId:string){
  const identity=root.identifier?.[0];required(identity&&typeof identity.system==='string'&&/^https?:\/\/\S+$|^urn:\S+$/.test(identity.system),'Informe identifier.system da origem.');
  const identifierSystem=text(identity.system,250),externalId=text(identity.value,200),version=text(root.meta?.versionId,64);
  required(/^[A-Za-z0-9.-]+$/.test(version),'meta.versionId inválido.');
+ let examDetails:ExamDetails|undefined;
  let category:Category,title='',occurredAt='',notes='',exams='',prescriptions='',diagnosis='';
  const resolve=(ref:any)=>refs.get(ref?.reference);
  if(root.resourceType==='Encounter'){
@@ -53,10 +61,17 @@ export function parseClinicalBundle(bundle:any,consentId:string){
   required(codes.includes('LAB')!==codes.includes('RAD'),'DiagnosticReport.category deve informar LAB ou RAD (v2-0074), sem ambiguidade.');
   category=codes.includes('LAB')?'laboratory':'imaging';required(['final','amended','corrected','appended'].includes(root.status),'Laudo precisa estar finalizado.');
   occurredAt=date(root.effectiveDateTime??root.effectivePeriod?.start??root.issued);title=text(cc(root.code),300);notes=typeof root.conclusion==='string'?root.conclusion:'';
+  const orderedProcedures=(root.basedOn??[]).map((ref:any)=>{
+   const order=resolve(ref);required(order?.resourceType==='ServiceRequest','basedOn deve apontar para ServiceRequest do mesmo paciente.');
+   return {name:text(cc(order.code),300),codes:examCodes(order.code)};
+  });
+  examDetails={reportCodes:examCodes(root.code),orderedProcedures,results:[]};
   exams=(root.result??[]).map((ref:any)=>{const o=resolve(ref);required(o?.resourceType==='Observation','Resultado deve apontar para Observation.');required(['final','amended','corrected'].includes(o.status),'Observation precisa estar finalizada.');required(cc(o.code),'Observation.code obrigatório.');
    const q=o.valueQuantity;if(q)required(typeof q.value==='number'&&Number.isFinite(q.value),'valueQuantity deve conter valor numérico finito.');let val=q?`${q.comparator??''}${q.value} ${q.unit??q.code??''}`:o.valueString??cc(o.valueCodeableConcept);
    required(val!==undefined&&val!==''||o.dataAbsentReason,'Observation deve informar valor ou motivo de ausência.');
    const ranges=(o.referenceRange??[]).map((r:any)=>r.text??`${r.low?.value??''}–${r.high?.value??''} ${r.low?.unit??r.high?.unit??''}`).join('; ');
+   const resultValue=val||cc(o.dataAbsentReason);
+   examDetails!.results.push({name:text(cc(o.code),300),codes:examCodes(o.code),value:String(resultValue),unitCode:typeof q?.code==='string'?q.code:null,unitSystem:typeof q?.system==='string'?q.system:null,referenceRange:ranges,interpretation:(o.interpretation??[]).map(cc).join(', ')});
    return `${cc(o.code)}: ${val||cc(o.dataAbsentReason)}${ranges?' (referência: '+ranges+')':''}${o.interpretation?.length?' · '+o.interpretation.map(cc).join(', '):''}`;
   }).join('\n');
   if(category==='imaging')for(const ref of root.imagingStudy??[]){const study=resolve(ref);required(study?.resourceType==='ImagingStudy','imagingStudy deve referenciar ImagingStudy do Bundle.');exams+='\nEstudo de imagem: '+(study.description??study.id)+' · '+(study.identifier??[]).map((i:any)=>i.value).join(', ');}
@@ -71,6 +86,6 @@ export function parseClinicalBundle(bundle:any,consentId:string){
  const organization=resolve(root.serviceProvider)??(performer?.resourceType==='Organization'?performer:resolve(performer?.organization));
  const sourceStatusLabel:Record<string,string>={active:'Em vigor',completed:'Concluída',stopped:'Interrompida',cancelled:'Cancelada',finished:'Finalizado',final:'Final',amended:'Alterado',corrected:'Corrigido',appended:'Complementado'};
  notes='Situação na origem: '+(sourceStatusLabel[root.status]??root.status)+'.\n'+notes;
- const summary={category,title:title.slice(0,300),occurredAt,sourceStatus:root.status,practitionerName,organizationName:organization?.name??null,payload:{notes,exams,prescriptions,diagnosis,integrationCategory:category}};
+ const summary={category,title:title.slice(0,300),occurredAt,sourceStatus:root.status,practitionerName,organizationName:organization?.name??null,payload:{notes,exams,prescriptions,diagnosis,integrationCategory:category,...(examDetails?{examDetails}:{})}};
  return {category,identifierSystem,externalId,version,digest:createHash('sha256').update(canonical(bundle)).digest('hex'),summary};
 }

@@ -1,3 +1,4 @@
+import {ReferenceError,searchAns,validatedInsurance} from './guided-references.js';
 import {StorageError,quotaTransaction,withManagedQuota} from './storage-quota.js';
 import {storeClinicalFile,legacyDocumentPath,serveDocument,retireStoredFile} from './document-storage.js';
 import { patientEncounterLocation } from './professional-directory.js';
@@ -315,6 +316,11 @@ function accountView(user: { userNumber: number; id: string; name: string; email
     rgUf: data?.rgUf ?? '', rgType: data?.rgType ?? 'RG', avatarDataUrl: data?.avatarDataUrl ?? '', cpf: data?.cpf ?? '', rg: data?.rg ?? '', postalCode: data?.postalCode ?? '', street: data?.street ?? '', number: data?.number ?? '', complement: data?.complement ?? '', neighborhood: data?.neighborhood ?? '', country: data?.country ?? 'Brasil',
     motherName:data?.motherName??'', birthDate: data?.birthDate ?? '', sex: data?.sex ?? '', city: data?.city ?? '', state: data?.state ?? '', isHealthProfessional: data?.isHealthProfessional === true, completed: Boolean(data?.accountCompletedAt) };
 }
+router.post('/directory/ans/search',auth,(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  try{return res.json(searchAns(req.body?.query,req.body?.operator));}
+  catch(e){return fail(res,e instanceof ReferenceError?e.status:503,e instanceof ReferenceError?e.message:'Consulta indisponível.');}
+});
 router.get('/address/cep/:cep', auth, async (req: AuthedRequest, res: Response) => {
   const cep = req.params.cep;
   if (!/^\d{8}$/.test(cep)) return fail(res, 400, 'Informe um CEP com 8 números.');
@@ -422,6 +428,7 @@ router.get('/professional/profile', auth, async (req: AuthedRequest, res: Respon
       region: item.region,
       status: item.status,
       verifiedAt: item.verifiedAt?.toISOString() ?? null,
+      rqe:item.rqe,rqeSpecialty:item.rqeSpecialty,rqeVerifiedAt:item.rqeVerifiedAt?.toISOString()??null,
     })),
   });
 });
@@ -434,10 +441,13 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
   const body = req.body ?? {};
   const profession = String(body.profession ?? '').trim();
   const specialty = String(body.specialty ?? '').trim() || null;
+  const rqe = String(body.rqe ?? '').trim() || null;
   const council = String(body.council ?? '').trim().toUpperCase();
   const registration = String(body.registration ?? '').trim().replace(/\s+/g, '');
   const region = String(body.region ?? '').trim().toUpperCase();
 
+  if (rqe && (council!=='CRM' || !specialty || !/^\d{1,12}$/.test(rqe) || /^0+$/.test(rqe))) return fail(res,400,'Para informar RQE, preencha uma especialidade e um número válido no cadastro CRM.');
+  if ((specialty?.length??0)>150) return fail(res,400,'Especialidade deve ter até 150 caracteres.');
   if (!profession) return fail(res, 400, 'Informe sua profissão.');
   if (!Object.prototype.hasOwnProperty.call(PROFESSIONAL_COUNCILS, council)) return fail(res, 400, 'Selecione um conselho profissional válido.');
   if (!registration) return fail(res, 400, 'Informe o número do registro profissional.');
@@ -492,10 +502,11 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
         throw new Error('PROFESSIONAL_REGISTRATION_IN_USE');
       }
 
+      await tx.professionalRegistration.updateMany({where:{practitionerId:practitioner.id},data:{rqeVerifiedAt:null}});
       if (duplicate) {
         await tx.professionalRegistration.update({
           where: { id: duplicate.id },
-          data: { status: duplicate.status === 'active' ? 'active' : 'unknown' },
+          data: { status: duplicate.status === 'active' ? 'active' : 'unknown',rqe,rqeSpecialty:rqe?specialty:null },
         });
       } else {
         await tx.professionalRegistration.create({
@@ -504,7 +515,7 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
             authorityId: authority.id,
             registration,
             region: region || null,
-            status: 'unknown',
+            status: 'unknown',rqe,rqeSpecialty:rqe?specialty:null,
           },
         });
       }
@@ -536,6 +547,7 @@ router.put('/professional/profile', auth, async (req: AuthedRequest, res: Respon
         region: item.region,
         status: item.status,
         verifiedAt: item.verifiedAt?.toISOString() ?? null,
+      rqe:item.rqe,rqeSpecialty:item.rqeSpecialty,rqeVerifiedAt:item.rqeVerifiedAt?.toISOString()??null,
       })),
     });
   } catch (error) {
@@ -634,6 +646,8 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
     return fail(res, 400, 'Informe tipo, descrição e data/hora válidos.');
   }
 
+  if(body.payload && typeof body.payload==='object') delete body.payload.examDetails;
+  if(type==='insurance'){try{body.payload=validatedInsurance(body.payload)}catch(e){if(e instanceof ReferenceError)return fail(res,e.status,e.message);throw e;}}
   if(body.payload?.followUp!==undefined){try{body.payload.followUp=normalizeFollowUp(body.payload.followUp,occurredAt)}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}}
   const actor = await prisma.user.findUnique({ where: { id: req.userId! }, select: { id: true, name: true } });
   let event;
@@ -649,7 +663,7 @@ router.post('/patients/:patientId/events', auth, async (req: AuthedRequest, res:
       endedAt: body.endedAt ? new Date(body.endedAt) : null,
       timezone: String(body.timezone ?? 'America/Sao_Paulo'),
       practitionerId: body.practitionerId ? String(body.practitionerId) : null,
-      organizationId: body.organizationId ? String(body.organizationId) : null,
+      organizationId: place?.organizationId ?? null,
       locationId: place?.id??null,
       sourceSystemId: body.sourceSystemId ? String(body.sourceSystemId) : null,
       practitionerNameSnapshot: body.practitionerName ? String(body.practitionerName) : null,
@@ -694,6 +708,8 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
   if (current.practitionerId && current.authoredByUserId === req.userId && !['draft', 'pending_patient_confirmation', 'rejected_by_patient'].includes(current.status)) return fail(res, 403, 'Este atendimento está disponível somente para consulta pelo profissional.');
   if (current.status === 'cancelled') return fail(res, 409, 'Reative o registro antes de editá-lo.');
   const body = req.body ?? {};
+  if(body.payload && typeof body.payload==='object') delete body.payload.examDetails;
+  if((body.type??current.type)==='insurance'){try{body.payload=validatedInsurance(body.payload??current.payload)}catch(e){if(e instanceof ReferenceError)return fail(res,e.status,e.message);throw e;}}
   if(body.payload?.followUp!==undefined){try{body.payload.followUp=normalizeFollowUp(body.payload.followUp,new Date(body.occurredAt??current.occurredAt))}catch(e){return fail(res,400,e instanceof Error?e.message:'Retorno inválido.')}}
   const isDiary = current.type === 'wellbeing_diary';
   if (isDiary && body.type !== undefined && body.type !== 'wellbeing_diary') return fail(res, 400, 'O tipo do Diário não pode ser alterado.');
@@ -711,6 +727,7 @@ router.put('/patients/:patientId/events/:eventId', auth, async (req: AuthedReque
     where: { id: current.id },
     data: {
       locationId:place===undefined?current.locationId:place?.id??null,
+      organizationId:place===undefined?current.organizationId:place?.organizationId??null,
       status: 'amended',
       title: body.title !== undefined ? String(body.title).trim() : current.title,
       type: body.type !== undefined ? String(body.type) : current.type,

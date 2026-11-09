@@ -40,6 +40,7 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [profession, setProfession] = useState('');
+  const [rqe,setRqe]=useState('');
   const [specialty, setSpecialty] = useState('');
   const [council, setCouncil] = useState<UpsertProfessionalProfileInput['council']>('CRM');
   const [registration, setRegistration] = useState('');
@@ -57,12 +58,12 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
       if (current) {
         setProfession(current.profession ?? '');
         setSpecialty(current.specialty ?? '');
-        const first = current.registrations?.[0];
+        const first = current.registrations.find(reg=>reg.status==='active')??current.registrations[0];
         if (first) {
           const normalized = COUNCILS.some(([value]) => value === first.council) ? first.council : 'OUTROS';
           setCouncil(normalized as UpsertProfessionalProfileInput['council']);
           setRegistration(first.registration ?? '');
-          setRegion(first.region ?? '');
+          setRegion(first.region ?? '');setRqe(first.rqe??'');
         }
       }
     } catch (error) {
@@ -85,6 +86,7 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
       const saved = await api.saveProfessionalProfile({
         profession: profession.trim(),
         specialty: specialty.trim() || undefined,
+        rqe:council==='CRM'?rqe:undefined,
         council,
         registration: registration.trim(),
         region: region || undefined,
@@ -124,6 +126,10 @@ export default function ProfessionalProfilePanel({ api }: { api: MyDoctorV1Api }
         <label className="min-w-0 text-xs font-bold text-mute">Especialidade
           <input value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="Ex.: Cardiologia" className={fieldClass()} />
         </label>
+        {council==='CRM'&&<label className="min-w-0 text-xs font-bold text-mute">RQE da especialidade (opcional)
+          <input value={rqe} onChange={e=>setRqe(e.target.value.replace(/\D/g,''))} maxLength={12} inputMode="numeric" className={fieldClass()}/>
+          {rqe&&<span className="mt-1 block">{profile?.verificationStatus==='verified'&&profile.registrations.some(reg=>reg.council==='CRM'&&reg.status==='active'&&reg.registration===registration&&reg.region===region&&reg.rqe===rqe&&reg.rqeSpecialty===specialty&&reg.rqeVerifiedAt)?'RQE conferido pela administração':'RQE informado, pendente de conferência'}</span>}
+        </label>}
         <label className="min-w-0 text-xs font-bold text-mute">Conselho profissional
           <select value={council} onChange={(e) => setCouncil(e.target.value as UpsertProfessionalProfileInput['council'])} className={fieldClass()}>
             {COUNCILS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}

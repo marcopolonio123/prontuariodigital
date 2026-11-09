@@ -38,9 +38,9 @@ export interface V1User { userNumber?: number; id: string; name: string; email: 
 export interface RegisterResponse extends V1User, LoginStartResponse { requiresMfaLogin: true; requiresEmailConfirmation:true; emailSent:boolean; }
 export interface LoginVerifyResponse { token: string; user: V1User; }
 export interface PatientProfile { id: string; record: string; name: string; relationship: string; accessLevel: string; source: 'owned' | 'delegated'; validUntil?: string | null; isTutor?:boolean;hasTutor?:boolean; }
-export interface ProfessionalRegistrationV1 { id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
+export interface ProfessionalRegistrationV1 { rqe?:string|null; rqeSpecialty?:string|null; rqeVerifiedAt?:string|null; id: string; council: string; councilName: string; registration: string; region?: string | null; status: string; verifiedAt?: string | null; }
 export interface ProfessionalProfileV1 { id: string; name: string; profession: string; specialty?: string | null; verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended' | string; verifiedAt?: string | null; active: boolean; registrations: ProfessionalRegistrationV1[]; }
-export interface UpsertProfessionalProfileInput { profession: string; specialty?: string; council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS'; registration: string; region?: string; }
+export interface UpsertProfessionalProfileInput { rqe?:string; profession: string; specialty?: string; council: 'CRM' | 'CREFITO' | 'CRN' | 'COREN' | 'CRO' | 'OUTROS'; registration: string; region?: string; }
 
 export interface PatientLookupV1 { patientId: string; name: string; }
 export interface ProfessionalAccessRequestV1 {
@@ -80,7 +80,9 @@ export interface IncomingAccessRequestV1 {assistantName?:string|null;
 
 export interface LocationAddressV1 {postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string}
 export interface LocationAvailabilityV1 {weekday:number;start:string;end:string}
-export interface ProfessionalLocationV1 { id: string; name: string; address: string; fullAddress?:LocationAddressV1|null; availability?:LocationAvailabilityV1[];active?:boolean;hasAssociations?:boolean; }
+export interface CnesLocationV1 {code:string;name:string;unitType:number|null;fullAddress:LocationAddressV1}
+export interface MedicationCatalogItemV1 {registration:string;name:string;ingredient:string}
+export interface ProfessionalLocationV1 { id: string; cnes?:string|null; name: string; address: string; fullAddress?:LocationAddressV1|null; availability?:LocationAvailabilityV1[];active?:boolean;hasAssociations?:boolean; }
 
 export interface ProfessionalConsultationDetailV1 extends HealthEventV1 { patientName: string; editable: boolean; canSubmit: boolean; documents: Array<{ id: string; type: string; originalFilename: string }>; }
 
@@ -142,21 +144,30 @@ export interface ConsultantUsageV1 {
 }
 
 export interface MedicationScheduleV1 {
-  id: string; patientId: string; name: string; dose: string; weekdays: number[]; times: string[];
+  id: string; patientId: string; name: string; medicationRegistration?:string|null; dose: string; weekdays: number[]; times: string[];
   continuousUse?: boolean; timezone: string; startsOn: string; endsOn: string | null; recipientIds: string[];
   alertsEnabled: boolean; active: boolean; updatedAt: string;
 }
-export type MedicationScheduleInput = Pick<MedicationScheduleV1, 'name' | 'dose' | 'weekdays' | 'times' | 'timezone' | 'continuousUse' | 'startsOn' | 'endsOn' | 'recipientIds' | 'alertsEnabled'>;
+export type MedicationScheduleInput = Pick<MedicationScheduleV1, 'name' | 'medicationRegistration' | 'dose' | 'weekdays' | 'times' | 'timezone' | 'continuousUse' | 'startsOn' | 'endsOn' | 'recipientIds' | 'alertsEnabled'>;
 export interface MedicationAgendaV1 {
   registeredMedications?: Array<{ name: string; dose: string; frequency: string }>;
   schedules: MedicationScheduleV1[]; alertsEnabled: boolean; canEdit: boolean; deliveryAvailable: boolean;
   recipients: Array<{ id: string; name: string; emailMasked: string; owner: boolean }>;
 }
 
+export type AdminCatalogKind = 'insurers'|'medications'|'professionals'|'facilities';
+export interface AdminCatalogEntryV1 {
+  id:string;name:string;internalCode:string|null;description:string;active:boolean;version:number;updatedAt:string;
+  history?:Array<{action:string;version:number;createdAt:string}>;
+}
+export interface AdminCatalogReferenceV1 {id:string;name:string;code:string;description:string;source:string;edition?:string;profileStatus?:string}
+export interface AdminCatalogPageV1 {items:Array<AdminCatalogEntryV1|AdminCatalogReferenceV1>;total:number;page:number;pageSize:number}
+export type AdminCatalogInput = {name:string;internalCode:string;description:string};
+
 export interface AdminProfessionalV1 {
   id: string; name: string; email: string; profession: string; specialty: string | null;
   verificationStatus: string; active: boolean; updatedAt: string;
-  registrations: Array<{ id: string; council: string; registration: string; region: string | null; status: string }>;
+  registrations: Array<{ id: string; council: string; registration: string; region: string | null; status: string; rqe?:string|null; rqeSpecialty?:string|null; rqeVerifiedAt?:string|null }>;
   documents: VerificationDocumentV1[];
   history: Array<{ id: string; decision: string; status: string; actorName: string; note: string; evidence: string | null; createdAt: string }>;
 }
@@ -192,6 +203,11 @@ export class MyDoctorV1Api {
   savePersonDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/people/'+encodeURIComponent(id)+'/document',kind,file)}
   uploadTutorDocument(id:string,kind:string,file:File){return this.uploadPersonFile('/tutorship/requests/'+encodeURIComponent(id)+'/documents',kind,file)}
   async openPersonFile(id:string,admin=false,person=false){const path=person?'/people/'+encodeURIComponent(id)+'/document/download':(admin?'/admin':'')+'/tutorship/documents/'+encodeURIComponent(id);return openPrivateDocument(this.url(path),this.token)}
+  searchCities(uf:string,query:string,signal?:AbortSignal){return this.req<Array<{code:string;name:string;uf:string}>>('/directory/cities?'+new URLSearchParams({uf,q:query}),{signal});}
+  searchCnesUnits(city:string,query:string,offset:number,signal?:AbortSignal){return this.req<{items:Array<{code:string;name:string;street:string}>;nextOffset:number|null}>('/directory/cnes/search',{method:'POST',body:JSON.stringify({city,query,offset}),signal});}
+  searchAns(query:string,operator?:string,signal?:AbortSignal){return this.req<{edition:string;items:Array<{code:string;name:string;legalName?:string;uf?:string}>}>('/directory/ans/search',{method:'POST',body:JSON.stringify({query,operator}),signal});}
+  lookupCnes(code:string,signal?:AbortSignal) { return this.req<CnesLocationV1>('/directory/cnes/'+encodeURIComponent(code),{signal}); }
+  searchMedicationCatalog(query:string,signal?:AbortSignal) { return this.req<{importedOn:string;items:MedicationCatalogItemV1[]}>('/directory/medications/search',{method:'POST',body:JSON.stringify({query}),signal}); }
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
   saveAccount(input: { name: string; phone: string; birthDate: string; sex: string; city: string; state: string; isHealthProfessional: boolean; motherName?:string;cpf?: string; rg?: string; rgUf?: string; rgType?: 'RG' | 'CIN'; postalCode?: string; street?: string; number?: string; complement?: string; neighborhood?: string; country?: string; avatarDataUrl?: string;fingerprintReference?:FingerprintReferenceInput|null }) { return this.req<AccountProfileV1>('/account', { method: 'PUT', body: JSON.stringify(input) }); }
@@ -215,8 +231,18 @@ export class MyDoctorV1Api {
   }
 
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
+  listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number},signal?:AbortSignal){
+    return this.req<AdminCatalogPageV1>('/admin/catalogs/'+kind+'?'+new URLSearchParams({...filters,page:String(filters.page)}),{signal});
+  }
+  adminCatalogDetail(kind:AdminCatalogKind,id:string){return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+'/'+encodeURIComponent(id));}
+  saveAdminCatalog(kind:AdminCatalogKind,input:AdminCatalogInput,existing?:AdminCatalogEntryV1){
+    return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+(existing?'/'+encodeURIComponent(existing.id):''),{method:existing?'PUT':'POST',body:JSON.stringify({...input,expectedVersion:existing?.version})});
+  }
+  changeAdminCatalogStatus(kind:AdminCatalogKind,item:AdminCatalogEntryV1){
+    return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+'/'+encodeURIComponent(item.id)+(item.active?'':'/restore'),{method:item.active?'DELETE':'POST',body:JSON.stringify({expectedVersion:item.version})});
+  }
   listAdminProfessionals() { return this.req<AdminProfessionalV1[]>('/admin/professionals'); }
-  decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; expectedUpdatedAt: string }) {
+  decideProfessional(id: string, input: { decision: string; note: string; evidence: string; registrationId: string; checkedIdentityAndCouncil: boolean; checkedRqe?:boolean; expectedUpdatedAt: string }) {
     return this.req<{ status: string }>(`/admin/professionals/${encodeURIComponent(id)}/decision`, { method: 'POST', body: JSON.stringify(input) });
   }
   setToken(token: string) { this.token = token; publishV1SessionToken(token); }
@@ -250,8 +276,8 @@ export class MyDoctorV1Api {
 
   listProfessionalLocations(includeInactive=false) { return this.req<ProfessionalLocationV1[]>('/professional/locations'+(includeInactive?'?includeInactive=1':'')); }
   setProfessionalLocationActive(id:string,active:boolean){return this.req<ProfessionalLocationV1>('/professional/locations/'+encodeURIComponent(id)+'/status',{method:'PATCH',body:JSON.stringify({active})})}
-  createProfessionalLocation(input: { name: string; address: string;fullAddress?:LocationAddressV1|null;availability?:LocationAvailabilityV1[] }) { return this.req<ProfessionalLocationV1>('/professional/locations', { method: 'POST', body: JSON.stringify(input) }); }
-  updateProfessionalLocation(id: string, input: { name: string; address: string;fullAddress?:LocationAddressV1|null;availability?:LocationAvailabilityV1[] }) { return this.req<ProfessionalLocationV1>(`/professional/locations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
+  createProfessionalLocation(input: { name: string; address: string;cnes?:string|null;fullAddress?:LocationAddressV1|null;availability?:LocationAvailabilityV1[] }) { return this.req<ProfessionalLocationV1>('/professional/locations', { method: 'POST', body: JSON.stringify(input) }); }
+  updateProfessionalLocation(id: string, input: { name: string; address: string;cnes?:string|null;fullAddress?:LocationAddressV1|null;availability?:LocationAvailabilityV1[] }) { return this.req<ProfessionalLocationV1>(`/professional/locations/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }); }
   removeProfessionalLocation(id: string) { return this.req<{removed:boolean}>(`/professional/locations/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   listProfessionalConsultations() { return this.req<ProfessionalConsultationV1[]>('/professional/consultations'); }
   revokePatientAccess(id: string) { return this.req<{ status: string }>(`/access-requests/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); }
