@@ -1,3 +1,8 @@
+import { adminCatalogs, adminDestinations, isAdminCatalog, isAdminDestination, type AdminDestination } from './lib/admin-navigation';
+import AdminCatalogPanel from './components/AdminCatalogPanel';
+import AdminIntegrationsPanel from './components/AdminIntegrationsPanel';
+import AdminStoragePanel from './components/AdminStoragePanel';
+import TutorRequestsPanel from './components/TutorRequestsPanel';
 import SessionIdentity from './components/SessionIdentity';
 import {ProfessionalTeam,StaffWorkspace} from './components/ProfessionalStaff';
 import AlertCenter from './components/AlertCenter';
@@ -22,7 +27,7 @@ import {
   subscribeV1SessionToken,
 } from './lib/api-v1';
 
-type ShellView = 'professional-team' | 'staff-workspace' | 'professional-agenda' | 'identification-history' | 'utility' | 'administration' | 'app' | 'professional' | 'clinicar' | 'professional-locations' | 'professional-access' | 'access-requests' | 'consultation-confirmations';
+type ShellView = AdminDestination | 'professional-team' | 'staff-workspace' | 'professional-agenda' | 'identification-history' | 'utility' | 'app' | 'professional' | 'clinicar' | 'professional-locations' | 'professional-access' | 'access-requests' | 'consultation-confirmations';
 
 export default function V1ProfessionalShell() {
   const [view, setView] = useState<ShellView>('app');
@@ -30,13 +35,14 @@ export default function V1ProfessionalShell() {
   const [token, setToken] = useState(readV1SessionToken());
   const [canClinicar, setCanClinicar] = useState(false);
   const [checkingClinicar, setCheckingClinicar] = useState(true);
-  const [canAdmin, setCanAdmin] = useState(false);
+  const [adminToken, setAdminToken] = useState('');
+  const canAdmin = Boolean(token && token === adminToken);
   const api = useMemo(() => new MyDoctorV1Api(defaultV1ApiUrl(), token), [token]);
 
   useEffect(() => subscribeV1SessionToken(setToken), []);
   useEffect(() => {
-    let current = true; setCanAdmin(false);
-    if (token) api.getAdminSession().then(result => { if (current) setCanAdmin(result.authorized); }).catch(() => { if (current) setCanAdmin(false); });
+    let current = true; setAdminToken('');
+    if (token) api.getAdminSession().then(result => { if (current) setAdminToken(result.authorized ? token : ''); }).catch(() => { if (current) setAdminToken(''); });
     return () => { current = false; };
   }, [api, token]);
   useEffect(() => { if (!token) setView('app'); }, [token]);
@@ -47,7 +53,7 @@ export default function V1ProfessionalShell() {
     return () => { current = false; };
   }, [api, token, view]);
 
-  const title = view==='professional-team'?'Minha equipe':view==='staff-workspace'?'Atendente / secretária':view==='professional-agenda'?'Agenda de atendimentos':view === 'identification-history' ? 'Acessos à minha digital' : view === 'utility' ? 'Identificar Pessoa' : view === 'administration' ? 'Administração' : view === 'professional' ? 'Validação de cadastro profissional' : view === 'clinicar' ? 'Atendimento' : view === 'professional-locations' ? 'Locais que atendo' : view === 'professional-access' ? 'Solicitar acesso ao prontuário do paciente' : view === 'access-requests' ? 'Autorização de acesso' : 'Atendimentos para confirmar';
+  const title = isAdminDestination(view) ? adminDestinations[view] : view==='professional-team'?'Minha equipe':view==='staff-workspace'?'Atendente / secretária':view==='professional-agenda'?'Agenda de atendimentos':view === 'identification-history' ? 'Acessos à minha digital' : view === 'utility' ? 'Identificar Pessoa' : view === 'professional' ? 'Meu cadastro profissional' : view === 'clinicar' ? 'Atendimento' : view === 'professional-locations' ? 'Locais que atendo' : view === 'professional-access' ? 'Solicitar acesso ao prontuário do paciente' : view === 'access-requests' ? 'Autorização de acesso' : 'Atendimentos para confirmar';
 
   return <>
     <RecordDictationEnhancer />
@@ -64,9 +70,16 @@ export default function V1ProfessionalShell() {
         {!token ? <section className="rounded-2xl border border-line bg-card p-5 shadow-lift"><h2 className="font-display text-xl font-bold text-ink">Faça login para continuar</h2><p className="mt-2 text-sm text-mute">Perfil profissional, Clinicar e compartilhamento usam o mesmo login do seu prontuário pessoal.</p><button type="button" onClick={() => setView('app')} className="mt-4 rounded-xl bg-pine-900 px-4 py-3 text-sm font-bold text-white">Voltar ao login</button></section>
           : view === 'professional-team' ? <ProfessionalTeam api={api}/>
           : view === 'staff-workspace' ? <StaffWorkspace key={token} api={api}/>
-          : view === 'identification-history' ? <IdentificationHistoryPanel key={token} api={api} canAdmin={canAdmin}/>
+          : view === 'identification-history' ? <IdentificationHistoryPanel key={token} api={api}/>
           : view === 'utility' ? <PublicUtilityPanel key={token} api={api}/>
-          : view === 'administration' ? <ProfessionalAdminPanel api={api} />
+          : isAdminDestination(view) ? (canAdmin ? <div key={view}>
+              {isAdminCatalog(view) ? <AdminCatalogPanel api={api} kind={adminCatalogs[view]}/>
+                : view === 'admin-integrations' ? <AdminIntegrationsPanel api={api}/>
+                : view === 'admin-verification' ? <ProfessionalAdminPanel api={api}/>
+                : view === 'admin-tutorship' ? <TutorRequestsPanel api={api} admin/>
+                : view === 'admin-storage' ? <AdminStoragePanel/>
+                : <IdentificationHistoryPanel api={api} admin/>}
+            </div> : <p role="status">Acesso restrito à administração.</p>)
           : view === 'professional' ? <ProfessionalProfilePanel api={api} />
           : view === 'professional-access' ? (checkingClinicar ? <p role="status">Verificando habilitação profissional...</p> : canClinicar ? <ClinicarPanel api={api} onOpenProfessional={()=>setView('professional')}/> : <section className="rounded-xl border border-line bg-card p-5">Solicitar acesso exige perfil profissional aprovado.</section>)
           : view==='professional-agenda'?(checkingClinicar?<p role="status">Verificando habilitação profissional...</p>:canClinicar?<ProfessionalAgenda key={token} api={api}/>:<section className="rounded-xl border border-line bg-card p-5">A agenda será liberada após aprovação do perfil profissional.</section>)
