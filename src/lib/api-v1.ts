@@ -166,7 +166,7 @@ export interface AdminCatalogEntryV1 {
   history?:Array<{action:string;version:number;createdAt:string}>;
 }
 export interface AdminCatalogReferenceV1 {id:string;name:string;code:string;description:string;source:string;edition?:string;profileStatus?:string;pharmacyPopularEans?:number}
-export interface AdminCatalogPageV1 {items:Array<AdminCatalogEntryV1|AdminCatalogReferenceV1>;total:number;page:number;pageSize:number}
+export interface AdminCatalogPageV1 {items:Array<AdminCatalogEntryV1|AdminCatalogReferenceV1>;total:number;page:number;pageSize:number;benefit?:'free'}
 export type AdminCatalogInput = {name:string;internalCode:string;description:string};
 
 export interface AdminProfessionalV1 {
@@ -247,7 +247,7 @@ export class MyDoctorV1Api {
     return this.req<AdminPage<AdminRelationship>>(`/admin/accounts/${userNumber}/relationships?` + new URLSearchParams({ kind, page: String(page) }), { signal });
   }
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
-  listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number;sort:'asc'|'desc'},signal?:AbortSignal){
+  listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number;sort:'asc'|'desc';benefit?:'free'},signal?:AbortSignal){
     return this.req<AdminCatalogPageV1>('/admin/catalogs/'+kind+'?'+new URLSearchParams({...filters,page:String(filters.page)}),{signal});
   }
   adminCatalogDetail(kind:AdminCatalogKind,id:string){return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+'/'+encodeURIComponent(id));}

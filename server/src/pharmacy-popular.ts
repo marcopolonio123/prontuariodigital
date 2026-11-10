@@ -44,6 +44,8 @@ function load() {
   return current = { edition, cmedEdition, rows, counts };
 }
 
+export function pharmacyPopularProductCounts(): ReadonlyMap<string, number> { return load().counts; }
+
 /** A product may have several presentations; the count is only for matched barcodes. */
 export function pharmacyPopularCoverage(registration: string): number | undefined {
   try { return load().counts.get(registration) ?? 0; }
