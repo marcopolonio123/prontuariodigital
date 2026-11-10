@@ -43,14 +43,14 @@ const endpoint=(fn:(req:AdminRequest,res:Response)=>Promise<unknown>)=>(req:Admi
   });
 };
 
-async function references(kind:Kind,q:string,skip:number){
-  if(kind==='medications')return listMedicationReferences(q,skip,pageSize);
-  if(kind==='insurers')return listOperatorReferences(q,skip,pageSize);
+async function references(kind:Kind,q:string,skip:number,sort:Prisma.SortOrder){
+  if(kind==='medications')return listMedicationReferences(q,skip,pageSize,sort);
+  if(kind==='insurers')return listOperatorReferences(q,skip,pageSize,sort);
   if(kind==='professionals'){
     const where:Prisma.PractitionerWhereInput=q?{OR:[{name:{contains:q,mode:'insensitive'}},{registrations:{some:{registration:{equals:q}}}}]}:{};
     const [total,rows]=await prisma.$transaction([
       prisma.practitioner.count({where}),
-      prisma.practitioner.findMany({where,skip,take:pageSize,orderBy:[{name:'asc'},{id:'asc'}],select:{id:true,name:true,profession:true,verificationStatus:true,registrations:{select:{registration:true,region:true,authority:{select:{code:true}}},take:12}}}),
+      prisma.practitioner.findMany({where,skip,take:pageSize,orderBy:[{name:sort},{id:'asc'}],select:{id:true,name:true,profession:true,verificationStatus:true,registrations:{select:{registration:true,region:true,authority:{select:{code:true}}},take:12}}}),
     ]);
     return {total,items:rows.map(row=>({
       id:row.id,name:row.name,code:row.registrations.map(reg=>[reg.authority.code,reg.registration,reg.region].filter(Boolean).join(' ')).join(' · '),
@@ -60,7 +60,7 @@ async function references(kind:Kind,q:string,skip:number){
   const where:Prisma.OrganizationWhereInput=q?{OR:[{name:{contains:q,mode:'insensitive'}},{identifiers:{some:{system:'CNES',value:q}}}]}:{};
   const [total,rows]=await prisma.$transaction([
     prisma.organization.count({where}),
-    prisma.organization.findMany({where,skip,take:pageSize,orderBy:[{name:'asc'},{id:'asc'}],select:{id:true,name:true,legalName:true,identifiers:{where:{system:'CNES'},select:{value:true,source:true,verifiedAt:true},take:1}}}),
+    prisma.organization.findMany({where,skip,take:pageSize,orderBy:[{name:sort},{id:'asc'}],select:{id:true,name:true,legalName:true,identifiers:{where:{system:'CNES'},select:{value:true,source:true,verifiedAt:true},take:1}}}),
   ]);
   return {total,items:rows.map(row=>{
     const cnes=row.identifiers[0];
@@ -70,14 +70,16 @@ async function references(kind:Kind,q:string,skip:number){
 
 router.get('/admin/catalogs/:kind',requireAdmin,endpoint(async(req,res)=>{
   const kind=kindOf(req.params.kind),q=field(req.query.q,100);
+  const sort=req.query.sort??'asc';
+  if(sort!=='asc'&&sort!=='desc')throw new CatalogInputError(400,'Ordenação inválida.');
   const source=req.query.source??'local',status=req.query.status??'active',page=Number(req.query.page??1);
   if(!Number.isInteger(page)||page<1||page>3000||!['local','reference'].includes(String(source))||!['active','archived','all'].includes(String(status)))throw new CatalogInputError(400,'Filtros inválidos.');
   const skip=(page-1)*pageSize;
-  if(source==='reference')return res.json({...await references(kind,q,skip),page,pageSize});
+  if(source==='reference')return res.json({...await references(kind,q,skip,sort),page,pageSize});
   const where:Prisma.AdminCatalogEntryWhereInput={kind,...(status==='all'?{}:{active:status==='active'}),...(q?{searchText:{contains:normalized(q).replace(/\s+/g,' ')}}:{})};
   const [total,items]=await prisma.$transaction([
     prisma.adminCatalogEntry.count({where}),
-    prisma.adminCatalogEntry.findMany({where,skip,take:pageSize,orderBy:[{name:'asc'},{id:'asc'}],select}),
+    prisma.adminCatalogEntry.findMany({where,skip,take:pageSize,orderBy:[{name:sort},{id:'asc'}],select}),
   ]);
   return res.json({items,total,page,pageSize});
 }));

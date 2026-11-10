@@ -231,7 +231,7 @@ export class MyDoctorV1Api {
   }
 
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
-  listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number},signal?:AbortSignal){
+  listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number;sort:'asc'|'desc'},signal?:AbortSignal){
     return this.req<AdminCatalogPageV1>('/admin/catalogs/'+kind+'?'+new URLSearchParams({...filters,page:String(filters.page)}),{signal});
   }
   adminCatalogDetail(kind:AdminCatalogKind,id:string){return this.req<AdminCatalogEntryV1>('/admin/catalogs/'+kind+'/'+encodeURIComponent(id));}

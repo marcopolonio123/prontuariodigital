@@ -61,6 +61,17 @@ try{
   assert.equal(reference.status,200);
   assert(reference.body.items.length>0 && reference.body.items.every(item=>item.source==='Anvisa'));
   assert.equal((await call('medications/'+reference.body.items[0].id,admin,{...baseInput,expectedVersion:1},'PUT')).status,404);
+  const first=await call('medications?source=reference&page=1&sort=asc',admin);
+  const second=await call('medications?source=reference&page=2&sort=asc',admin);
+  const reverse=await call('medications?source=reference&page=1&sort=desc',admin);
+  assert([first,second,reverse].every(r=>r.status===200&&r.body.items.length===20));
+  assert.equal(second.body.total,first.body.total);
+  assert.equal(second.body.page,2);
+  assert.equal(new Set([...first.body.items,...second.body.items].map(item=>item.id)).size,40);
+  const ordered=[...first.body.items,...second.body.items];
+  assert(ordered.every((row,i)=>i===0||ordered[i-1].name.localeCompare(row.name,'pt-BR')<=0));
+  assert(reverse.body.items.every((row,i)=>i===0||reverse.body.items[i-1].name.localeCompare(row.name,'pt-BR')>=0));
+  assert.equal((await call('medications?sort=other',admin)).status,400);
   const ans=await call('insurers?source=reference&q=006246',admin);
   assert.equal(ans.status,200);assert.equal(ans.body.items[0].source,'ANS');
   assert.equal(await db.practitioner.count({where:{userId:{in:accounts}}}),0);
