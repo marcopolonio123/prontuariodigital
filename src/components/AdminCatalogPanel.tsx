@@ -45,7 +45,7 @@ function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
   function afterSave(text:string){
     close();setMessage(text);setPage(1);setRefresh(x=>x+1);
   }
-  const pages=Math.max(1,Math.ceil((data?.total??0)/(data?.pageSize??20)));
+  const pages=Math.max(1,Math.ceil((data?.total??0)/(data?.pageSize??10)));
   const pagination=(label:string)=>pages>1&&<nav aria-label={label} className="flex flex-wrap items-center justify-between gap-2 text-sm">
     <span>Página {page} de {pages}</span>
     <div className="flex flex-wrap gap-2">

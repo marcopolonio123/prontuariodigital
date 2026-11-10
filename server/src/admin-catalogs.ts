@@ -8,7 +8,7 @@ import {listOperatorReferences,normalized,ReferenceError} from './guided-referen
 const router=Router();
 const kinds=['insurers','medications','professionals','facilities'] as const;
 type Kind=typeof kinds[number];
-const pageSize=20;
+const pageSize=10;
 const select={id:true,kind:true,name:true,internalCode:true,description:true,active:true,version:true,createdAt:true,updatedAt:true} as const;
 
 class CatalogInputError extends Error {
