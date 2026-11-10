@@ -1,3 +1,4 @@
+import type { AdminAccountFilters, AdminAccountRow, AdminLinkKind, AdminOverview, AdminPage, AdminRelationship, AdminStoragePlans } from './admin-insights';
 import {openPrivateDocument} from './document-preview';
 export type MfaChannel = 'email' | 'sms';
 
@@ -230,6 +231,14 @@ export class MyDoctorV1Api {
     return openPrivateDocument(this.url(path),this.token);
   }
 
+  getAdminStoragePlans(signal?: AbortSignal) { return this.req<AdminStoragePlans>('/admin/storage/plans', { signal }); }
+  getAdminOverview(signal?: AbortSignal) { return this.req<AdminOverview>('/admin/overview', { signal }); }
+  listAdminAccounts(filters: AdminAccountFilters, page: number, signal?: AbortSignal) {
+    return this.req<AdminPage<AdminAccountRow>>('/admin/accounts?' + new URLSearchParams({ ...filters, page: String(page) }), { signal });
+  }
+  listAdminRelationships(userNumber: number, kind: AdminLinkKind, page: number, signal?: AbortSignal) {
+    return this.req<AdminPage<AdminRelationship>>(`/admin/accounts/${userNumber}/relationships?` + new URLSearchParams({ kind, page: String(page) }), { signal });
+  }
   getAdminSession() { return this.req<{ authorized: boolean }>('/admin/session'); }
   listAdminCatalog(kind:AdminCatalogKind, filters:{source:string;status:string;q:string;page:number;sort:'asc'|'desc'},signal?:AbortSignal){
     return this.req<AdminCatalogPageV1>('/admin/catalogs/'+kind+'?'+new URLSearchParams({...filters,page:String(filters.page)}),{signal});

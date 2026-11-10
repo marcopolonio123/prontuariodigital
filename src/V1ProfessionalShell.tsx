@@ -1,7 +1,7 @@
 import { adminCatalogs, adminDestinations, isAdminCatalog, isAdminDestination, type AdminDestination } from './lib/admin-navigation';
 import AdminCatalogPanel from './components/AdminCatalogPanel';
 import AdminIntegrationsPanel from './components/AdminIntegrationsPanel';
-import AdminStoragePanel from './components/AdminStoragePanel';
+import { AdminAccountsPanel, AdminHealthPanel, AdminStoragePlansPanel } from './components/AdminInsights';
 import TutorRequestsPanel from './components/TutorRequestsPanel';
 import SessionIdentity from './components/SessionIdentity';
 import {ProfessionalTeam,StaffWorkspace} from './components/ProfessionalStaff';
@@ -77,7 +77,9 @@ export default function V1ProfessionalShell() {
                 : view === 'admin-integrations' ? <AdminIntegrationsPanel api={api}/>
                 : view === 'admin-verification' ? <ProfessionalAdminPanel api={api}/>
                 : view === 'admin-tutorship' ? <TutorRequestsPanel api={api} admin/>
-                : view === 'admin-storage' ? <AdminStoragePanel/>
+                : view === 'admin-storage' ? <AdminStoragePlansPanel api={api}/>
+                : view === 'admin-accounts' ? <AdminAccountsPanel api={api}/>
+                : view === 'admin-health' ? <AdminHealthPanel api={api}/>
                 : <IdentificationHistoryPanel api={api} admin/>}
             </div> : <p role="status">Acesso restrito à administração.</p>)
           : view === 'professional' ? <ProfessionalProfilePanel api={api} />

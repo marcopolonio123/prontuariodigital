@@ -16,6 +16,8 @@ export const adminDestinations = {
   'admin-verification': 'Validação de profissionais',
   'admin-tutorship': 'Solicitações de tutoria',
   'admin-storage': 'Planos de armazenamento',
+  'admin-accounts': 'Usuários e vínculos',
+  'admin-health': 'Saúde do app',
   'admin-identification': 'Auditoria de identificação',
 } as const;
 

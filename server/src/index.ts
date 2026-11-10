@@ -1,3 +1,4 @@
+import adminInsightsRouter from './admin-insights.js';
 import adminCatalogRouter from './admin-catalogs.js';
 import integrationsRouter from './integrations.js';
 import professionalStaffRouter from './professional-staff.js';
@@ -53,6 +54,7 @@ app.use('/api/v1', professionalAccessRouter);
 app.use('/api/v1', medicationAgendaRouter);
 app.use('/api/v1', professionalAdminRouter);
 app.use('/api/v1', adminCatalogRouter);
+app.use('/api/v1', adminInsightsRouter);
 
 interface AuthedRequest extends Request { userId?: string; }
 function sign(userId: string): string { return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: JWT_TTL }); }

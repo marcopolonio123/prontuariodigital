@@ -109,6 +109,7 @@ jobs:
           node scripts/reference-directory-smoke.mjs
           node scripts/guided-references-smoke.mjs
           node scripts/admin-catalog-smoke.mjs
+          node scripts/admin-insights-smoke.mjs
 
 
 
