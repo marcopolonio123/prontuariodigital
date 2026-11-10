@@ -1,3 +1,4 @@
+import { listPharmacyPopular } from './pharmacy-popular.js';
 import { CatalogError, searchMedicationCatalog, verifiedMedication } from './medication-catalog.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
@@ -19,6 +20,17 @@ router.post('/directory/medications/search', auth, (req: AuthedRequest, res: Res
   try { return res.json(searchMedicationCatalog(req.body?.query)); }
   catch (error) { if(error instanceof CatalogError)return res.status(error.status).json({error:error.message});return res.status(503).json({error:'Catálogo indisponível.'}); }
 });
+router.post('/directory/pharmacy-popular/search', auth, (req: AuthedRequest, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const { query, page, sort } = req.body ?? {};
+  if (typeof query !== 'string' || query.length > 100 || !Number.isInteger(page) || page < 1 || page > 10000 ||
+      !['asc', 'desc'].includes(sort)) {
+    return res.status(400).json({ error: 'Confira os filtros da consulta.' });
+  }
+  try { return res.json(listPharmacyPopular(query, page, sort)); }
+  catch { return res.status(503).json({ error: 'A lista do Farmácia Popular está indisponível no momento.' }); }
+});
+
 export function grantAllowsMedication(scope: unknown) {
   return scope == null || (Array.isArray(scope) && (scope.includes('record') || scope.includes('medications')));
 }

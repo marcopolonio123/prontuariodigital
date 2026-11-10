@@ -82,7 +82,11 @@ export interface IncomingAccessRequestV1 {assistantName?:string|null;
 export interface LocationAddressV1 {postalCode:string;street:string;number:string;complement:string;neighborhood:string;city:string;state:string;country:string}
 export interface LocationAvailabilityV1 {weekday:number;start:string;end:string}
 export interface CnesLocationV1 {code:string;name:string;unitType:number|null;fullAddress:LocationAddressV1}
-export interface MedicationCatalogItemV1 {registration:string;name:string;ingredient:string}
+export interface PharmacyPopularPageV1 {
+  edition: string; cmedEdition: string; total: number; page: number; size: number;
+  items: { ean: string; product: string; brand: string | null; presentation: string | null; registration: string | null }[];
+}
+export interface MedicationCatalogItemV1 {registration:string;name:string;ingredient:string;pharmacyPopularEans?:number}
 export interface ProfessionalLocationV1 { id: string; cnes?:string|null; name: string; address: string; fullAddress?:LocationAddressV1|null; availability?:LocationAvailabilityV1[];active?:boolean;hasAssociations?:boolean; }
 
 export interface ProfessionalConsultationDetailV1 extends HealthEventV1 { patientName: string; editable: boolean; canSubmit: boolean; documents: Array<{ id: string; type: string; originalFilename: string }>; }
@@ -161,7 +165,7 @@ export interface AdminCatalogEntryV1 {
   id:string;name:string;internalCode:string|null;description:string;active:boolean;version:number;updatedAt:string;
   history?:Array<{action:string;version:number;createdAt:string}>;
 }
-export interface AdminCatalogReferenceV1 {id:string;name:string;code:string;description:string;source:string;edition?:string;profileStatus?:string}
+export interface AdminCatalogReferenceV1 {id:string;name:string;code:string;description:string;source:string;edition?:string;profileStatus?:string;pharmacyPopularEans?:number}
 export interface AdminCatalogPageV1 {items:Array<AdminCatalogEntryV1|AdminCatalogReferenceV1>;total:number;page:number;pageSize:number}
 export type AdminCatalogInput = {name:string;internalCode:string;description:string};
 
@@ -208,6 +212,9 @@ export class MyDoctorV1Api {
   searchCnesUnits(city:string,query:string,offset:number,signal?:AbortSignal){return this.req<{items:Array<{code:string;name:string;street:string}>;nextOffset:number|null}>('/directory/cnes/search',{method:'POST',body:JSON.stringify({city,query,offset}),signal});}
   searchAns(query:string,operator?:string,signal?:AbortSignal){return this.req<{edition:string;items:Array<{code:string;name:string;legalName?:string;uf?:string}>}>('/directory/ans/search',{method:'POST',body:JSON.stringify({query,operator}),signal});}
   lookupCnes(code:string,signal?:AbortSignal) { return this.req<CnesLocationV1>('/directory/cnes/'+encodeURIComponent(code),{signal}); }
+  searchPharmacyPopular(query: string, page: number, sort: 'asc'|'desc', signal?: AbortSignal) {
+    return this.req<PharmacyPopularPageV1>('/directory/pharmacy-popular/search', {method:'POST',body:JSON.stringify({query,page,sort}),signal});
+  }
   searchMedicationCatalog(query:string,signal?:AbortSignal) { return this.req<{importedOn:string;items:MedicationCatalogItemV1[]}>('/directory/medications/search',{method:'POST',body:JSON.stringify({query}),signal}); }
   lookupAddress(cep: string, signal?: AbortSignal) { return this.req<{ erro?: boolean | string; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string }>(`/address/cep/${encodeURIComponent(cep)}`, { signal }); }
   getAccount() { return this.req<AccountProfileV1>('/account'); }
