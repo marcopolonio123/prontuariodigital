@@ -68,7 +68,7 @@ try{
   await expandAdmin();
   await adminGroup.getByRole('button',{name:'Usuários e vínculos',exact:true}).click();
   await page.getByText(/Filtros · 11 conta/).click();
-  await page.getByLabel('Plano no carrinho',{exact:true}).selectOption('20');
+  await page.getByLabel('Plano no carrinho').selectOption('20');
   await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
   await page.getByText(/Filtro ativo · 11 conta/).waitFor();
   assert.equal(accountQuery.get('cart'),'20');
