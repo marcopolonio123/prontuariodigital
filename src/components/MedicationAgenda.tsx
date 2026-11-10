@@ -1,3 +1,4 @@
+import MedicationLeafletLink from './MedicationLeafletLink';
 import QueryList,{QueryFilters} from './QueryList';
 
 import { useEffect, useRef, useState } from 'react';
@@ -33,7 +34,10 @@ function CatalogField({api,name,registration,onSelect,disabled}:{api:MyDoctorV1A
   return <div className="min-w-0 space-y-2">
     <label className="text-xs font-bold text-mute">Medicamento<input value={name} maxLength={150} onChange={e=>{request.current?.abort();setPending(false);setItems([]);setStatus('');onSelect(e.target.value,null)}} className={inputClass}/></label>
     <button type="button" className={secondaryClass} disabled={disabled||pending||name.trim().length<3||name.trim().length>80} onClick={()=>void search()}>{pending?'Buscando…':'Buscar no catálogo Anvisa'}</button>
-    {registration&&<p className="text-xs text-mute">Registro Anvisa: {registration}. A dose continua sendo informada conforme a prescrição.</p>}
+    {registration&&<div className="space-y-2">
+      <p className="text-xs text-mute">Registro Anvisa: {registration}. A dose continua sendo informada conforme a prescrição.</p>
+      <MedicationLeafletLink registration={registration} name={name} />
+    </div>}
     {status&&<p role="status" className="text-xs text-mute">{status}</p>}
     {items.length>0&&<ul className="max-h-56 space-y-1 overflow-auto rounded-lg border border-line bg-white p-2">{items.map(item=><li key={item.registration}><button type="button" disabled={disabled} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-paper" onClick={()=>{onSelect(item.name,item.registration);setItems([]);setStatus('')}}><strong>{item.name}</strong><span className="block text-xs text-mute">{item.ingredient||'Princípio ativo não informado'} · {item.registration}</span>{!!item.pharmacyPopularEans&&<span className="block text-xs font-semibold text-moss-800">Há embalagens no Farmácia Popular. Confira o código de barras.</span>}</button></li>)}</ul>}
   </div>;
@@ -146,6 +150,7 @@ export default function MedicationAgenda({ api, profile }: { api: MyDoctorV1Api;
        {key:'alerts',label:'Alertas',value:item=>item.alertsEnabled&&agenda.alertsEnabled?'Configurados':'Desativados'}
       ]} renderDetails={schedule=><div className="space-y-3"><h4 className="font-bold text-ink">{schedule.name}</h4><p>Dose: {schedule.dose||'Dose não informada'}</p><p>Dias: {schedule.weekdays.length===7?'Todos os dias':days.filter(([day])=>schedule.weekdays.includes(day)).map(([,label])=>label).join(', ')}</p><p>Horários: {schedule.times.join(', ')} · {schedule.timezone.replace('America/','').replace(/_/g,' ')}</p><p>{schedule.continuousUse?'Uso contínuo':schedule.startsOn.split('-').reverse().join('/')+(schedule.endsOn?' até '+schedule.endsOn.split('-').reverse().join('/'):' · Sem término')}</p><p>Alertas: {schedule.alertsEnabled&&agenda.alertsEnabled?'Configurados':'Desativados'}</p><p>Destinatários: {schedule.recipientIds.map(id=>agenda.recipients.find(person=>person.id===id)?.name??'Conta sem acesso vigente').join(', ')||'Sem destinatários'}</p>
       {agenda.registeredMedications?.some(medicine=>normalized(medicine.name)===normalized(schedule.name)&&normalized(medicine.dose)!==normalized(schedule.dose))&&<p className="text-warn-600">Dose diferente do prontuário. Confira a prescrição.</p>}
+      <MedicationLeafletLink registration={schedule.medicationRegistration} name={schedule.name} />
       {agenda.canEdit ? <div className="flex items-center gap-1 whitespace-nowrap">
                 <button className="inline-flex min-h-11 items-center rounded-md border border-line px-2 py-1.5 text-xs font-semibold text-moss-800 hover:bg-moss-50 disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Editar ${schedule.name}`} onClick={() => { setEditing(schedule); setForm({ name: schedule.name, medicationRegistration:schedule.medicationRegistration, dose: schedule.dose, continuousUse: schedule.continuousUse === true, weekdays: schedule.weekdays, times: schedule.times, timezone: schedule.timezone, startsOn: schedule.startsOn, endsOn: schedule.endsOn, recipientIds: schedule.recipientIds, alertsEnabled: schedule.alertsEnabled }); }}>Editar</button>
                 <button className="inline-flex min-h-11 items-center rounded-md px-2 py-1.5 text-xs font-semibold text-mute hover:bg-paper disabled:opacity-50 md:min-h-0" disabled={busy} aria-label={`Remover ${schedule.name}`} onClick={() => void run(async () => { if (!window.confirm(`Remover ${schedule.name} da agenda e interromper seus alertas?`)) return; await api.removeMedicationSchedule(profile.id, schedule.id); await refresh(); if (editing?.id === schedule.id) { setEditing(null); setForm(null); } setFeedback('Medicamento removido da agenda.'); })}>Remover</button>

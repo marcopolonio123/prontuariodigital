@@ -11,14 +11,16 @@ try{
   await page.addInitScript(()=>sessionStorage.setItem('mydoctor.v1.sessionToken','medication-fixture'));
   const schedules=Array.from({length:23},(_,i)=>({id:'med-'+i,patientId:'p1',name:'Medicamento '+i,dose:'10 mg',weekdays:[1],times:['08:00'],continuousUse:false,timezone:'America/Sao_Paulo',startsOn:'2026-10-01',endsOn:'2026-10-31',recipientIds:['p1'],alertsEnabled:false,active:true,updatedAt:'2026-10-01T12:00:00Z'}));
   schedules[21]={...schedules[21],name:'Temporário',weekdays:[3],recipientIds:['r2'],alertsEnabled:true,endsOn:'2026-10-05'};
-  schedules[22]={...schedules[22],name:'Ácido fólico',dose:'5 mg',weekdays:[0,3],times:['07:00','19:00'],continuousUse:true,startsOn:'',endsOn:null,recipientIds:['r2'],alertsEnabled:true};
+  schedules[22]={...schedules[22],name:'Ácido fólico',medicationRegistration:'105830220',dose:'5 mg',weekdays:[0,3],times:['07:00','19:00'],continuousUse:true,startsOn:'',endsOn:null,recipientIds:['r2'],alertsEnabled:true};
+  const officialLeaflet='https://consultas.anvisa.gov.br/#/bulario/q/?numeroRegistro=105830220';
   let mutations=0, benefitQuery='';
   await page.route('**/api/v1/**',route=>{
    const path=new URL(route.request().url()).pathname.replace('/api/v1','');
    if(path==='/directory/pharmacy-popular/search'){
     benefitQuery=route.request().postDataJSON().query;
     const item={ean:'7894916502900',product:'MEDICAMENTO OFICIAL DE TESTE',brand:'Marca teste',presentation:'Embalagem teste',registration:'105830220'};
-    const items=!benefitQuery||benefitQuery===item.ean?[item]:[];
+    const unmatched={...item,ean:'7894916512589',product:'EMBALAGEM SEM REGISTRO VINCULADO',brand:null,presentation:null,registration:null};
+    const items=!benefitQuery||benefitQuery===item.ean?[item]:benefitQuery===unmatched.ean?[unmatched]:[];
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items,total:items.length,page:1,size:10,edition:'2026-10-16',cmedEdition:'2026-11-09'})});
    }
    if(route.request().method()!=='GET')mutations++;
@@ -37,7 +39,7 @@ try{
   await top.getByRole('button',{name:'Próxima',exact:true}).click();await top.getByRole('button',{name:'Próxima',exact:true}).click();assert.equal(await rows.count(),3);
   await search.fill('acido');assert.equal(await rows.count(),3,'Pesquisa aplicada antes do botão');
   await search.press('Enter');assert.equal(await rows.count(),1);await rows.getByText('Ácido fólico',{exact:true}).waitFor();
-  assert.equal(await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).count(),0); await rows.first().click(); await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).click(); await page.getByRole('button',{name:'Cancelar',exact:true}).click(); assert.equal(await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).count(),1); assert.equal(await top.count(),0);await filters.getByText('Filtro ativo',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).count(),0); await rows.first().click(); assert.equal(await page.getByRole('link',{name:/Bula digital de Ácido fólico/}).getAttribute('href'),officialLeaflet); await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).click(); await page.getByRole('button',{name:'Cancelar',exact:true}).click(); assert.equal(await page.getByRole('button',{name:'Editar Ácido fólico',exact:true}).count(),1); assert.equal(await top.count(),0);await filters.getByText('Filtro ativo',{exact:true}).waitFor();
   await clear.click();assert.equal(await rows.count(),10);assert.equal(await search.inputValue(),'');
   await page.getByLabel('Dia da semana',{exact:true}).selectOption('0');await page.getByLabel('Tipo de uso',{exact:true}).selectOption('continuous');
   await page.getByLabel('Destinatário dos alertas',{exact:true}).selectOption('r2');await page.getByLabel('Alertas configurados',{exact:true}).selectOption('on');
@@ -61,6 +63,14 @@ try{
   await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
   await page.getByText('Gratuito no programa',{exact:true}).waitFor();
   assert.equal(benefitQuery,'7894916502900');
+  const leaflet=page.getByRole('link',{name:/Bula digital de Marca teste/});
+  assert.equal(await leaflet.getAttribute('href'),officialLeaflet);
+  assert.equal(await leaflet.getAttribute('target'),'_blank');
+  await pharmacySearch.fill('7894916512589');
+  await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
+  await page.getByText('Bula não vinculada',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('link',{name:/Bula digital de/}).count(),0);
+  assert.equal(await page.getByRole('link',{name:'Consultar Bulário da Anvisa',exact:true}).getAttribute('href'),'https://consultas.anvisa.gov.br/#/bulario/');
   assert.equal(await page.getByRole('navigation',{name:/Páginas de medicamentos/}).count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   console.log('Medicamentos: filtros combinados, acentos, período, horário, paginação, Enter e limpar OK',width);await page.close();
