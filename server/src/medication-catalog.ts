@@ -1,4 +1,4 @@
-import {pharmacyPopularCoverage} from './pharmacy-popular.js';
+import {listPharmacyPopular,pharmacyPopularCoverage,pharmacyPopularProductCounts} from './pharmacy-popular.js';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {gunzipSync} from 'node:zlib';
@@ -43,12 +43,24 @@ export function verifiedMedication(registration:unknown) {
 }
 
 /** Admin consultation of the packaged edition. This never mutates source data. */
-export function listMedicationReferences(query:string,skip:number,take:number,sort:'asc'|'desc') {
+export function listMedicationReferences(query:string,skip:number,take:number,sort:'asc'|'desc',freeOnly=false) {
   const {items,importedOn}=load();
   const words=normalize(query).split(' ');
-  const matches=[...items.values()].filter(item=>words.every(word=>item.search.includes(word)||item.registration.includes(word)));
+  const digits=query.replace(/[ .-]/g,'');
+  let covered: ReadonlyMap<string,number>|undefined;
+  let eanRegistration: string|null|undefined;
+  if(freeOnly) {
+    try {
+      covered=pharmacyPopularProductCounts();
+      if(/^\d{13}$/.test(digits))eanRegistration=listPharmacyPopular(digits,1,'asc').items[0]?.registration??null;
+    } catch { throw new CatalogError(503,'A lista do Farmácia Popular está indisponível no momento.'); }
+  }
+  const matches=[...items.values()].filter(item=>
+    (!covered||covered.has(item.registration))&&
+    (eanRegistration!==undefined?item.registration===eanRegistration:words.every(word=>item.search.includes(word)||item.registration.includes(word)))
+  );
   matches.sort((a,b)=>(sort==='asc'?1:-1)*a.name.localeCompare(b.name,'pt-BR')||a.registration.localeCompare(b.registration));
   return {total:matches.length,items:matches.slice(skip,skip+take).map(item=>({
-    id:item.registration,name:item.name,code:item.registration,description:item.ingredient,source:'Anvisa',edition:importedOn,pharmacyPopularEans:pharmacyPopularCoverage(item.registration),
+    id:item.registration,name:item.name,code:item.registration,description:item.ingredient,source:'Anvisa',edition:importedOn,pharmacyPopularEans:covered?.get(item.registration)??pharmacyPopularCoverage(item.registration),
   }))};
 }

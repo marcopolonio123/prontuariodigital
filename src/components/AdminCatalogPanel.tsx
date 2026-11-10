@@ -15,6 +15,7 @@ const actions:Record<string,string>={create:'Inclusão',edit:'Edição',archive:
 const profileStatus:Record<string,string>={verified:'Aprovado',pending:'Em análise',unverified:'Não verificado',rejected:'Recusado',suspended:'Suspenso'};
 
 export default function AdminCatalogPanel({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
+  const [freeOnly,setFreeOnly]=useState(false);
   const [sort,setSort]=useState<'asc'|'desc'>('asc');
   const [source,setSource]=useState<'local'|'reference'>('local'),[status,setStatus]=useState('active');
   const [query,setQuery]=useState(''),[applied,setApplied]=useState(''),[page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
@@ -24,15 +25,16 @@ export default function AdminCatalogPanel({api,kind}:{api:MyDoctorV1Api;kind:Adm
   useEffect(()=>{
     const controller=new AbortController();
     setLoading(true);setData(null);
-    void api.listAdminCatalog(kind,{source,status,q:applied,page,sort},controller.signal).then(value=>{
+    void api.listAdminCatalog(kind,{source,status,q:applied,page,sort,...(freeOnly?{benefit:'free' as const}:{})},controller.signal).then(value=>{
       if(controller.signal.aborted)return;
+      if(freeOnly&&value.benefit!=='free')throw new Error('O filtro de gratuidade está indisponível no momento. Tente novamente.');
       const last=Math.max(1,Math.ceil(value.total/value.pageSize));
       if(page>last){setPage(last);return;}
       setData(value);
     }).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Consulta indisponível.');})
       .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return()=>controller.abort();
-  },[api,kind,source,status,applied,page,sort,refresh]);
+  },[api,kind,source,status,applied,page,sort,refresh,freeOnly]);
   const close=()=>{setForm(null);setEntry(null);setArchive(false)};
   const resetMessages=()=>{setError('');setMessage('')};
   async function run(work:()=>Promise<void>){
@@ -57,14 +59,21 @@ export default function AdminCatalogPanel({api,kind}:{api:MyDoctorV1Api;kind:Adm
   return <div className="mt-4 space-y-4">
     <p className="text-sm text-mute">{descriptions[kind]}</p>
     <div className="flex flex-wrap gap-2">
-      {(['local','reference'] as const).map(value=><button key={value} type="button" disabled={busy} aria-pressed={source===value} className={source===value?primary:button} onClick={()=>{if(source===value)return;close();resetMessages();setSource(value);setPage(1)}}>{value==='local'?'Cadastros locais':'Consultar referências'}</button>)}
+      {(['local','reference',...(kind==='medications'?['free'] as const:[])] as const).map(value=>{
+        const active=value==='free'?freeOnly:source===value&&!freeOnly;
+        return <button key={value} type="button" disabled={busy} aria-pressed={active} className={active?primary:button} onClick={()=>{
+          if(active)return;
+          close();resetMessages();setSource(value==='local'?'local':'reference');setFreeOnly(value==='free');if(value==='free')setApplied(query.trim());setPage(1);
+        }}>{value==='local'?'Cadastros locais':value==='reference'?'Consultar referências':'Gratuitos no Farmácia Popular'}</button>;
+      })}
       {source==='local'&&<button type="button" disabled={busy} className={button} onClick={()=>{close();resetMessages();setForm(empty())}}>+ Incluir cadastro</button>}
     </div>
-    {source==='reference'&&<p className="rounded-lg bg-paper p-3 text-xs text-mute">Referências para consulta. As alterações feitas nos cadastros locais não modificam estas fontes.</p>}
+    {freeOnly&&<p className="rounded-lg bg-moss-50 p-3 text-xs text-mute">Mostra produtos da Anvisa com embalagens listadas no programa. Confira o código de barras para confirmar a cobertura. A CMED informa preços máximos, sem identificar descontos das farmácias.</p>}
+    {source==='reference'&&!freeOnly&&<p className="rounded-lg bg-paper p-3 text-xs text-mute">Referências para consulta. As alterações feitas nos cadastros locais não modificam estas fontes.</p>}
     <form className="flex flex-wrap items-end gap-2" onSubmit={e=>{e.preventDefault();resetMessages();setPage(1);setApplied(query.trim());setRefresh(x=>x+1)}}>
-      <label className="min-w-0 flex-1 text-xs font-bold">Buscar por nome ou código<input value={query} maxLength={100} onChange={e=>setQuery(e.target.value)} className={field}/></label>
+      <label className="min-w-0 flex-1 text-xs font-bold">{freeOnly?'Buscar por nome, registro Anvisa ou código de barras':'Buscar por nome ou código'}<input value={query} maxLength={100} onChange={e=>setQuery(e.target.value)} className={field}/></label>
       {source==='local'&&<label className="text-xs font-bold">Situação<select value={status} className={field} onChange={e=>{resetMessages();setStatus(e.target.value);setPage(1)}}><option value="active">Ativos</option><option value="archived">Arquivados</option><option value="all">Todos</option></select></label>}
-      <button className={button} disabled={busy}>Buscar</button><button type="button" className={button} disabled={busy} onClick={()=>{resetMessages();setQuery('');setApplied('');setStatus('active');setPage(1);setRefresh(x=>x+1)}}>Limpar</button>
+      <button className={button} disabled={busy}>Buscar</button><button type="button" className={button} disabled={busy} onClick={()=>{resetMessages();setQuery('');setApplied('');setStatus('active');setFreeOnly(false);setPage(1);setRefresh(x=>x+1)}}>Limpar</button>
     </form>
     {error&&<p role="alert" className="rounded-lg border border-line p-3 text-sm">{error}</p>}
     {message&&<p role="status" className="rounded-lg bg-moss-50 p-3 text-sm">{message}</p>}
@@ -72,9 +81,9 @@ export default function AdminCatalogPanel({api,kind}:{api:MyDoctorV1Api;kind:Adm
     {data&&<><p role="status" className="text-xs text-mute">{data.total?('Exibindo '+((page-1)*data.pageSize+1)+'–'+Math.min(page*data.pageSize,data.total)+' de '+data.total+' registros'):'0 registros'}</p>
       {pagination('Paginação acima da tabela')}
       {data.items.length>0?<div className="overflow-x-auto"><table className="w-full min-w-[500px] text-left text-sm">
-        <thead><tr className="border-b border-line"><th className="p-2" scope="col" aria-sort={sort==='asc'?'ascending':'descending'}><button type="button" disabled={busy} className="min-h-10 text-left font-bold underline underline-offset-2" aria-label={sort==='asc'?'Ordenar nome de Z a A':'Ordenar nome de A a Z'} onClick={()=>{resetMessages();setSort(sort==='asc'?'desc':'asc');setPage(1)}}>Nome <span aria-hidden="true">{sort==='asc'?'↑':'↓'}</span></button></th><th className="p-2">Código</th><th className="p-2">Situação / origem</th><th className="p-2">Ações</th></tr></thead>
+        <thead><tr className="border-b border-line"><th className="p-2" scope="col" aria-sort={sort==='asc'?'ascending':'descending'}><button type="button" disabled={busy} className="min-h-10 text-left font-bold underline underline-offset-2" aria-label={sort==='asc'?'Ordenar nome de Z a A':'Ordenar nome de A a Z'} onClick={()=>{resetMessages();setSort(sort==='asc'?'desc':'asc');setPage(1)}}>Nome <span aria-hidden="true">{sort==='asc'?'↑':'↓'}</span></button></th><th className="p-2">Código</th><th className="p-2">Situação / origem</th>{(source==='local'||kind!=='medications')&&<th className="p-2">Ações</th>}</tr></thead>
         <tbody>{data.items.map(item=><tr key={item.id} className="border-b border-line"><th scope="row" className="p-2 font-semibold">{item.name}{item.description&&<span className="block max-w-md break-words text-xs font-normal text-mute">{item.description}</span>}</th>
-          {'version' in item?<><td className="break-all p-2">{item.internalCode||'—'}</td><td className="p-2">{item.active?'Ativo':'Arquivado'}</td><td className="p-2"><button type="button" disabled={busy} className={button} onClick={()=>void run(async()=>{const detail=await api.adminCatalogDetail(kind,item.id);setEntry(detail);setArchive(false);setForm(detail.active?{name:detail.name,internalCode:detail.internalCode??'',description:detail.description}:null)})}>Abrir cadastro</button></td></>:<><td className="break-all p-2">{item.code||'—'}</td><td className="p-2">{item.source}{item.profileStatus?' · '+(profileStatus[item.profileStatus]??item.profileStatus):''}{!!item.pharmacyPopularEans&&<span className="block text-xs font-semibold text-moss-800">Farmácia Popular · {item.pharmacyPopularEans} EAN(s)</span>}{item.edition&&<span className="block text-xs text-mute">{item.edition.split('-').reverse().join('/')}</span>}</td><td className="p-2"><button type="button" className={button} disabled={busy} onClick={()=>{close();resetMessages();setSource('local');setPage(1);setForm({name:item.name.slice(0,150),internalCode:'',description:item.description.slice(0,1500)});setMessage('Confira os dados antes de incluir. Este será um cadastro local.')}}>Usar como base</button></td></>}
+          {'version' in item?<><td className="break-all p-2">{item.internalCode||'—'}</td><td className="p-2">{item.active?'Ativo':'Arquivado'}</td><td className="p-2"><button type="button" disabled={busy} className={button} onClick={()=>void run(async()=>{const detail=await api.adminCatalogDetail(kind,item.id);setEntry(detail);setArchive(false);setForm(detail.active?{name:detail.name,internalCode:detail.internalCode??'',description:detail.description}:null)})}>Abrir cadastro</button></td></>:<><td className="break-all p-2">{item.code||'—'}</td><td className="p-2">{item.source}{item.profileStatus?' · '+(profileStatus[item.profileStatus]??item.profileStatus):''}{!!item.pharmacyPopularEans&&<span className="block text-xs font-semibold text-moss-800">Farmácia Popular · {item.pharmacyPopularEans} EAN(s)</span>}{item.edition&&<span className="block text-xs text-mute">{item.edition.split('-').reverse().join('/')}</span>}</td>{kind!=='medications'&&<td className="p-2"><button type="button" className={button} disabled={busy} onClick={()=>{close();resetMessages();setSource('local');setPage(1);setForm({name:item.name.slice(0,150),internalCode:'',description:item.description.slice(0,1500)});setMessage('Confira os dados antes de incluir. Este será um cadastro local.')}}>Usar como base</button></td>}</>}
         </tr>)}</tbody>
       </table></div>:<p className="text-sm text-mute">Nenhum registro encontrado neste filtro.</p>}
       {pagination('Paginação abaixo da tabela')}

@@ -43,8 +43,8 @@ const endpoint=(fn:(req:AdminRequest,res:Response)=>Promise<unknown>)=>(req:Admi
   });
 };
 
-async function references(kind:Kind,q:string,skip:number,sort:Prisma.SortOrder){
-  if(kind==='medications')return listMedicationReferences(q,skip,pageSize,sort);
+async function references(kind:Kind,q:string,skip:number,sort:Prisma.SortOrder,freeOnly:boolean){
+  if(kind==='medications')return listMedicationReferences(q,skip,pageSize,sort,freeOnly);
   if(kind==='insurers')return listOperatorReferences(q,skip,pageSize,sort);
   if(kind==='professionals'){
     const where:Prisma.PractitionerWhereInput=q?{OR:[{name:{contains:q,mode:'insensitive'}},{registrations:{some:{registration:{equals:q}}}}]}:{};
@@ -74,8 +74,12 @@ router.get('/admin/catalogs/:kind',requireAdmin,endpoint(async(req,res)=>{
   if(sort!=='asc'&&sort!=='desc')throw new CatalogInputError(400,'Ordenação inválida.');
   const source=req.query.source??'local',status=req.query.status??'active',page=Number(req.query.page??1);
   if(!Number.isInteger(page)||page<1||page>3000||!['local','reference'].includes(String(source))||!['active','archived','all'].includes(String(status)))throw new CatalogInputError(400,'Filtros inválidos.');
+  const benefit=req.query.benefit;
+  if(benefit!==undefined&&(benefit!=='free'||kind!=='medications'||source!=='reference')) {
+    throw new CatalogInputError(400,'O filtro de gratuidade é para referências de medicamentos.');
+  }
   const skip=(page-1)*pageSize;
-  if(source==='reference')return res.json({...await references(kind,q,skip,sort),page,pageSize});
+  if(source==='reference')return res.json({...await references(kind,q,skip,sort,benefit==='free'),page,pageSize,...(benefit==='free'?{benefit}:{})});
   const where:Prisma.AdminCatalogEntryWhereInput={kind,...(status==='all'?{}:{active:status==='active'}),...(q?{searchText:{contains:normalized(q).replace(/\s+/g,' ')}}:{})};
   const [total,items]=await prisma.$transaction([
     prisma.adminCatalogEntry.count({where}),

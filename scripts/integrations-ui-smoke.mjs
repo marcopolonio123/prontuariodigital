@@ -19,7 +19,13 @@ try{
    else if(p==='/admin/session')body={authorized:admin};
    else if(p==='/alerts')body={items:[],total:0};
    else if(p==='/professional/profile')body={active:false};
-   else if(p.startsWith('/admin/catalogs/')){assert(admin);openedCatalogs.push(p.split('/').at(-1));body={items:[],total:0,page:1,pageSize:10};}
+   else if(p.startsWith('/admin/catalogs/')){
+    assert(admin);openedCatalogs.push(p.split('/').at(-1));body={items:[],total:0,page:1,pageSize:10};
+    if(u.searchParams.get('benefit')==='free'){
+     assert.equal(p,'/admin/catalogs/medications');assert.equal(u.searchParams.get('source'),'reference');
+     body={...body,benefit:'free',items:[{id:'105830220',name:'Medicamento teste com cobertura',code:'105830220',source:'Anvisa',pharmacyPopularEans:1}],total:1};
+    }
+   }
    else if(p==='/admin/storage/plans'){assert(admin);body={checkoutEnabled:false,plans:[{gb:1,period:'unlimited',priceCents:0,currency:'BRL',purchasable:false},{gb:20,period:'month',priceCents:650,currency:'BRL',purchasable:false}]};}
    else if(p==='/admin/accounts'){assert(admin);accountQuery=u.searchParams;body={items:[adminAccount],total:11,page:Number(u.searchParams.get('page')),size:10};}
    else if(p==='/admin/accounts/8/relationships'){assert(admin);body={items:[{recordNumber:17,name:'Dependente teste',owner:adminAccount,tutor:adminAccount}],total:1,page:1,size:10};}
@@ -49,6 +55,17 @@ try{
    await page.getByRole('heading',{name:label,exact:true}).waitFor();
    await page.getByText('Nenhum registro encontrado neste filtro.',{exact:true}).waitFor();
    assert.equal(openedCatalogs.at(-1),kind);
+   if(kind==='medications'){
+    const filter=page.getByRole('button',{name:'Gratuitos no Farmácia Popular',exact:true});
+    await filter.click();
+    await page.getByText('Medicamento teste com cobertura',{exact:true}).waitFor();
+    assert.equal(await filter.getAttribute('aria-pressed'),'true');
+    assert.equal(await page.getByRole('button',{name:'Usar como base',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'+ Incluir cadastro',exact:true}).count(),0);
+    await page.getByRole('button',{name:'Cadastros locais',exact:true}).click();
+    await page.getByRole('button',{name:'+ Incluir cadastro',exact:true}).click();
+    assert.equal(await page.getByRole('region',{name:'Novo cadastro local',exact:true}).getByRole('textbox',{name:'Nome',exact:true}).inputValue(),'');
+   }
    await page.getByRole('button',{name:'Voltar ao MyDoctor'}).click();
    await expandAdmin();
   }
