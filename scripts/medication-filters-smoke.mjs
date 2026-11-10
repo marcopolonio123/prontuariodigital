@@ -12,9 +12,15 @@ try{
   const schedules=Array.from({length:23},(_,i)=>({id:'med-'+i,patientId:'p1',name:'Medicamento '+i,dose:'10 mg',weekdays:[1],times:['08:00'],continuousUse:false,timezone:'America/Sao_Paulo',startsOn:'2026-10-01',endsOn:'2026-10-31',recipientIds:['p1'],alertsEnabled:false,active:true,updatedAt:'2026-10-01T12:00:00Z'}));
   schedules[21]={...schedules[21],name:'Temporário',weekdays:[3],recipientIds:['r2'],alertsEnabled:true,endsOn:'2026-10-05'};
   schedules[22]={...schedules[22],name:'Ácido fólico',dose:'5 mg',weekdays:[0,3],times:['07:00','19:00'],continuousUse:true,startsOn:'',endsOn:null,recipientIds:['r2'],alertsEnabled:true};
-  let mutations=0;
+  let mutations=0, benefitQuery='';
   await page.route('**/api/v1/**',route=>{
    const path=new URL(route.request().url()).pathname.replace('/api/v1','');
+   if(path==='/directory/pharmacy-popular/search'){
+    benefitQuery=route.request().postDataJSON().query;
+    const item={ean:'7894916502900',product:'MEDICAMENTO OFICIAL DE TESTE',brand:'Marca teste',presentation:'Embalagem teste',registration:'105830220'};
+    const items=!benefitQuery||benefitQuery===item.ean?[item]:[];
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items,total:items.length,page:1,size:10,edition:'2026-10-16',cmedEdition:'2026-11-09'})});
+   }
    if(route.request().method()!=='GET')mutations++;
    const data=path==='/account'?{id:'u1',name:'Paciente teste',completed:true}:path==='/profiles'?[{id:'p1',name:'Paciente teste',source:'owned',relationship:'self'}]:path==='/patients/p1/medications'?{schedules,alertsEnabled:true,canEdit:true,recipients:[{id:'p1',name:'Paciente teste',emailMasked:'p***@example.test',owner:true},{id:'r2',name:'Tutor teste',emailMasked:'t***@example.test',owner:false}]}:path==='/admin/session'?{authorized:false}:[];
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
@@ -47,6 +53,16 @@ try{
   await filters.locator('summary').click();assert.equal(await filters.getAttribute('open'),null);assert.equal(await rows.count(),2);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(mutations,0,'Filtros alteraram medicamentos');
+  await page.getByRole('button',{name:'Abrir menu',exact:true}).click();
+  await page.getByRole('button',{name:'Medicamentos gratuitos',exact:true}).click();
+  await page.getByText('Gratuito no programa',{exact:true}).waitFor();
+  const pharmacySearch=page.getByRole('textbox',{name:'Medicamento, marca, registro Anvisa ou código de barras',exact:true});
+  await pharmacySearch.fill('7894916502900');
+  await page.getByRole('button',{name:'Pesquisar',exact:true}).click();
+  await page.getByText('Gratuito no programa',{exact:true}).waitFor();
+  assert.equal(benefitQuery,'7894916502900');
+  assert.equal(await page.getByRole('navigation',{name:/Páginas de medicamentos/}).count(),0);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   console.log('Medicamentos: filtros combinados, acentos, período, horário, paginação, Enter e limpar OK',width);await page.close();
  }
 }finally{await browser?.close();server.kill()}

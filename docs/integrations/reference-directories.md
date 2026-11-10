@@ -34,3 +34,15 @@ Revise o diff de contagem e publique a nova edição junto à aplicação. Não 
 - Operadoras e planos: buscar cadastro público aplicável e guardar código de operadora separadamente da identificação da carteirinha. Vincular autorização de exame apenas após confirmação da operadora.
 
 Fontes: [DEMAS / CNES](https://apidadosabertos.saude.gov.br/), [Dados Abertos Anvisa](https://dados.anvisa.gov.br/dados/), [Memed](https://doc.memed.com.br/).
+
+## Farmácia Popular
+
+**Minha saúde → Medicamentos gratuitos** pesquisa as embalagens do elenco por nome, marca, registro de produto ou código de barras. O cruzamento é por EAN exato com a lista PMC da CMED e pelo prefixo de nove dígitos do registro oficial presente no catálogo Anvisa. Códigos oficiais sem correspondência única na CMED continuam pesquisáveis, sem associação a um registro; não há associação por semelhança de nomes. Na agenda e na referência administrativa, o indicador do produto sinaliza que existem embalagens no programa, sem marcar o produto inteiro como coberto.
+
+A edição de 16/10/2026 inclui 656 EANs válidos; 621 vinculados à edição Anvisa de 09/11/2026. Um código com dígito verificador inválido foi excluído e registrado nos metadados. A lista PMC de 09/11/2026 serve para cruzar códigos e apresentações; o app não estima o preço da farmácia nem descontos.
+
+Para atualizar, baixe a [lista oficial de códigos do Farmácia Popular](https://www.gov.br/saude/pt-br/composicao/sectics/farmacia-popular/codigos-de-barras) e a [lista PMC da CMED](https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/cmed/precos/precos). Com Poppler e openpyxl, rode:
+
+    python3 server/scripts/import-pharmacy-popular.py lista-ean.pdf AAAA-MM-DD lista-pmc.xlsx AAAA-MM-DD
+
+Use as datas impressas nas fontes. Revise a contagem, os EANs excluídos e o número de correspondências antes de publicar a nova edição. O arquivo registra datas e hashes das fontes. A consulta roda no MyDoctor, sem transmitir a busca ou dados do paciente aos órgãos.
