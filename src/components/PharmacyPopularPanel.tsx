@@ -1,3 +1,4 @@
+import MedicationLeafletLink, { ANVISA_LEAFLET_DIRECTORY } from './MedicationLeafletLink';
 import { useEffect, useState } from 'react';
 import type { MyDoctorV1Api, PharmacyPopularPageV1 } from '../lib/api-v1';
 
@@ -53,7 +54,7 @@ export default function PharmacyPopularPanel({ api }: { api: MyDoctorV1Api }) {
               <th scope="col" className="p-2" aria-sort={sort === 'asc' ? 'ascending' : 'descending'}>
                 <button type="button" className="min-h-11 font-bold underline" onClick={() => { setSort(sort === 'asc' ? 'desc' : 'asc'); setPage(1); }}>Medicamento <span aria-hidden="true">{sort === 'asc' ? '↑' : '↓'}</span></button>
               </th>
-              <th scope="col" className="p-2">Código de barras</th><th scope="col" className="p-2">Benefício</th>
+              <th scope="col" className="p-2">Código de barras</th><th scope="col" className="p-2">Benefício e bula</th>
             </tr></thead>
             <tbody>{data.items.map(row => <tr className="border-b border-line" key={row.ean}>
               <th scope="row" className="max-w-md break-words p-2 font-semibold">
@@ -62,7 +63,13 @@ export default function PharmacyPopularPanel({ api }: { api: MyDoctorV1Api }) {
                 {row.registration && <span className="block text-xs font-normal text-mute">Registro Anvisa: {row.registration}</span>}
               </th>
               <td className="p-2 tabular-nums">{row.ean}</td>
-              <td className="p-2"><span className="inline-block rounded-lg bg-moss-50 px-2 py-1 text-xs font-bold text-moss-800">Gratuito no programa</span></td>
+              <td className="p-2">
+                <div className="flex flex-col items-start gap-2">
+                  <span className="inline-block rounded-lg bg-moss-50 px-2 py-1 text-xs font-bold text-moss-800">Gratuito no programa</span>
+                  {row.registration ? <MedicationLeafletLink registration={row.registration} name={row.brand || row.product} />
+                    : <span className="text-xs text-mute">Bula não vinculada</span>}
+                </div>
+              </td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -72,8 +79,10 @@ export default function PharmacyPopularPanel({ api }: { api: MyDoctorV1Api }) {
     <p className="text-sm text-mute">A retirada depende das regras do programa e do estoque de uma farmácia credenciada. Confira as orientações na fonte oficial.</p>
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold text-moss-800">
       <a className="underline" href={source} target="_blank" rel="noreferrer">Farmácia Popular: regras e farmácias</a>
+      <a className="underline" href={ANVISA_LEAFLET_DIRECTORY} target="_blank" rel="noreferrer">Consultar Bulário da Anvisa</a>
       <a className="underline" href={cmed} target="_blank" rel="noreferrer">Consultar preços máximos na CMED</a>
     </div>
+    <p className="text-xs text-mute">O botão Bula digital abre a consulta pelo registro do produto na Anvisa. Confira a apresentação da sua embalagem e escolha a bula do paciente.</p>
     <p className="text-xs text-mute">O preço máximo da CMED não é o preço praticado pela farmácia nem indica desconto.</p>
   </section>;
 }

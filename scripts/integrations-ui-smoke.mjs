@@ -60,6 +60,7 @@ try{
     await filter.click();
     await page.getByText('Medicamento teste com cobertura',{exact:true}).waitFor();
     assert.equal(await filter.getAttribute('aria-pressed'),'true');
+    assert.equal(await page.getByRole('link',{name:/Bula digital de Medicamento teste com cobertura/}).getAttribute('href'),'https://consultas.anvisa.gov.br/#/bulario/q/?numeroRegistro=105830220');
     assert.equal(await page.getByRole('button',{name:'Usar como base',exact:true}).count(),0);
     assert.equal(await page.getByRole('button',{name:'+ Incluir cadastro',exact:true}).count(),0);
     await page.getByRole('button',{name:'Cadastros locais',exact:true}).click();
