@@ -51,10 +51,11 @@ export function validatedInsurance(value:unknown){
 }
 
 /** Admin consultation. Plan associations remain under the ANS catalogue. */
-export function listOperatorReferences(query:string,skip:number,take:number){
+export function listOperatorReferences(query:string,skip:number,take:number,sort:'asc'|'desc'){
   const {edition,operators}=ansDirectory();
   const term=normalized(query);
   const matches=Object.entries(operators).filter(([id,[name,legal]])=>id.includes(term)||normalized(name+' '+legal).includes(term));
+  matches.sort((a,b)=>(sort==='asc'?1:-1)*a[1][0].localeCompare(b[1][0],'pt-BR')||a[0].localeCompare(b[0]));
   return {total:matches.length,items:matches.slice(skip,skip+take).map(([id,[name,legal,uf]])=>({
     id,name,code:id,description:[legal,uf].filter(Boolean).join(' · '),source:'ANS',edition,
   }))};

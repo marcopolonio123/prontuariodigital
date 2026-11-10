@@ -41,10 +41,11 @@ export function verifiedMedication(registration:unknown) {
 }
 
 /** Admin consultation of the packaged edition. This never mutates source data. */
-export function listMedicationReferences(query:string,skip:number,take:number) {
+export function listMedicationReferences(query:string,skip:number,take:number,sort:'asc'|'desc') {
   const {items,importedOn}=load();
   const words=normalize(query).split(' ');
   const matches=[...items.values()].filter(item=>words.every(word=>item.search.includes(word)||item.registration.includes(word)));
+  matches.sort((a,b)=>(sort==='asc'?1:-1)*a.name.localeCompare(b.name,'pt-BR')||a.registration.localeCompare(b.registration));
   return {total:matches.length,items:matches.slice(skip,skip+take).map(item=>({
     id:item.registration,name:item.name,code:item.registration,description:item.ingredient,source:'Anvisa',edition:importedOn,
   }))};

@@ -16,6 +16,7 @@ const actions:Record<string,string>={create:'Inclusão',edit:'Edição',archive:
 const profileStatus:Record<string,string>={verified:'Aprovado',pending:'Em análise',unverified:'Não verificado',rejected:'Recusado',suspended:'Suspenso'};
 
 function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
+  const [sort,setSort]=useState<'asc'|'desc'>('asc');
   const [source,setSource]=useState<'local'|'reference'>('local'),[status,setStatus]=useState('active');
   const [query,setQuery]=useState(''),[applied,setApplied]=useState(''),[page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
   const [data,setData]=useState<AdminCatalogPageV1|null>(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
@@ -24,12 +25,15 @@ function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
   useEffect(()=>{
     const controller=new AbortController();
     setLoading(true);setData(null);
-    void api.listAdminCatalog(kind,{source,status,q:applied,page},controller.signal).then(value=>{
-      if(!controller.signal.aborted)setData(value);
+    void api.listAdminCatalog(kind,{source,status,q:applied,page,sort},controller.signal).then(value=>{
+      if(controller.signal.aborted)return;
+      const last=Math.max(1,Math.ceil(value.total/value.pageSize));
+      if(page>last){setPage(last);return;}
+      setData(value);
     }).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Consulta indisponível.');})
       .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return()=>controller.abort();
-  },[api,kind,source,status,applied,page,refresh]);
+  },[api,kind,source,status,applied,page,sort,refresh]);
   const close=()=>{setForm(null);setEntry(null);setArchive(false)};
   const resetMessages=()=>{setError('');setMessage('')};
   async function run(work:()=>Promise<void>){
@@ -41,7 +45,16 @@ function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
   function afterSave(text:string){
     close();setMessage(text);setPage(1);setRefresh(x=>x+1);
   }
-  const pages=Math.max(1,Math.ceil((data?.total??0)/(data?.pageSize??20)));
+  const pages=Math.max(1,Math.ceil((data?.total??0)/(data?.pageSize??10)));
+  const pagination=(label:string)=>pages>1&&<nav aria-label={label} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+    <span>Página {page} de {pages}</span>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" className={button} disabled={page<=1||busy} onClick={()=>setPage(1)}>Primeira</button>
+      <button type="button" className={button} disabled={page<=1||busy} onClick={()=>setPage(x=>x-1)}>Anterior</button>
+      <button type="button" className={button} disabled={page>=pages||busy} onClick={()=>setPage(x=>x+1)}>Próxima</button>
+      <button type="button" className={button} disabled={page>=pages||busy} onClick={()=>setPage(pages)}>Última</button>
+    </div>
+  </nav>;
   return <div className="mt-4 space-y-4">
     <p className="text-sm text-mute">{descriptions[kind]}</p>
     <div className="flex flex-wrap gap-2">
@@ -57,14 +70,15 @@ function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
     {error&&<p role="alert" className="rounded-lg border border-line p-3 text-sm">{error}</p>}
     {message&&<p role="status" className="rounded-lg bg-moss-50 p-3 text-sm">{message}</p>}
     {loading&&<p role="status" className="text-sm">Carregando cadastros…</p>}
-    {data&&<><p className="text-xs text-mute">{data.total} registro(s)</p>
+    {data&&<><p role="status" className="text-xs text-mute">{data.total?('Exibindo '+((page-1)*data.pageSize+1)+'–'+Math.min(page*data.pageSize,data.total)+' de '+data.total+' registros'):'0 registros'}</p>
+      {pagination('Paginação acima da tabela')}
       {data.items.length>0?<div className="overflow-x-auto"><table className="w-full min-w-[500px] text-left text-sm">
-        <thead><tr className="border-b border-line"><th className="p-2">Nome</th><th className="p-2">Código</th><th className="p-2">Situação / origem</th><th className="p-2">Ações</th></tr></thead>
+        <thead><tr className="border-b border-line"><th className="p-2" scope="col" aria-sort={sort==='asc'?'ascending':'descending'}><button type="button" disabled={busy} className="min-h-10 text-left font-bold underline underline-offset-2" aria-label={sort==='asc'?'Ordenar nome de Z a A':'Ordenar nome de A a Z'} onClick={()=>{resetMessages();setSort(sort==='asc'?'desc':'asc');setPage(1)}}>Nome <span aria-hidden="true">{sort==='asc'?'↑':'↓'}</span></button></th><th className="p-2">Código</th><th className="p-2">Situação / origem</th><th className="p-2">Ações</th></tr></thead>
         <tbody>{data.items.map(item=><tr key={item.id} className="border-b border-line"><th scope="row" className="p-2 font-semibold">{item.name}{item.description&&<span className="block max-w-md break-words text-xs font-normal text-mute">{item.description}</span>}</th>
           {'version' in item?<><td className="break-all p-2">{item.internalCode||'—'}</td><td className="p-2">{item.active?'Ativo':'Arquivado'}</td><td className="p-2"><button type="button" disabled={busy} className={button} onClick={()=>void run(async()=>{const detail=await api.adminCatalogDetail(kind,item.id);setEntry(detail);setArchive(false);setForm(detail.active?{name:detail.name,internalCode:detail.internalCode??'',description:detail.description}:null)})}>Abrir cadastro</button></td></>:<><td className="break-all p-2">{item.code||'—'}</td><td className="p-2">{item.source}{item.profileStatus?' · '+(profileStatus[item.profileStatus]??item.profileStatus):''}{item.edition&&<span className="block text-xs text-mute">{item.edition.split('-').reverse().join('/')}</span>}</td><td className="p-2"><button type="button" className={button} disabled={busy} onClick={()=>{close();resetMessages();setSource('local');setPage(1);setForm({name:item.name.slice(0,150),internalCode:'',description:item.description.slice(0,1500)});setMessage('Confira os dados antes de incluir. Este será um cadastro local.')}}>Usar como base</button></td></>}
         </tr>)}</tbody>
       </table></div>:<p className="text-sm text-mute">Nenhum registro encontrado neste filtro.</p>}
-      {pages>1&&<div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>Página {page} de {pages}</span><div className="flex gap-2"><button type="button" className={button} disabled={page<=1||busy} onClick={()=>setPage(x=>x-1)}>Anterior</button><button type="button" className={button} disabled={page>=pages||busy} onClick={()=>setPage(x=>x+1)}>Próxima</button></div></div>}
+      {pagination('Paginação abaixo da tabela')}
     </>}
     {(form||entry)&&<section className="space-y-3 rounded-xl border border-line bg-paper p-3" aria-label={entry?'Detalhes do cadastro':'Novo cadastro local'}>
       <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold">{entry?entry.name:'Novo cadastro local'}</h4><button type="button" className={button} disabled={busy} onClick={close}>Fechar</button></div>
