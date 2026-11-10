@@ -1,7 +1,6 @@
 import {useEffect,useState} from 'react';
 import type {AdminCatalogEntryV1,AdminCatalogInput,AdminCatalogKind,AdminCatalogPageV1,MyDoctorV1Api} from '../lib/api-v1';
 
-const labels:Record<AdminCatalogKind,string>={insurers:'Administradoras de saúde',medications:'Medicamentos',professionals:'Profissionais',facilities:'Estabelecimentos de saúde'};
 const descriptions:Record<AdminCatalogKind,string>={
   insurers:'Consulte as operadoras da edição da ANS e mantenha os registros locais da ferramenta.',
   medications:'Consulte os registros de produto da edição da Anvisa e mantenha o cadastro local de medicamentos.',
@@ -15,7 +14,7 @@ const empty=():AdminCatalogInput=>({name:'',internalCode:'',description:''});
 const actions:Record<string,string>={create:'Inclusão',edit:'Edição',archive:'Arquivamento',restore:'Reativação'};
 const profileStatus:Record<string,string>={verified:'Aprovado',pending:'Em análise',unverified:'Não verificado',rejected:'Recusado',suspended:'Suspenso'};
 
-function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
+export default function AdminCatalogPanel({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
   const [sort,setSort]=useState<'asc'|'desc'>('asc');
   const [source,setSource]=useState<'local'|'reference'>('local'),[status,setStatus]=useState('active');
   const [query,setQuery]=useState(''),[applied,setApplied]=useState(''),[page,setPage]=useState(1),[refresh,setRefresh]=useState(0);
@@ -93,12 +92,4 @@ function Catalog({api,kind}:{api:MyDoctorV1Api;kind:AdminCatalogKind}){
       {!!entry?.history?.length&&<details><summary className="cursor-pointer text-sm font-bold">Histórico de alterações</summary><ul className="mt-2 space-y-1 text-xs">{entry.history.map(item=><li key={item.version}>{actions[item.action]??item.action} · versão {item.version} · {new Date(item.createdAt).toLocaleString('pt-BR')}</li>)}</ul></details>}
     </section>}
   </div>;
-}
-export default function AdminCatalogPanel({api}:{api:MyDoctorV1Api}){
-  const [open,setOpen]=useState(false),[kind,setKind]=useState<AdminCatalogKind>('insurers');
-  return <details className="rounded-xl border border-line bg-card p-4" onToggle={e=>setOpen(e.currentTarget.open)}>
-    <summary className="cursor-pointer text-lg font-bold">Cadastros administrativos</summary>
-    {open&&<><div className="mt-4 flex flex-wrap gap-2" aria-label="Tipos de cadastro">{(Object.keys(labels) as AdminCatalogKind[]).map(key=><button type="button" key={key} aria-pressed={kind===key} className={kind===key?primary:button} onClick={()=>setKind(key)}>{labels[key]}</button>)}</div>
-      <Catalog key={kind} api={api} kind={kind}/></>}
-  </details>;
 }
