@@ -11,7 +11,7 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[message,setMessage]=useState('');
   const [record,setRecord]=useState<RecordExportData|null>(null);
   const [specialties,setSpecialties]=useState<string[]>([]),[start,setStart]=useState(''),[end,setEnd]=useState('');
-  const [selected,setSelected]=useState<string[]>([]);
+  const [includeExams,setIncludeExams]=useState(false);
   const request=useRef<AbortController|null>(null);
   useEffect(()=>()=>request.current?.abort(),[]);
   const specialty=(event:RecordExportData['events'][number])=>event.specialty||'Sem especialidade informada';
@@ -21,13 +21,14 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
     return (!specialties.length||specialties.includes(specialty(event)))&&(!start||date>=start)&&(!end||date<=end);
   };
   const events=record?.events.filter(matches)??[];
-  const attachments=events.flatMap(event=>event.documents.map(doc=>({doc,event})));
-  const exams=attachments.map(({doc})=>doc).filter(doc=>selected.includes(doc.id));
+  const attachments=events.flatMap(event=>event.documents??[]);
+  const exams=includeExams?attachments:[];
   const invalid=!!(start&&end&&start>end);
   const tooLarge=exams.length>20||exams.reduce((total,doc)=>total+doc.sizeBytes,0)>50*1024*1024;
 
   async function read(signal:AbortSignal) {
     const value=await api.getRecordExport(profile.id,signal);
+    if(value.events.some(event=>!Array.isArray(event.documents)))throw new Error('A exportação está sendo atualizada. Tente novamente em instantes.');
     if(value.patient.id!==profile.id)throw new Error('O prontuário não corresponde ao perfil selecionado.');
     return value;
   }
@@ -35,7 +36,7 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
     request.current?.abort();
     const controller=new AbortController();request.current=controller;
     setOpen(true);setRecord(null);setMessage('');setLoading(true);
-    setStart('');setEnd('');setSpecialties([]);setSelected([]);
+    setStart('');setEnd('');setSpecialties([]);setIncludeExams(false);
     try{const value=await read(controller.signal);if(!controller.signal.aborted)setRecord(value);}
     catch(error){if(!controller.signal.aborted)setMessage(error instanceof Error?error.message:'Não foi possível carregar a exportação.');}
     finally{if(!controller.signal.aborted)setLoading(false);}
@@ -48,8 +49,8 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
     try {
       const [{createRecordPdf},fresh]=await Promise.all([import('../lib/record-pdf'),read(controller.signal)]);
       const current=fresh.events.filter(event=>eventIds.has(event.id)&&matches(event));
-      const docs=new Map(current.flatMap(event=>event.documents.map(doc=>[doc.id,doc] as const)));
-      if(current.length!==events.length||exams.some(doc=>!docs.has(doc.id)))throw new Error('O prontuário mudou. Feche e abra a exportação novamente para revisar a seleção.');
+      const docs=new Map(current.flatMap(event=>(event.documents??[]).map(doc=>[doc.id,doc] as const)));
+      if(current.length!==events.length||(includeExams&&(docs.size!==exams.length||exams.some(doc=>!docs.has(doc.id)))))throw new Error('O prontuário mudou. Feche e abra a exportação novamente para revisar a seleção.');
       const bytes=await createRecordPdf({...fresh,events:current},exams.map(doc=>docs.get(doc.id)!),id=>api.getRecordExportExam(profile.id,id,controller.signal));
       if(controller.signal.aborted||!isCurrent()||session!==readV1SessionToken())return;
       const url=URL.createObjectURL(new Blob([Uint8Array.from(bytes)],{type:'application/pdf'}));
@@ -70,22 +71,20 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
           {options.length>0&&<details className="rounded-lg border border-line p-2">
             <summary className="cursor-pointer font-semibold">Especialidades {specialties.length?`(${specialties.length} selecionadas)`:'(todas)'}</summary>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {options.map(value=><label key={value} className="flex items-center gap-2"><input className="!w-auto" type="checkbox" checked={specialties.includes(value)} onChange={()=>{setSpecialties(toggle(specialties,value));setSelected([]);}}/>{value}</label>)}
+              {options.map(value=><label key={value} className="flex items-center gap-2"><input className="!w-auto" type="checkbox" checked={specialties.includes(value)} onChange={()=>{setSpecialties(toggle(specialties,value));}}/>{value}</label>)}
             </div>
           </details>}
           <div className="flex flex-wrap gap-3">
-            <label>De (opcional)<input className="block rounded-lg border border-line p-2" type="date" value={start} onChange={e=>{setStart(e.target.value);setSelected([]);}}/></label>
-            <label>Até (opcional)<input className="block rounded-lg border border-line p-2" type="date" value={end} onChange={e=>{setEnd(e.target.value);setSelected([]);}}/></label>
+            <label>De (opcional)<input className="block rounded-lg border border-line p-2" type="date" value={start} onChange={e=>{setStart(e.target.value);}}/></label>
+            <label>Até (opcional)<input className="block rounded-lg border border-line p-2" type="date" value={end} onChange={e=>{setEnd(e.target.value);}}/></label>
           </div>
           {invalid?<p role="alert">A data final deve ser igual ou posterior à inicial.</p>:<p>{events.length} atendimento(s) no PDF.</p>}
-          <details className="rounded-lg border border-line p-2">
-            <summary className="cursor-pointer font-semibold">Exames anexos ({exams.length} selecionados)</summary>
-            <p className="my-2">Marque os exames que deseja acrescentar ao final do PDF. Nenhum vem selecionado.</p>
-            {attachments.length?<div className="max-h-56 space-y-2 overflow-auto">{attachments.map(({doc,event})=>
-              <label className="flex items-start gap-2" key={doc.id}><input className="!w-auto" type="checkbox" checked={selected.includes(doc.id)} onChange={()=>setSelected(toggle(selected,doc.id))}/><span className="break-all">{doc.originalFilename} <span className="text-mute">· {event.title} · {day(event.occurredAt).split('-').reverse().join('/')}</span></span></label>)}
-            </div>:<p>Nenhum exame anexado aos atendimentos selecionados.</p>}
-          </details>
-          {tooLarge&&<p role="alert">Escolha até 20 exames, somando no máximo 50 MB.</p>}
+          <label className="flex items-center gap-2 font-semibold">
+            <input className="!w-auto" type="checkbox" checked={includeExams} onChange={e=>setIncludeExams(e.target.checked)}/>
+            Incluir exames anexos
+          </label>
+          <p>{attachments.length ? `${attachments.length} exame(s) anexado(s) aos atendimentos filtrados.` : 'Nenhum exame anexado aos atendimentos filtrados.'}</p>
+          {tooLarge&&<p role="alert">Os anexos excedem o limite de 20 exames ou 50 MB. Restrinja o período ou as especialidades, ou exporte sem anexos.</p>}
         </fieldset>}
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy||loading||!events.length||invalid||tooLarge} className="min-h-11 rounded-xl bg-pine-900 px-3 font-bold text-white disabled:opacity-50" onClick={()=>void download()}>{busy?'Gerando PDF…':'Baixar PDF'}</button>
