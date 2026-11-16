@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import {ReferenceError,searchAns,validatedInsurance} from './guided-references.js';
 import {StorageError,quotaTransaction,withManagedQuota} from './storage-quota.js';
 import {storeClinicalFile,legacyDocumentPath,readPrivateObject,serveDocument,retireStoredFile} from './document-storage.js';
@@ -292,17 +293,17 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
   if (challenge.expiresAt.getTime() < Date.now()) return fail(res, 400, 'Código expirado. Solicite um novo código.');
   if (challenge.attempts >= OTP_MAX_ATTEMPTS) return fail(res, 429, 'Número máximo de tentativas excedido.');
 
-  const available = { id: challenge.id, purpose: 'login', consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: OTP_MAX_ATTEMPTS } };
   const valid = await bcrypt.compare(code, challenge.codeHash);
-  available.expiresAt.gt = new Date();
+  const checkedAt = new Date();
+  const available: Prisma.VerificationChallengeWhereInput = { id: challenge.id, purpose: 'login', consumedAt: null, expiresAt: { gt: checkedAt }, attempts: { lt: OTP_MAX_ATTEMPTS } };
   if (!valid) {
     await prisma.verificationChallenge.updateMany({ where: available, data: { attempts: { increment: 1 } } });
     return fail(res, 401, 'Código incorreto.');
   }
   const consumed = await prisma.$transaction(async tx => {
-    const result = await tx.verificationChallenge.updateMany({ where: available, data: { consumedAt: available.expiresAt.gt } });
+    const result = await tx.verificationChallenge.updateMany({ where: available, data: { consumedAt: checkedAt } });
     if (result.count && challenge.channel === 'email') {
-      await tx.user.updateMany({ where: { id: challenge.userId, email: challenge.destination, emailVerifiedAt: null }, data: { emailVerifiedAt: available.expiresAt.gt } });
+      await tx.user.updateMany({ where: { id: challenge.userId, email: challenge.destination, emailVerifiedAt: null }, data: { emailVerifiedAt: checkedAt } });
     }
     return result.count === 1;
   });

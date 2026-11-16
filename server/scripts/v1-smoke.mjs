@@ -43,10 +43,14 @@ const challenge = await call('/api/v1/auth/login/start', {
 assert(challenge?.challengeId, 'challengeId ausente');
 assert(/^\d{6}$/.test(challenge?.developmentCode ?? ''), 'código MFA de desenvolvimento ausente');
 
-const verified = await call('/api/v1/auth/login/verify', {
+const verify = () => call('/api/v1/auth/login/verify', {
   method: 'POST',
   body: JSON.stringify({ challengeId: challenge.challengeId, code: challenge.developmentCode }),
 });
+const attempts = await Promise.allSettled([verify(), verify()]);
+const successes = attempts.filter(result => result.status === 'fulfilled');
+assert(successes.length === 1 && attempts.some(result => result.status === 'rejected' && result.reason.message.includes('-> 400')), 'o mesmo código deve gerar apenas uma sessão');
+const verified = successes[0].value;
 assert(verified?.token, 'JWT ausente após MFA');
 const auth = { authorization: `Bearer ${verified.token}` };
 
