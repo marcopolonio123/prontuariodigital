@@ -280,6 +280,7 @@ router.post('/auth/login/start', async (req: Request, res: Response) => {
 /** Login V1 — etapa 2. Somente após MFA válido o JWT é emitido. */
 router.post('/auth/login/verify', async (req: Request, res: Response) => {
   const { challengeId, code } = req.body ?? {};
+  if (typeof challengeId !== 'string' || typeof code !== 'string' || !/^\d{6}$/.test(code)) return fail(res, 400, 'Informe o código de seis dígitos.');
   const challenge = await prisma.verificationChallenge.findUnique({
     where: { id: String(challengeId ?? '') },
     include: { user: true },
@@ -291,14 +292,21 @@ router.post('/auth/login/verify', async (req: Request, res: Response) => {
   if (challenge.expiresAt.getTime() < Date.now()) return fail(res, 400, 'Código expirado. Solicite um novo código.');
   if (challenge.attempts >= OTP_MAX_ATTEMPTS) return fail(res, 429, 'Número máximo de tentativas excedido.');
 
-  const valid = await bcrypt.compare(String(code ?? ''), challenge.codeHash);
+  const available = { id: challenge.id, purpose: 'login', consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: OTP_MAX_ATTEMPTS } };
+  const valid = await bcrypt.compare(code, challenge.codeHash);
+  available.expiresAt.gt = new Date();
   if (!valid) {
-    await prisma.verificationChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
+    await prisma.verificationChallenge.updateMany({ where: available, data: { attempts: { increment: 1 } } });
     return fail(res, 401, 'Código incorreto.');
   }
-
-  await prisma.verificationChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
-  if(!challenge.user.emailVerifiedAt)await prisma.user.update({where:{id:challenge.user.id},data:{emailVerifiedAt:new Date()}});
+  const consumed = await prisma.$transaction(async tx => {
+    const result = await tx.verificationChallenge.updateMany({ where: available, data: { consumedAt: available.expiresAt.gt } });
+    if (result.count && challenge.channel === 'email') {
+      await tx.user.updateMany({ where: { id: challenge.userId, email: challenge.destination, emailVerifiedAt: null }, data: { emailVerifiedAt: available.expiresAt.gt } });
+    }
+    return result.count === 1;
+  });
+  if (!consumed) return fail(res, 400, 'Código utilizado ou indisponível. Solicite um novo código.');
 
   return res.json({
     token: sign(challenge.user.id),
