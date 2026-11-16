@@ -327,7 +327,13 @@ export class MyDoctorV1Api {
 
   listProfiles() { return this.req<PatientProfile[]>('/profiles'); }
   createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
-  getRecordExport(patientId: string) { return this.req<RecordExportData>(`/patients/${encodeURIComponent(patientId)}/record-export`, {cache:'no-store'}); }
+  async getRecordExportExam(patientId: string, documentId: string, signal: AbortSignal) {
+    const url=this.url(`/patients/${encodeURIComponent(patientId)}/record-export/exams/${encodeURIComponent(documentId)}`);
+    const response=await fetch(url,{headers:{Authorization:`Bearer ${this.token}`},cache:'no-store',signal});
+    if(!response.ok)throw new Error('Não foi possível baixar um dos exames selecionados.');
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  getRecordExport(patientId: string, signal?:AbortSignal) { return this.req<RecordExportData>(`/patients/${encodeURIComponent(patientId)}/record-export`, {signal,cache:'no-store'}); }
   listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
   createHealthEvent(patientId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(input) }); }
   updateHealthEvent(patientId: string, eventId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}`, { method: 'PUT', body: JSON.stringify(input) }); }
