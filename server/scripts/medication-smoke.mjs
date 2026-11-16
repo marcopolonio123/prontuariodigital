@@ -68,6 +68,14 @@ try {
   const patientId = profile.body.id;
   const endpoint = '/patients/' + patientId + '/medications';
   const grant = await db.accessGrant.create({ data: { accountId: dependentUser.id, patientId, level: 'leitura', scope: ['record'] } });
+  const exportPath='/patients/'+patientId+'/record-export';
+  assert.equal((await call(exportPath)).status,401);
+  assert.equal((await call(exportPath,null,stranger.token)).status,403);
+  assert.equal((await call(exportPath,null,dependentUser.token)).status,403);
+  const exported=await call(exportPath,null,owner.token);
+  assert.equal(exported.status,200);
+  assert.equal(exported.body.patient.id,patientId);
+  assert.deepEqual(exported.body.events,[]);
   assert.equal((await call(endpoint)).status, 401);
   assert.equal((await call(endpoint, null, stranger.token)).status, 403);
   const originalPatient = await db.patient.findUnique({ where: { id: patientId } });

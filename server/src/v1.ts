@@ -619,6 +619,39 @@ router.post('/profiles',auth,async(req:AuthedRequest,res:Response)=>{
  catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível cadastrar. Consulte novamente antes de incluir.'})}
 });
 
+/** Export is limited to the patient and their active tutor. */
+router.get('/patients/:patientId/record-export', auth, async (req: AuthedRequest, res: Response) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  try {
+    const patient = await prisma.patient.findFirst({
+      where: { id: req.params.patientId, ...managedPatientWhere(req.userId!) },
+      select: {
+        id: true, name: true, recordNumber: true,
+        events: {
+          where: { status: { in: ['final','amended'] }, type: { in: ['consultation','exam','hospitalization','procedure','therapy','vaccine','prescription','other'] } },
+          orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+          select: { type: true, title: true, occurredAt: true, practitionerNameSnapshot: true, organizationNameSnapshot: true, locationNameSnapshot: true, payload: true },
+        },
+      },
+    });
+    if (!patient) return fail(res, 403, 'Somente o titular ou tutor ativo pode exportar este prontuário.');
+    const { events, ...identity } = patient;
+    const labels = { specialty: 'Especialidade', symptoms: 'Sintomas', diagnosis: 'Diagnóstico', exams: 'Exames', prescriptions: 'Prescrições', notes: 'Observações' };
+    return res.json({ patient: identity, events: events.map(({payload,...event}) => {
+      const data = payload as Record<string, unknown> | null;
+      const fields = Object.entries(labels).flatMap(([key,label]) => {
+        const value = data?.[key];
+        return typeof value === 'string' && value.trim() ? [[label, value.trim()]] : [];
+      });
+      if(data?.onlineVisit===true)fields.push(['Modalidade','Atendimento on-line']);
+      else if(data?.homeVisit===true)fields.push(['Modalidade','Atendimento domiciliar']);
+      return {...event, fields};
+    }) });
+  } catch {
+    return fail(res, 503, 'Não foi possível preparar o prontuário para exportação. Tente novamente.');
+  }
+});
+
 /** Linha do tempo clínica de um perfil autorizado. */
 router.get('/patients/:patientId/events', auth, async (req: AuthedRequest, res: Response) => {
   const ids = await visiblePatientIds(req.userId!);
