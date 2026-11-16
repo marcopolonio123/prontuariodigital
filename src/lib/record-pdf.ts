@@ -91,7 +91,7 @@ export async function createRecordPdf(record:RecordExportData, exams:RecordExpor
         target.drawImage(image,{x:(595.28-scaled.width)/2,y:(841.89-scaled.height)/2,...scaled});
       }
     } catch {
-      throw new Error(`Não foi possível incluir “${exam.originalFilename}”. Confira se o arquivo está disponível e legível, ou desmarque-o para exportar os demais.`);
+      throw new Error(`Não foi possível incluir “${exam.originalFilename}”. Confira se o arquivo está disponível e legível, ou exporte sem anexos.`);
     }
   }
   return pdf.save();
