@@ -12,6 +12,7 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
   const [record,setRecord]=useState<RecordExportData|null>(null);
   const [specialties,setSpecialties]=useState<string[]>([]),[start,setStart]=useState(''),[end,setEnd]=useState('');
   const [includeExams,setIncludeExams]=useState(false);
+  const [prepared,setPrepared]=useState<{file:File;session:string}|null>(null);
   const request=useRef<AbortController|null>(null);
   useEffect(()=>()=>request.current?.abort(),[]);
   const specialty=(event:RecordExportData['events'][number])=>event.specialty||'Sem especialidade informada';
@@ -35,13 +36,37 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
   async function prepare() {
     request.current?.abort();
     const controller=new AbortController();request.current=controller;
-    setOpen(true);setRecord(null);setMessage('');setLoading(true);
+    setOpen(true);setPrepared(null);setRecord(null);setMessage('');setLoading(true);
     setStart('');setEnd('');setSpecialties([]);setIncludeExams(false);
     try{const value=await read(controller.signal);if(!controller.signal.aborted)setRecord(value);}
     catch(error){if(!controller.signal.aborted)setMessage(error instanceof Error?error.message:'Não foi possível carregar a exportação.');}
     finally{if(!controller.signal.aborted)setLoading(false);}
   }
-  async function download() {
+  function save(file:File) {
+    const url=URL.createObjectURL(file);
+    const link=document.createElement('a');
+    link.href=url;link.download=file.name;
+    document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    setPrepared(null);setOpen(false);setMessage('PDF baixado. Confira o arquivo antes de encaminhar.');
+  }
+  const isValid=(value:{session:string})=>isCurrent()&&value.session===readV1SessionToken();
+  async function share() {
+    if(!prepared||busy||!isValid(prepared))return;
+    const data={files:[prepared.file]};
+    if(!navigator.canShare?.(data)||typeof navigator.share!=='function'){
+      setMessage('Neste navegador, baixe o PDF e anexe o arquivo ao e-mail ou WhatsApp.');
+      return;
+    }
+    setBusy(true);setMessage('');
+    try {
+      await navigator.share(data);
+      setMessage('Confira no aplicativo escolhido se o envio foi concluído.');
+    } catch(error) {
+      if(!(error instanceof DOMException&&error.name==='AbortError'))
+        setMessage('Não foi possível abrir o compartilhamento. Baixe o PDF para anexá-lo manualmente.');
+    } finally {setBusy(false);}
+  }
+  async function generate(forShare=false) {
     if(busy||!record||!events.length||invalid||tooLarge)return;
     const session=readV1SessionToken(),controller=new AbortController();request.current=controller;
     const eventIds=new Set(events.map(event=>event.id));
@@ -53,11 +78,9 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
       if(current.length!==events.length||(includeExams&&(docs.size!==exams.length||exams.some(doc=>!docs.has(doc.id)))))throw new Error('O prontuário mudou. Feche e abra a exportação novamente para revisar a seleção.');
       const bytes=await createRecordPdf({...fresh,events:current},exams.map(doc=>docs.get(doc.id)!),id=>api.getRecordExportExam(profile.id,id,controller.signal));
       if(controller.signal.aborted||!isCurrent()||session!==readV1SessionToken())return;
-      const url=URL.createObjectURL(new Blob([Uint8Array.from(bytes)],{type:'application/pdf'}));
-      const link=document.createElement('a');
-      link.href=url;link.download=`MyDoctor-prontuario-${fresh.patient.recordNumber}.pdf`;
-      document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
-      setOpen(false);setMessage('PDF gerado. Confira o arquivo antes de encaminhar.');
+      const file=new File([Uint8Array.from(bytes)],`MyDoctor-prontuario-${fresh.patient.recordNumber}.pdf`,{type:'application/pdf'});
+      if(forShare)setPrepared({file,session});
+      else save(file);
     } catch(error) {if(!controller.signal.aborted)setMessage(error instanceof Error?error.message:'Não foi possível gerar o PDF.');}
     finally {if(!controller.signal.aborted)setBusy(false);}
   }
@@ -67,7 +90,7 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
         <p><strong>Exportar prontuário de {profile.name}</strong></p>
         <p>Inclui apenas atendimentos ativos e confirmados. Use os filtros abaixo se quiser limitar o que será compartilhado.</p>
         {loading&&<p role="status">Carregando opções…</p>}
-        {record&&<fieldset disabled={busy} className="space-y-3">
+        {record&&<fieldset disabled={busy||!!prepared} className="space-y-3">
           {options.length>0&&<details className="rounded-lg border border-line p-2">
             <summary className="cursor-pointer font-semibold">Especialidades {specialties.length?`(${specialties.length} selecionadas)`:'(todas)'}</summary>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -86,10 +109,16 @@ export default function RecordExport({api,profile,isCurrent}:{api:MyDoctorV1Api;
           <p>{attachments.length ? `${attachments.length} exame(s) anexado(s) aos atendimentos filtrados.` : 'Nenhum exame anexado aos atendimentos filtrados.'}</p>
           {tooLarge&&<p role="alert">Os anexos excedem o limite de 20 exames ou 50 MB. Restrinja o período ou as especialidades, ou exporte sem anexos.</p>}
         </fieldset>}
+        {prepared&&<p role="status">{navigator.canShare?.({files:[prepared.file]})&&typeof navigator.share==='function'
+          ? 'PDF pronto. Escolha e-mail, WhatsApp ou outro app disponível. Confira o destinatário antes de enviar.'
+          : 'Seu navegador não compartilha arquivos diretamente. Baixe o PDF e anexe-o no e-mail ou WhatsApp.'}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={busy||loading||!events.length||invalid||tooLarge} className="min-h-11 rounded-xl bg-pine-900 px-3 font-bold text-white disabled:opacity-50" onClick={()=>void download()}>{busy?'Gerando PDF…':'Baixar PDF'}</button>
-          <button type="button" disabled={busy} className={button} onClick={()=>{request.current?.abort();setOpen(false);setMessage('');}}>Cancelar exportação</button>
+          <button type="button" disabled={busy||loading||!events.length||invalid||tooLarge} className="min-h-11 rounded-xl bg-pine-900 px-3 font-bold text-white disabled:opacity-50" onClick={()=>{if(prepared){if(isValid(prepared))save(prepared.file);}else void generate();}}>Baixar PDF</button>
+          {!prepared?<button type="button" disabled={busy||loading||!events.length||invalid||tooLarge} className={button} onClick={()=>void generate(true)}>Preparar para compartilhar</button>:
+            <button type="button" disabled={busy||!navigator.canShare?.({files:[prepared.file]})||typeof navigator.share!=='function'} className={button} onClick={()=>void share()}>Compartilhar PDF</button>}
+          <button type="button" disabled={busy} className={button} onClick={()=>{request.current?.abort();setPrepared(null);setOpen(false);setMessage('');}}>Cancelar exportação</button>
         </div>
+        {busy&&<p role="status">Aguarde…</p>}
       </div>}
     {message&&<p role="status" className="mt-2">{message}</p>}
   </div>;
