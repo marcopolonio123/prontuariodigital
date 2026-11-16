@@ -76,6 +76,15 @@ try {
   assert.equal(exported.status,200);
   assert.equal(exported.body.patient.id,patientId);
   assert.deepEqual(exported.body.events,[]);
+  const createdForExport=await call('/patients/'+patientId+'/events',{
+    type:'consultation',title:'Consulta para exportação',occurredAt:new Date().toISOString(),payload:{specialty:'Cardiologia',notes:'Consulta fictícia'},
+  },owner.token);
+  assert.equal(createdForExport.status,201);
+  const withEvent=await call(exportPath,null,owner.token);
+  assert.equal(withEvent.body.events[0].specialty,'Cardiologia');
+  assert.deepEqual(withEvent.body.events[0].documents,[]);
+  assert.equal((await call(exportPath+'/exams/unknown',null,dependentUser.token)).status,404);
+
   assert.equal((await call(endpoint)).status, 401);
   assert.equal((await call(endpoint, null, stranger.token)).status, 403);
   const originalPatient = await db.patient.findUnique({ where: { id: patientId } });

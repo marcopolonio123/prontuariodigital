@@ -1,6 +1,6 @@
 import {ReferenceError,searchAns,validatedInsurance} from './guided-references.js';
 import {StorageError,quotaTransaction,withManagedQuota} from './storage-quota.js';
-import {storeClinicalFile,legacyDocumentPath,serveDocument,retireStoredFile} from './document-storage.js';
+import {storeClinicalFile,legacyDocumentPath,readPrivateObject,serveDocument,retireStoredFile} from './document-storage.js';
 import { patientEncounterLocation } from './professional-directory.js';
 import { canReadEvent, grantedSections } from './access-scope.js';
 import { randomInt, randomUUID } from 'node:crypto';
@@ -619,6 +619,32 @@ router.post('/profiles',auth,async(req:AuthedRequest,res:Response)=>{
  catch(e){res.status(e instanceof PersonError?e.status:503).json({error:e instanceof PersonError?e.message:'Não foi possível cadastrar. Consulte novamente antes de incluir.'})}
 });
 
+const exportableEvent = {
+  status: { in: ['final','amended'] },
+  type: { in: ['consultation','exam','hospitalization','procedure','therapy','vaccine','prescription','other'] },
+};
+const exportableExam = { type: 'exam', status: { not: 'deleted' }, mimeType: { in: ['application/pdf','image/png','image/jpeg','image/webp'] } };
+router.get('/patients/:patientId/record-export/exams/:documentId', auth, async (req: AuthedRequest, res: Response) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  try {
+    const patientId = req.params.patientId;
+    const doc = await prisma.clinicalDocument.findFirst({ where: {
+      id: req.params.documentId, patientId, ...exportableExam,
+      patient: managedPatientWhere(req.userId!), event: { patientId, ...exportableEvent },
+    }});
+    if (!doc) return fail(res, 404, 'Exame não disponível para exportação.');
+    const metadata = doc.metadata as {storageProvider?:string;storageBucket?:string}|null;
+    const bytes = metadata?.storageProvider==='s3'
+      ? await readPrivateObject({objectKey:doc.objectKey,storageProvider:'s3',storageBucket:metadata.storageBucket})
+      : await fs.readFile(legacyDocumentPath(doc.objectKey));
+    res.setHeader('Content-Disposition','attachment');
+    return res.type(doc.mimeType).send(bytes);
+  } catch {
+    return fail(res, 503, 'Não foi possível ler o exame selecionado.');
+  }
+});
+
 /** Export is limited to the patient and their active tutor. */
 router.get('/patients/:patientId/record-export', auth, async (req: AuthedRequest, res: Response) => {
   res.setHeader('Cache-Control', 'private, no-store');
@@ -628,16 +654,20 @@ router.get('/patients/:patientId/record-export', auth, async (req: AuthedRequest
       select: {
         id: true, name: true, recordNumber: true,
         events: {
-          where: { status: { in: ['final','amended'] }, type: { in: ['consultation','exam','hospitalization','procedure','therapy','vaccine','prescription','other'] } },
+          where: exportableEvent,
           orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
-          select: { type: true, title: true, occurredAt: true, practitionerNameSnapshot: true, organizationNameSnapshot: true, locationNameSnapshot: true, payload: true },
+          select: { id: true, type: true, title: true, occurredAt: true, practitionerNameSnapshot: true, organizationNameSnapshot: true, locationNameSnapshot: true,
+            professionSnapshot: true, payload: true, provenance: true,
+            documents: { where: {...exportableExam, patientId: req.params.patientId}, orderBy: [{ createdAt: 'asc' },{ id: 'asc' }],
+              select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true } },
+          },
         },
       },
     });
     if (!patient) return fail(res, 403, 'Somente o titular ou tutor ativo pode exportar este prontuário.');
     const { events, ...identity } = patient;
     const labels = { specialty: 'Especialidade', symptoms: 'Sintomas', diagnosis: 'Diagnóstico', exams: 'Exames', prescriptions: 'Prescrições', notes: 'Observações' };
-    return res.json({ patient: identity, events: events.map(({payload,...event}) => {
+    return res.json({ patient: identity, events: events.map(({payload,provenance,professionSnapshot,...event}) => {
       const data = payload as Record<string, unknown> | null;
       const fields = Object.entries(labels).flatMap(([key,label]) => {
         const value = data?.[key];
@@ -645,7 +675,9 @@ router.get('/patients/:patientId/record-export', auth, async (req: AuthedRequest
       });
       if(data?.onlineVisit===true)fields.push(['Modalidade','Atendimento on-line']);
       else if(data?.homeVisit===true)fields.push(['Modalidade','Atendimento domiciliar']);
-      return {...event, fields};
+      const specialty = typeof data?.specialty==='string' && data.specialty.trim() ? data.specialty.trim()
+        : (provenance as { source?:string }|null)?.source==='mydoctor_professional'||data?.confirmationRequired===true ? '' : professionSnapshot?.trim()??'';
+      return {...event, specialty, fields};
     }) });
   } catch {
     return fail(res, 503, 'Não foi possível preparar o prontuário para exportação. Tente novamente.');
