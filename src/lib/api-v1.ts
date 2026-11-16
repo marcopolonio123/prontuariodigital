@@ -1,3 +1,4 @@
+import type { RecordExportData } from './record-pdf';
 import type { AdminAccountFilters, AdminAccountRow, AdminLinkKind, AdminOverview, AdminPage, AdminRelationship, AdminStoragePlans } from './admin-insights';
 import {openPrivateDocument} from './document-preview';
 export type MfaChannel = 'email' | 'sms';
@@ -326,6 +327,7 @@ export class MyDoctorV1Api {
 
   listProfiles() { return this.req<PatientProfile[]>('/profiles'); }
   createDependentProfile(input: { name: string; relationship: 'child' | 'parent' | 'guardian' | 'dependent' | 'other'; birthDate?: string; sex?: string; record?: string; }) { return this.req<PatientProfile>('/profiles', { method: 'POST', body: JSON.stringify(input) }); }
+  getRecordExport(patientId: string) { return this.req<RecordExportData>(`/patients/${encodeURIComponent(patientId)}/record-export`, {cache:'no-store'}); }
   listHealthEvents(patientId: string) { return this.req<HealthEventV1[]>(`/patients/${encodeURIComponent(patientId)}/events`); }
   createHealthEvent(patientId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events`, { method: 'POST', body: JSON.stringify(input) }); }
   updateHealthEvent(patientId: string, eventId: string, input: CreateHealthEventInput) { return this.req<HealthEventV1>(`/patients/${encodeURIComponent(patientId)}/events/${encodeURIComponent(eventId)}`, { method: 'PUT', body: JSON.stringify(input) }); }
