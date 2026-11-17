@@ -197,7 +197,7 @@ try {
   await click('Sair');
   assert.match(document.body.textContent, /Entrar no MyDoctor/);
   assert.equal(window.sessionStorage.getItem('mydoctor.v1.sessionToken'), null);
-  await click('Clique aqui para se cadastrar');
+  await click('Criar minha conta');
   assert.doesNotMatch(document.body.textContent, /Você é um profissional da saúde e deseja clinicar pelo APP/);
   assert.match(document.body.textContent,/Repita a senha/);
   assert.equal(document.querySelector('[aria-label="Menu do MyDoctor"]'),null,'Menu persistiu após logout');
